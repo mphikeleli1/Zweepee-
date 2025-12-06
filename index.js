@@ -115,4 +115,23 @@ app.post('/whatsapp/inbound', async (req, res) => {
 app.get('/', (req, res) => res.send('Zweepee bot running'));
 
 const PORT = process.env.PORT || 3000;
+// Webhook verification
+const VERIFY_TOKEN = "zweepee123"; // must match the token you set in Meta dashboard
+
+app.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    res.status(200).send(challenge); // plain text echo
+  } else {
+    res.sendStatus(403);
+  }
+});
+
+app.post('/webhook', (req, res) => {
+  console.log("Incoming webhook payload:", req.body);
+  res.sendStatus(200); // always ACK
+});
 app.listen(PORT, () => console.log(`Bot listening on ${PORT}`));
