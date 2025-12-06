@@ -159,6 +159,42 @@ app.post('/webhook', (req, res) => {
 // Health check
 app.get('/', (req, res) => res.send('Zweepee bot is running'));
 
+
 // Correct port binding for Render (this overrides any earlier app.listen line)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Bot listening on port ${PORT}`));
+
+const express = require('express');
+const bodyParser = require('body-parser');
+
+const app = express();
+app.use(bodyParser.json());
+
+// Webhook verification
+app.get('/webhook', (req, res) => {
+  const verifyToken = "zweepee123";
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode && token) {
+    if (mode === 'subscribe' && token === verifyToken) {
+      return res.status(200).send(challenge);
+    } else {
+      return res.sendStatus(403);
+    }
+  }
+});
+
+// Webhook receiver
+app.post('/webhook', (req, res) => {
+  console.log("Incoming webhook:", JSON.stringify(req.body, null, 2));
+  return res.sendStatus(200);
+});
+
+// Health check
+app.get('/', (req, res) => res.send('Zweepee bot is running'));
+
+// Correct port binding for Render
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Bot listening on port ${PORT}`));
