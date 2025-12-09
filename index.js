@@ -1,33 +1,37 @@
 const express = require('express');
-const bodyParser = require('body-parser');  // New: Helps read WhatsApp letters
-
 const app = express();
-app.use(bodyParser.json());  // New: Turns on the reader
 
-// New: Welcome mat for the front door
+app.use(express.json());
+
+// Home page
 app.get('/', (req, res) => {
-  res.send('Hello! Webhook mailbox is ready. Visit /webhook for WhatsApp setup.');
+  res.send('WhatsApp bot is running. Webhook: /webhook');
 });
 
-// Old: WhatsApp unlock check
+// Webhook verification
 app.get('/webhook', (req, res) => {
-  const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-
-  if (mode === 'subscribe' && token === process.env.VERIFY_TOKEN) {
-    console.log('Door unlocked!');  // New: Logs success
-    res.status(200).send(challenge);
+  
+  console.log('Token received:', token);
+  
+  if (token === 'zweepee123') {
+    console.log('Webhook verified - sending challenge');
+    res.send(challenge);
   } else {
+    console.log('Wrong token');
     res.sendStatus(403);
   }
 });
 
-// Old: Catch messages (now can read them)
+// Receive messages
 app.post('/webhook', (req, res) => {
-  console.log('Message arrived!', req.body);  // New: Shows what WhatsApp sent
-  res.sendStatus(200);
+  console.log('Message received');
+  res.send('OK');
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Webhook test server running on ${PORT}`));
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log('Server started');
+});
