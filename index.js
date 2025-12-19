@@ -8,6 +8,11 @@ app.use(bodyParser.json());
 app.get('/webhook', (req, res) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
+
+  // Debug lines
+  console.log('Token from URL:', token);
+  console.log('Token from ENV:', process.env.WA_VERIFY_TOKEN);
+
   if (token === process.env.WA_VERIFY_TOKEN) {
     res.status(200).send(challenge);
   } else {
@@ -17,7 +22,7 @@ app.get('/webhook', (req, res) => {
 
 // Webhook events (POST)
 app.post('/webhook', (req, res) => {
-  console.log(req.body);
+  console.log('Incoming webhook body:', req.body);
   res.status(200).send('OK');
 });
 
