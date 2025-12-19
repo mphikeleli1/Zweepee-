@@ -1,31 +1,29 @@
 const express = require('express');
+const bodyParser = require('body-parser');
+require('dotenv').config();
+
 const app = express();
-app.use(express.json());
+app.use(bodyParser.json());
 
-app.get('/', (req, res) => {
-  res.send('WhatsApp bot running');
-});
-
+// Webhook verification (GET)
 app.get('/webhook', (req, res) => {
-  console.log('Meta test:', req.query);
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-  
-  if (token === 'zweepee123') {
-    console.log('Token match');
-    res.send(challenge);
+  if (token === process.env.WA_VERIFY_TOKEN) {
+    res.status(200).send(challenge);
   } else {
-    console.log('Token wrong:', token);
-    res.sendStatus(403);
+    res.status(403).send('Invalid token');
   }
 });
 
+// Webhook events (POST)
 app.post('/webhook', (req, res) => {
-  console.log('Message:', req.body);
-  res.send('OK');
+  console.log(req.body);
+  res.status(200).send('OK');
 });
 
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log('Server on port', PORT);
+  console.log(`Server running on port ${PORT}`);
 });
