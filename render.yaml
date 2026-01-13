@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: zweepee-server
+    env: node
+    buildCommand: "npm install"
+    startCommand: "node server.js"
+    envVars:
+      - key: SUPABASE_URL
+        value: ""
+      - key: SUPABASE_SERVICE_KEY
+        value: ""
+      - key: BASE_URL
+        value: ""
+      - key: PAYFAST_MERCHANT_ID
+        value: ""
+      - key: PAYFAST_MERCHANT_KEY
+        value: ""
+      - key: SESSION_SECRET
+        value: ""
+      - key: REDIS_URL
+        value: ""
+      - key: PIN_SALT
+        value: ""
+      - key: ADMIN_KEY
+        value: ""
+      - key: GEMINI_API_KEY
+        value: ""
+      - key: RETAIL_AFFILIATE
+        value: "true"
+      - key: PORT
+        value: "3000"
+      - key: NODE_ENV
+        value: "production"
