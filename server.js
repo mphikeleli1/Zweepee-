@@ -73,7 +73,7 @@ const validateConfig = () => {
 validateConfig();
 
 const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'BASE_URL', 'PAYFAST_MERCHANT_ID', 'PAYFAST_MERCHANT_KEY',
-  'SESSION_SECRET', 'REDIS_URL', 'PIN_SALT', 'ADMIN_KEY', 'GEMINI_API_KEY'];
+  'SESSION_SECRET', 'REDIS_URL', 'PIN_SALT', 'ADMIN_KEY', 'GEMINI_API_KEY', 'META_WEBHOOK_VERIFY_TOKEN', 'META_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'];
 const missing = requiredEnv.filter(e => !process.env[e]);
 if (missing.length) { console.error('Missing env:', missing.join(', ')); process.exit(1); }
 
@@ -223,7 +223,7 @@ const allowedTables = ['group_carts', 'cart_items', 'cart_participants', 'securi
   'revenue_records', 'user_patterns', 'predictive_suggestions', 'privacy_controls', 'life_context',
   'supplier_bids', 'broadcast_groups', 'collection_points', 'airtime_transactions', 'concierge_tokens',
   'stokvels', 'stokvel_members', 'stokvel_history', 'disputes', 'p2p_transfers', 'activity_bundles',
-  'service_providers'];
+  'service_providers', 'messages'];
 
 const supabase = createClient(config.supabase.url, config.supabase.key, { auth: { persistSession: false } });
 
@@ -531,6 +531,43 @@ const revenue = async (stream, amount, source, phone, idempKey) => {
 };
 
 // =========================
+// WHATSAPP MESSAGING
+// =========================
+const sendWhatsAppMessage = async (to, message) => {
+  const url = `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const accessToken = process.env.META_ACCESS_TOKEN;
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: to,
+    text: { body: message },
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      logger.error('WhatsApp API error:', errorData);
+      throw new Error(`WhatsApp API request failed with status ${response.status}`);
+    }
+
+    const responseData = await response.json();
+    logger.info('WhatsApp message sent:', responseData);
+    return responseData;
+  } catch (error) {
+    logger.error('Failed to send WhatsApp message:', error);
+    throw error;
+  }
+};
+// =========================
 // NOTIFICATIONS
 // =========================
 const sendNotification = async (phone, type, data) => {
@@ -588,6 +625,21 @@ const analyzeImageWithGemini = async (imageBuffer, phone) => {
   } catch (e) {
     logger.error('Gemini error:', e);
     return { text: 'product image' };
+  }
+};
+
+const analyzeTextWithGemini = async (text) => {
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const prompt = promptJail(text);
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const responseText = response.text();
+    return { text: responseText };
+  } catch (e) {
+    logger.error('Gemini error:', e);
+    return { text: 'Sorry, I am having trouble connecting to my brain.' };
   }
 };
 
@@ -2478,6 +2530,40 @@ app.post('/webhooks/payfast', async (req, res) => {
     res.status(500).send('Error - queued for retry');
   }
 });
+
+app.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
+    res.status(200).send(challenge);
+  } else {
+    res.sendStatus(403);
+  }
+});
+
+app.post('/webhook', async (req, res) => {
+  try {
+    const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+    if (message) {
+      const from = message.from;
+      const text = message.text.body;
+
+      await db('insert', 'messages', { data: { from, text, raw: message } });
+
+      const geminiResponse = await analyzeTextWithGemini(text);
+      await sendWhatsAppMessage(from, geminiResponse.text);
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    logger.error('Error processing webhook:', error);
+    res.sendStatus(500);
+  }
+});
+
 
 // =========================
 // HEALTH & UTILITY (ENHANCED - 4 LINES ADDED)

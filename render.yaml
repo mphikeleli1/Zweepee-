@@ -27,6 +27,12 @@ services:
         value: ""
       - key: RETAIL_AFFILIATE
         value: "true"
+      - key: META_WEBHOOK_VERIFY_TOKEN
+        value: ""
+      - key: META_ACCESS_TOKEN
+        value: ""
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        value: ""
       - key: PORT
         value: "3000"
       - key: NODE_ENV
