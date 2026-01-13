@@ -91,7 +91,8 @@ const config = {
     takealot: process.env.TAKEALOT_AFFILIATE, makro: process.env.MAKRO_AFFILIATE,
     trafficfines: process.env.TRAFFIC_FINES_AFFILIATE, hellodoctor: process.env.HELLO_DOCTOR_AFFILIATE,
     bus: process.env.BUS_TICKETS_AFFILIATE, bond: process.env.BOND_APPLICATIONS_AFFILIATE,
-    legal: process.env.LEGAL_SERVICES_AFFILIATE, awin: process.env.AWIN_API_KEY, webgains: process.env.WEBGAINS_API_KEY },
+    legal: process.env.LEGAL_SERVICES_AFFILIATE, awin: process.env.AWIN_API_KEY, webgains: process.env.WEBGAINS_API_KEY,
+    retail: process.env.RETAIL_AFFILIATE },
   fees: { platform: parseFloat(process.env.PLATFORM_FEE || '0.05'), fastFood: parseFloat(process.env.FAST_FOOD_FEE || '10.00'),
     stokvel: parseFloat(process.env.STOKVEL_FEE || '0.02'), activityBundle: parseFloat(process.env.ACTIVITY_FEE || '0.05'),
     p2p: parseFloat(process.env.P2P_FEE || '0.01'), concierge: parseFloat(process.env.CONCIERGE_FEE || '0.05'),
@@ -458,7 +459,8 @@ const hasAffiliate = (serviceType) => {
     'doctor': config.affiliates.hellodoctor,
     'bus': config.affiliates.bus,
     'bond': config.affiliates.bond,
-    'legal': config.affiliates.legal
+    'legal': config.affiliates.legal,
+    'retail': config.affiliates.retail
   };
   return !!affiliateMap[serviceType];
 };
