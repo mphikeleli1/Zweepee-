@@ -72,10 +72,15 @@ const validateConfig = () => {
 };
 validateConfig();
 
-const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'BASE_URL', 'PAYFAST_MERCHANT_ID', 'PAYFAST_MERCHANT_KEY',
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'BASE_URL',
   'SESSION_SECRET', 'REDIS_URL', 'PIN_SALT', 'ADMIN_KEY', 'GEMINI_API_KEY', 'META_WEBHOOK_VERIFY_TOKEN', 'META_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'];
 const missing = requiredEnv.filter(e => !process.env[e]);
 if (missing.length) { console.error('Missing env:', missing.join(', ')); process.exit(1); }
+
+const payfastReady = process.env.PAYFAST_MERCHANT_ID && process.env.PAYFAST_MERCHANT_KEY;
+if (!payfastReady) {
+  logger.warn('PayFast credentials not found. Payment features will be disabled.');
+}
 
 const config = {
   supabase: { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_KEY },
@@ -1135,6 +1140,7 @@ const getPublicSummary = async (cartId) => {
 // UPDATED CHECKOUT WITH SPLIT PAYMENT PARAMS (NEW)
 // =========================
 const checkoutCart = async ({ cartId, phone, paymentMethod = 'payfast', idempotencyKey, supplierId, deliveryOption, deliveryAddress }, req) => {
+  if (!payfastReady) throw new Error('Payment processing is not available at this time.');
   if (!idempotencyKey) idempotencyKey = `checkout_${cartId}_${Date.now()}`;
   
   return await safeExecute(`checkout:${cartId}`, 'checkout_cart', idempotencyKey, 10000, async () => {
@@ -1487,6 +1493,7 @@ const joinStokvel = async ({ phone, inviteCode }, req) => {
 };
 
 const sendToStokvel = async ({ senderPhone, stokvelId, amount, description = '' }, req) => {
+  if (!payfastReady) throw new Error('Payment processing is not available at this time.');
   return await safeExecute(`stokvel_pay:${stokvelId}`, 'stokvel_payment', `stokvel_${senderPhone}_${Date.now()}`, 5000, async () => {
     const [stokvel] = await db('select', 'stokvels', { eq: { col: 'id', val: stokvelId }, limit: 1 });
     if (!stokvel || stokvel.status !== 'active') throw new Error(friendlyError('Invalid stokvel'));
@@ -1650,6 +1657,7 @@ const createDispute = async ({ phone, cartId, itemId, reason, evidenceUrls = [] 
 // UPDATED: P2P TRANSFER (STOKVEL COMPATIBLE)
 // =========================
 const sendMoney = async ({ senderPhone, receiverPhone, amount, description = '', isStokvel = false }, req) => {
+  if (!payfastReady) throw new Error('Payment processing is not available at this time.');
   return await safeExecute(`p2p:${senderPhone}`, 'send_money', `p2p_${senderPhone}_${Date.now()}`, 5000, async () => {
     const transferId = uuidv4();
     const fee = money.multiply(amount, config.fees.p2p);
@@ -1700,6 +1708,7 @@ const sendMoney = async ({ senderPhone, receiverPhone, amount, description = '',
 // UPDATED: ACTIVITY BUNDLE WITH BUNDLE PRICING LOGIC (UPDATE 2)
 // =========================
 const createActivityBundle = async (phone, services, name = 'Activity Bundle', req) => {
+  if (!payfastReady) throw new Error('Payment processing is not available at this time.');
   return await safeExecute(`bundle:${phone}`, 'create_bundle', `bundle_${phone}_${Date.now()}`, 5000, async () => {
     const bundleId = uuidv4();
     let totalAmount = 0;
