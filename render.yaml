@@ -2,6 +2,7 @@ services:
   - type: web
     name: zweepee-server
     env: node
+    rootDir: .
     buildCommand: "npm install"
     startCommand: "node server.js"
     envVars:
