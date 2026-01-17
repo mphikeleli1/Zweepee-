@@ -14,7 +14,6 @@ const express = require('express'), crypto = require('crypto'), helmet = require
   Ajv = require('ajv'), session = require('express-session'), { createClient: createRedisClient } = require('redis'),
   { Queue, Worker } = require('bullmq'), winston = require('winston'), morgan = require('morgan'),
   { GoogleGenerativeAI } = require('@google/generative-ai');
-const RedisStore = require('connect-redis').default;
 require('dotenv').config();
 
 // =========================
@@ -2106,9 +2105,9 @@ app.use(cors({ origin: config.server.isProd ? process.env.ALLOWED_ORIGINS?.split
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// FIXED SESSION CONFIGURATION
+// UPDATE 2: Secure session cookie (3 lines)
 app.use(session({
-  store: new RedisStore({ client: redisClient }),
+  store: require('connect-redis').default({ client: redisClient }),
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
