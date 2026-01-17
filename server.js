@@ -72,7 +72,7 @@ const validateConfig = () => {
 };
 validateConfig();
 
-const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'BASE_URL', 'PAYFAST_MERCHANT_ID', 'PAYFAST_MERCHANT_KEY',
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'BASE_URL',
   'SESSION_SECRET', 'REDIS_URL', 'PIN_SALT', 'ADMIN_KEY', 'GEMINI_API_KEY'];
 const missing = requiredEnv.filter(e => !process.env[e]);
 if (missing.length) { console.error('Missing env:', missing.join(', ')); process.exit(1); }
