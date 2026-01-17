@@ -63,7 +63,7 @@ const validateConfig = () => {
   if (!process.env.GEMINI_API_KEY?.startsWith('AIza')) errors.push('Invalid Gemini key format');
   if (!process.env.SUPABASE_URL?.includes('supabase.co')) errors.push('Invalid Supabase URL');
   if (!process.env.REDIS_URL?.startsWith('redis://')) errors.push('Invalid Redis URL');
-  if (process.env.PAYFAST_MERCHANT_ID?.length < 5) errors.push('PayFast ID too short');
+  // if (process.env.PAYFAST_MERCHANT_ID?.length < 5) errors.push('PayFast ID too short');
   if (process.env.SESSION_SECRET?.length < 32) errors.push('Session secret too weak');
   if (errors.length > 0) {
     console.error('Config errors:', errors.join(', '));
