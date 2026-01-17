@@ -2107,7 +2107,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // UPDATE 2: Secure session cookie (3 lines)
 app.use(session({  secret: process.env.SESSION_SECRET,
-                 store: new (require('connect-redis')(session))({ client: redisClient }),
+                 store: new RedisStore({ client: redisClient }),
   resave: false,
   saveUninitialized: false,
   cookie: {
