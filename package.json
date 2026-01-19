@@ -1,1 +1,25 @@
-{"name":"zweepee-master-server","version":"1.0.1","main":"server.js","scripts":{"start":"node server.js"},"dependencies":{"express":"^4.19.2","@google/generative-ai":"latest","@supabase/supabase-js":"latest","ajv":"latest","bullmq":"latest","connect-redis":"latest","cors":"latest","dotenv":"latest","express-rate-limit":"latest","express-session":"latest","helmet":"latest","morgan":"latest","redis":"latest","uuid":"latest","winston":"latest"}}
+{
+  "name": "zweepee-master-server",
+  "version": "1.0.1",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "latest",
+    "@supabase/supabase-js": "latest",
+    "ajv": "latest",
+    "bullmq": "latest",
+    "connect-redis": "latest",
+    "cors": "^2.8.5",
+    "dotenv": "latest",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.2.1",
+    "express-session": "latest",
+    "helmet": "^8.1.0",
+    "morgan": "latest",
+    "redis": "latest",
+    "uuid": "latest",
+    "winston": "^3.19.0"
+  }
+}
