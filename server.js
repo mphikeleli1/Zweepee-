@@ -1,15 +1,16 @@
-import express from "express";
-import fetch from "node-fetch";
+const express = require("express");
+const fetch = require("node-fetch");
+const bodyParser = require("body-parser");
 
 const app = express();
-app.use(express.json());
+app.use(bodyParser.json());
 
 // Health check
 app.get("/", (req, res) => {
   res.send("Zweepee webhook live");
 });
 
-// Webhook for Chakra Chat
+// Chakra Chat webhook
 app.post("/webhook", async (req, res) => {
   const { message } = req.body;
 
@@ -28,7 +29,6 @@ app.post("/webhook", async (req, res) => {
     const data = await response.json();
     const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No reply";
 
-    // Send reply back to Chakra → WhatsApp
     res.json({ reply });
   } catch (err) {
     console.error("Gemini error:", err);
