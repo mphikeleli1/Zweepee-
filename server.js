@@ -1,39 +1,40 @@
-// server.js
-'use strict';
-
-const express = require('express');
-const bodyParser = require('body-parser');
+import express from "express";
+import fetch from "node-fetch";
 
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
 
-// Health check route
-app.get('/', (req, res) => {
-  res.send('Zweepee bare server is running ✅');
+// Health check
+app.get("/", (req, res) => {
+  res.send("Zweepee webhook live");
 });
 
-// WhatsApp webhook endpoint (Jules will extend this)
-app.post('/webhook', (req, res) => {
-  console.log('Incoming WhatsApp webhook:', req.body);
-  res.sendStatus(200); // acknowledge receipt
-});
+// Webhook for Chakra Chat
+app.post("/webhook", async (req, res) => {
+  const { message } = req.body;
 
-// WhatsApp webhook verification (Jules will handle token check)
-app.get('/webhook', (req, res) => {
-  const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+  try {
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + process.env.GEMINI_API_KEY,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: message || "" }] }]
+        })
+      }
+    );
 
-  if (mode && token && token === verifyToken) {
-    res.status(200).send(challenge);
-  } else {
-    res.sendStatus(403);
+    const data = await response.json();
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No reply";
+
+    // Send reply back to Chakra → WhatsApp
+    res.json({ reply });
+  } catch (err) {
+    console.error("Gemini error:", err);
+    res.json({ reply: "Error processing message" });
   }
 });
 
-// Render provides PORT automatically
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Webhook running on port ${PORT}`));
