@@ -10,7 +10,7 @@ app.get("/", (req, res) => {
   res.send("Zweepee webhook live");
 });
 
-// Chakra Chat webhook
+// Webhook for Chakra Chat
 app.post("/webhook", async (req, res) => {
   const { message } = req.body;
 
@@ -29,10 +29,11 @@ app.post("/webhook", async (req, res) => {
     const data = await response.json();
     const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No reply";
 
-    res.json({ reply });
+    // IMPORTANT: Chakra expects { text: ... }
+    res.json({ text: reply });
   } catch (err) {
     console.error("Gemini error:", err);
-    res.json({ reply: "Error processing message" });
+    res.json({ text: "Error processing message" });
   }
 });
 
