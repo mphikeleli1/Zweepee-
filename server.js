@@ -8,21 +8,27 @@ app.use(bodyParser.json());
 // Webhook endpoint for WhatsApp → Chakra → Gemini
 app.post("/webhook", async (req, res) => {
   try {
-    const userMessage = req.body.message || "";
+    // Extract the actual WhatsApp message text
+    const userMessage =
+      req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || "";
 
-    // Call Gemini (replace with your actual Gemini API call)
-    const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + process.env.GEMINI_API_KEY, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: userMessage }]}]
-      })
-    });
+    // Call Gemini API
+    const geminiResponse = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
+        process.env.GEMINI_API_KEY,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: userMessage }]}]
+        })
+      }
+    );
 
     const data = await geminiResponse.json();
     const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "…";
 
-    // IMPORTANT: return { text: reply } for Chakra
+    // Return in the format Chakra expects
     res.json({ text: reply });
   } catch (err) {
     console.error("Webhook error:", err);
