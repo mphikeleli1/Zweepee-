@@ -5,14 +5,33 @@ import fetch from "node-fetch";
 const app = express();
 app.use(bodyParser.json());
 
+// ✅ Verify Token must match what you set in Meta console
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "zweepee123";
+
+// ✅ Meta verification handshake
+app.get("/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode && token) {
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("✅ WEBHOOK_VERIFIED");
+      res.status(200).send(challenge); // critical line
+    } else {
+      res.sendStatus(403); // token mismatch
+    }
+  } else {
+    res.sendStatus(400); // missing parameters
+  }
+});
+
 // Webhook endpoint for WhatsApp → Chakra → Gemini
 app.post("/webhook", async (req, res) => {
   try {
-    // Extract the actual WhatsApp message text
     const userMessage =
       req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || "";
 
-    // Call Gemini API
     const geminiResponse = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
         process.env.GEMINI_API_KEY,
@@ -28,7 +47,6 @@ app.post("/webhook", async (req, res) => {
     const data = await geminiResponse.json();
     const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "…";
 
-    // Return in the format Chakra expects
     res.json({ text: reply });
   } catch (err) {
     console.error("Webhook error:", err);
