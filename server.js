@@ -26,9 +26,12 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// Webhook endpoint for WhatsApp → Chakra → Gemini
+// Webhook endpoint for WhatsApp → Gemini
 app.post("/webhook", async (req, res) => {
   try {
+    // 👇 This line ensures you see the payload in Render logs
+    console.log("Incoming webhook payload:", JSON.stringify(req.body, null, 2));
+
     const userMessage =
       req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || "";
 
