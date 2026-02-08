@@ -879,7 +879,7 @@ async function viewCart(user, supabase) {
 
   response += `\n───────────────\n`;
   response += `Subtotal: R${total}\n`;
-  if (fees > 0) response += `Service: R${fees}\n`;
+  if (fees > 0) response += `Concierge Fee: R${fees}\n`;
   response += `*Total: R${total + fees}*\n\n`;
   response += `[Pay Now] [Clear Cart]`;
 
@@ -899,7 +899,7 @@ function generateUnifiedCart(items, user, memory) {
 
   response += `\n───────────────\n`;
   response += `Subtotal: R${total}\n`;
-  if (fees > 0) response += `Service: R${fees}\n`;
+  if (fees > 0) response += `Concierge Fee: R${fees}\n`;
   response += `*Total: R${total + fees}*\n\n`;
 
   // Proactive suggestion
@@ -949,11 +949,12 @@ async function checkoutCart(user, supabase, env) {
 
   response += `───────────────\n`;
   response += `Items: R${subtotal}\n`;
-  if (fees > 0) response += `Service: R${fees}\n`;
+  if (fees > 0) response += `Concierge Fee: R${fees}\n`;
   response += `*Total: R${total}*\n\n`;
-  response += `🔒 Pay securely:\n${paymentUrl}\n\n`;
+  response += `🔒 Pay securely via PayFast:\n${paymentUrl}\n\n`;
+  response += `✨ *Zero Friction Concierge Service*\n`;
   response += `✅ Instant confirmation\n`;
-  response += `📦 Track in chat`;
+  response += `📦 Track everything right here in chat`;
 
   return response;
 }
@@ -1034,7 +1035,8 @@ function generateGreeting(user, memory) {
 }
 
 function generateHelp(user, memory) {
-  return `✨ *Zweepee - Your AI Concierge*\n\n` +
+  return `✨ *Zweepee - Your AI Magic Concierge*\n\n` +
+    `I bring the world to your chat. No apps, no redirects, just magic.\n\n` +
     `I can help with:\n\n` +
     `🛍️ *Shopping*\n"Find iPhone" or send photo\n\n` +
     `🍗 *Food Delivery*\n"KFC bucket" or "Pizza"\n\n` +
