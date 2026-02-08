@@ -1,0 +1,14 @@
+name = "zweepee"
+main = "zweepee-worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+WHAPI_PHONE = "27730552773"
+
+# KV Namespace for user caching (optional - uncomment when ready)
+# [[kv_namespaces]]
+# binding = "USER_CACHE"
+# id = "your_kv_namespace_id_here"
+
+[env.production]
+vars = { ENVIRONMENT = "production" }
