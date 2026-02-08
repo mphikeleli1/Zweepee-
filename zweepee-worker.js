@@ -16,21 +16,12 @@ export default {
 
     // Health check & Diagnostics
     if (url.pathname === '/health') {
-      const isAdmin = request.headers.get('x-admin-key') === env.ADMIN_KEY;
-
-      if (isAdmin) {
-        // Run full system diagnostic
-        const diagnostic = await runDiagnostics(env);
-        return new Response(JSON.stringify(diagnostic), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+      const adminKey = request.headers.get('x-admin-key');
+      if (adminKey !== env.ADMIN_KEY) {
+        return new Response('Unauthorized', { status: 401 });
       }
-
-      return new Response(JSON.stringify({
-        status: 'healthy',
-        timestamp: Date.now(),
-        version: '1.0.0'
-      }), {
+      const diagnostic = await runDiagnostics(env);
+      return new Response(JSON.stringify(diagnostic), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -40,7 +31,7 @@ export default {
       const body = await request.json();
 
       // Acknowledge immediately (Whapi expects fast response)
-      ctx.waitUntil(processMessage(body, env));
+      ctx.waitUntil(processMessage(body, env, ctx));
 
       return new Response('OK', { status: 200 });
     }
@@ -53,7 +44,7 @@ export default {
 // 2. MESSAGE PROCESSING ORCHESTRATOR
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function processMessage(body, env) {
+async function processMessage(body, env, ctx) {
   try {
     // 🛠️ Initialize Supabase first for early checks
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
