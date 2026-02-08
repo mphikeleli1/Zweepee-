@@ -250,6 +250,7 @@ Return ONLY valid JSON array:
       "location": "extracted location",
       "date": "extracted date",
       "quantity": number,
+      "budget": number,
       "any_other_relevant_data": "value"
     }
   }
@@ -426,9 +427,16 @@ async function handleShopping(user, messageText, mediaData, extractedData, memor
     return `🔍 No results for "${query}"\n\nTry:\n• Different spelling\n• Brand name\n• Send a photo 📸`;
   }
 
-  // Show top 3 with adaptive UX
-  const mode = memory?.preferences?.ux_mode || 'balanced';
-  return generateProductResponse(products, query, mode, user.id, supabase);
+  // Send images for top 2 products
+  for (const p of products.slice(0, 2)) {
+    let caption = `🛍️ *${p.name}*\n`;
+    caption += `${p.retailer} - R${p.price.toLocaleString()}\n`;
+    caption += `📦 ${p.delivery}`;
+
+    await sendWhatsAppImage(user.phone_number, p.image_url, caption, env);
+  }
+
+  return `Reply 1-2 to add to cart! 🛒`;
 }
 
 async function searchProducts(query, env) {
@@ -446,6 +454,7 @@ async function searchProducts(query, env) {
       delivery: '2-3 days',
       has_affiliate: true,
       concierge_fee: 0,
+      image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
       url: `https://takealot.com/search?q=${encodeURIComponent(query)}`
     },
     {
@@ -459,25 +468,12 @@ async function searchProducts(query, env) {
       delivery: 'Collect today',
       has_affiliate: true,
       concierge_fee: 0,
+      image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
       url: `https://makro.co.za/search?q=${encodeURIComponent(query)}`
     }
   ];
 }
 
-function generateProductResponse(products, query, mode, userId, supabase) {
-  const top3 = products.slice(0, 3);
-  let response = `🔍 *${query}*\n\n`;
-
-  top3.forEach((p, i) => {
-    const savings = p.original_price ? ` 💰 Save R${p.original_price - p.price}` : '';
-    response += `${i + 1}. *${p.retailer}* - R${p.price.toLocaleString()}${savings}\n`;
-    response += `   ${'⭐'.repeat(Math.round(p.rating))} ${p.rating}/5\n`;
-    response += `   📦 ${p.delivery}\n\n`;
-  });
-
-  response += `Reply 1-3 to add to cart\nSay "show cheaper" or "compare"`;
-  return response;
-}
 
 async function getShoppingQuickQuote(user, data, memory, env) {
   const products = await searchProducts(data.product || 'gift', env);
@@ -516,15 +512,16 @@ async function handleFood(user, messageText, extractedData, memory, supabase, en
     return `🍔 What would you like to eat?\n\nPopular:\n• KFC\n• McDonald's\n• Nando's\n• Pizza`;
   }
 
-  let response = `🍗 *Food Delivery*\n\n`;
-  foodOptions.slice(0, 3).forEach((f, i) => {
-    response += `${i + 1}. ${f.name}\n`;
-    response += `   ${f.restaurant} - R${f.price}\n`;
-    response += `   ⏱️ ${f.delivery_time}\n\n`;
-  });
+  // Send images for food options
+  for (const f of foodOptions.slice(0, 2)) {
+    let caption = `🍗 *${f.name}*\n`;
+    caption += `${f.restaurant} - R${f.price}\n`;
+    caption += `⏱️ ${f.delivery_time}`;
 
-  response += `Reply 1-3 to order`;
-  return response;
+    await sendWhatsAppImage(user.phone_number, f.image_url, caption, env);
+  }
+
+  return `Reply 1-2 to order! 😋`;
 }
 
 async function searchFood(query, lastAddress, env) {
@@ -541,7 +538,8 @@ async function searchFood(query, lastAddress, env) {
       price: 189,
       delivery_time: '35-45 min',
       delivery_address: lastAddress || 'Your location',
-      concierge_fee: 10
+      concierge_fee: 10,
+      image_url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500'
     }
   ];
 }
@@ -568,21 +566,30 @@ async function getFoodQuickQuote(user, data, memory, env) {
 async function handleAccommodation(user, messageText, extractedData, memory, supabase, env) {
   const location = extractedData.location || 'Cape Town';
   const date = extractedData.date || 'tomorrow';
+  const budget = extractedData.budget;
 
   // Mock accommodation search - TODO: Booking.com/Airbnb API
-  const options = await searchAccommodation(location, date, env);
+  let options = await searchAccommodation(location, date, env);
 
-  let response = `🏨 *${location} • ${date}*\n\n`;
-  options.slice(0, 3).forEach((h, i) => {
-    response += `${i + 1}. *${h.name}*\n`;
-    response += `   R${h.price}/night ${'⭐'.repeat(Math.round(h.rating))} ${h.rating}\n`;
-    response += `   via ${h.platform}\n`;
-    if (h.features) response += `   ${h.features.slice(0, 2).join(' • ')}\n`;
-    response += `\n`;
-  });
+  // Apply budget filter if provided
+  if (budget) {
+    options = options.filter(h => h.price <= budget);
+    if (options.length === 0) {
+      return `🏨 I couldn't find anything in ${location} for under R${budget}. Would you like to see the closest options?`;
+    }
+  }
 
-  response += `Reply 1-3 to book\nSay "show cheaper"`;
-  return response;
+  // Send images for the top 2 options
+  for (const h of options.slice(0, 2)) {
+    let caption = `🏨 *${h.name}*\n`;
+    caption += `R${h.price}/night ${'⭐'.repeat(Math.round(h.rating))} ${h.rating}\n`;
+    caption += `via ${h.platform}\n`;
+    if (h.features) caption += `${h.features.slice(0, 2).join(' • ')}`;
+
+    await sendWhatsAppImage(user.phone_number, h.image_url, caption, env);
+  }
+
+  return `Reply 1-2 to book or ask for more details! ✨`;
 }
 
 async function searchAccommodation(location, date, env) {
@@ -599,6 +606,7 @@ async function searchAccommodation(location, date, env) {
       location: location,
       has_affiliate: true,
       concierge_fee: 0,
+      image_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500',
       url: `https://booking.com/search?location=${location}`
     },
     {
@@ -612,6 +620,7 @@ async function searchAccommodation(location, date, env) {
       location: location,
       has_affiliate: true,
       concierge_fee: 0,
+      image_url: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500',
       url: `https://airbnb.com/s/${location}`
     }
   ];
@@ -1188,6 +1197,31 @@ async function sendWhatsAppMessage(to, text, env) {
 
   } catch (error) {
     console.error('❌ Send error:', error);
+  }
+}
+
+async function sendWhatsAppImage(to, imageUrl, caption, env) {
+  try {
+    const cleanPhone = to.replace('@c.us', '');
+
+    const response = await fetch('https://gate.whapi.cloud/messages/image', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.WHAPI_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        to: cleanPhone,
+        media: imageUrl,
+        caption: caption
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Whapi image send error:', await response.text());
+    }
+  } catch (error) {
+    console.error('❌ Image send error:', error);
   }
 }
 
