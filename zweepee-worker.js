@@ -760,7 +760,7 @@ async function handleBuses(user, messageText, extractedData, memory, supabase, e
     response += `   ${b.departure} → ${b.arrival} (${b.duration})\n\n`;
   });
 
-  response += `Book at:\n${buses[0]?.url || 'intercape.co.za'}`;
+  response += `Reply 1 to book`;
   return response;
 }
 
