@@ -14,8 +14,18 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Health check
+    // Health check & Diagnostics
     if (url.pathname === '/health') {
+      const isAdmin = request.headers.get('x-admin-key') === env.ADMIN_KEY;
+
+      if (isAdmin) {
+        // Run full system diagnostic
+        const diagnostic = await runDiagnostics(env);
+        return new Response(JSON.stringify(diagnostic), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
       return new Response(JSON.stringify({
         status: 'healthy',
         timestamp: Date.now(),
@@ -93,7 +103,90 @@ async function processMessage(body, env) {
 
   } catch (error) {
     console.error('❌ Process error:', error);
+
+    // 🚨 Log to Zweepee Sentry
+    ctx.waitUntil(logSystemAlert({
+      severity: 'error',
+      source: 'worker',
+      message: error.message,
+      stack_trace: error.stack,
+      context: { body }
+    }, env));
+
+    try {
+      const userPhone = body.messages?.[0]?.from?.replace('@c.us', '');
+      if (userPhone) {
+        await sendWhatsAppMessage(userPhone, `⚠️ Zweepee Magic is having a moment. I've logged this for Jules to fix!`, env);
+      }
+    } catch (sendError) {
+      console.error('Fallback send error:', sendError);
+    }
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ZWEEPEE SENTRY - Real-time Monitoring
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function logSystemAlert(alert, env) {
+  try {
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+    await supabase.from('system_alerts').insert([alert]);
+
+    // Critical alerts also go to Admin WhatsApp
+    if (alert.severity === 'critical' || alert.severity === 'error') {
+      const adminPhone = env.ADMIN_PHONE || env.WHAPI_PHONE;
+      await sendWhatsAppMessage(adminPhone, `🚨 *ZWEEPEE SENTRY ALERT*\n\nSource: ${alert.source}\nError: ${alert.message}`, env);
+    }
+  } catch (e) {
+    console.error('Failed to log alert:', e);
+  }
+}
+
+async function runDiagnostics(env) {
+  const results = {
+    timestamp: new Date().toISOString(),
+    status: 'checking',
+    services: {}
+  };
+
+  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+
+  // 1. Check Supabase
+  try {
+    const { error } = await supabase.from('users').select('id').limit(1);
+    results.services.supabase = error ? `Error: ${error.message}` : 'Healthy';
+  } catch (e) {
+    results.services.supabase = `Fatal: ${e.message}`;
+  }
+
+  // 2. Check Whapi
+  try {
+    const whapiRes = await fetch('https://gate.whapi.cloud/health', {
+      headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
+    });
+    const whapiData = await whapiRes.json();
+    results.services.whapi = whapiRes.ok ? 'Healthy' : whapiData.error || 'Unknown Error';
+  } catch (e) {
+    results.services.whapi = `Fatal: ${e.message}`;
+  }
+
+  // 3. Check Gemini
+  try {
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] })
+    });
+    results.services.gemini = geminiRes.ok ? 'Healthy' : 'Invalid API Key';
+  } catch (e) {
+    results.services.gemini = `Fatal: ${e.message}`;
+  }
+
+  const allHealthy = Object.values(results.services).every(v => v === 'Healthy');
+  results.status = allHealthy ? 'healthy' : 'unhealthy';
+
+  return results;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -166,9 +259,12 @@ Rules:
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
 
     const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/\[[\s\S]*\]/);
-    const intents = jsonMatch ? JSON.parse(jsonMatch[1] || jsonMatch[0]) : [{ intent: 'help', confidence: 0.5 }];
+    let intents = jsonMatch ? JSON.parse(jsonMatch[1] || jsonMatch[0]) : [{ intent: 'help', confidence: 0.5 }];
 
-    return Array.isArray(intents) ? intents : [intents];
+    if (!Array.isArray(intents)) intents = [intents];
+    if (intents.length === 0) intents = [{ intent: 'help', confidence: 0.5 }];
+
+    return intents;
 
   } catch (error) {
     console.error('Intent detection error:', error);
@@ -181,13 +277,18 @@ Rules:
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env) {
+  // Ensure we have at least one intent
+  if (!intents || intents.length === 0) {
+    intents = [{ intent: 'help', confidence: 0.1 }];
+  }
+
   // Handle multiple intents (multi-product request)
   if (intents.length > 1) {
     return await handleMultiIntent(user, intents, memory, supabase, env);
   }
 
   const primaryIntent = intents[0];
-  const intent = primaryIntent.intent;
+  const intent = primaryIntent?.intent || 'help';
   const data = primaryIntent.extracted_data || {};
 
   // Route to appropriate Mirage
@@ -931,18 +1032,21 @@ function generateHelp(user, memory) {
 async function getOrCreateUser(phoneNumber, supabase) {
   try {
     // Check database
-    let { data: existing } = await supabase
+    const { data: existing, error: fetchError } = await supabase
       .from('users')
       .select('*')
       .eq('phone_number', phoneNumber)
       .single();
 
     if (existing) return existing;
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "no rows found"
+      console.error('Supabase fetch error:', fetchError);
+    }
 
     // Create new user
     const referralCode = crypto.randomUUID().substring(0, 8).toUpperCase();
 
-    const { data: newUser } = await supabase
+    const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert([{
         phone_number: phoneNumber,
@@ -955,13 +1059,18 @@ async function getOrCreateUser(phoneNumber, supabase) {
       .select()
       .single();
 
+    if (insertError) {
+      console.error('Supabase insert error:', insertError);
+      throw new Error(insertError.message);
+    }
+
     return newUser;
 
   } catch (error) {
     console.error('User creation error:', error);
     // Return minimal user object on error
     return {
-      id: phoneNumber,
+      id: phoneNumber, // Fallback to phone number as ID if DB fails
       phone_number: phoneNumber,
       preferences: { ux_mode: 'balanced' }
     };

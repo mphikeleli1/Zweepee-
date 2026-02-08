@@ -1,0 +1,105 @@
+{
+  "wallTime": 16978,
+  "cpuTime": 9,
+  "truncated": false,
+  "executionModel": "stateless",
+  "outcome": "ok",
+  "scriptTags": [
+    "cf:service=zweepee"
+  ],
+  "scriptVersion": {
+    "id": "86d569e4-37bc-4801-b262-c8bbbe2c9ca9"
+  },
+  "scriptName": "zweepee",
+  "diagnosticsChannelEvents": [],
+  "exceptions": [],
+  "logs": [
+    {
+      "message": [
+        "Whapi send error:",
+        "{\"error\":\"Channel not found\",\"requestId\":\"f908c592-3b57-4d60-885e-48bac69de7ad\"}"
+      ],
+      "level": "error",
+      "timestamp": 1770545185317
+    }
+  ],
+  "eventTimestamp": 1770545168471,
+  "event": {
+    "request": {
+      "url": "https://zweepee.busanigama.workers.dev/webhook",
+      "method": "POST",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, br",
+        "cf-connecting-ip": "35.224.132.190",
+        "cf-ipcountry": "US",
+        "cf-ray": "9caa5006edcd7a44",
+        "cf-visitor": "{\"scheme\":\"https\"}",
+        "connection": "Keep-Alive",
+        "content-length": "68",
+        "content-type": "application/json",
+        "host": "zweepee.busanigama.workers.dev",
+        "user-agent": "curl/8.5.0",
+        "x-forwarded-proto": "https",
+        "x-real-ip": "35.224.132.190"
+      },
+      "cf": {
+        "httpProtocol": "HTTP/2",
+        "requestPriority": "weight=16;exclusive=0;group=0;group-weight=0",
+        "edgeRequestKeepAliveStatus": 1,
+        "requestHeaderNames": {},
+        "clientTcpRtt": 12,
+        "colo": "ORD",
+        "asn": 396982,
+        "asOrganization": "Google LLC",
+        "country": "US",
+        "isEUCountry": false,
+        "city": "Council Bluffs",
+        "continent": "NA",
+        "region": "Iowa",
+        "regionCode": "IA",
+        "timezone": "America/Chicago",
+        "longitude": "-95.86083",
+        "latitude": "41.26194",
+        "postalCode": "51502",
+        "metroCode": "652",
+        "tlsVersion": "TLSv1.3",
+        "tlsCipher": "AEAD-AES256-GCM-SHA384",
+        "tlsClientRandom": "8DbjvW+pSpLhmoQF05nC/33je8BUDmKkaIkNbnPLuN4=",
+        "tlsClientCiphersSha1": "GXSPDLP4G3X+prK73a4wBuOaHRc=",
+        "tlsClientExtensionsSha1": "tlH5gnoC5Z1HF45J5OgHEi338V0=",
+        "tlsClientExtensionsSha1Le": "mRCkyUCRFDTLCNHGQsZNFhkU1/4=",
+        "tlsExportedAuthenticator": {
+          "clientHandshake": "3b0831a85bf5adb154902c5c0bc374c800bb70fa41f16077ec4c620a6efdba3063e871591dffaabb89ee7c675257fdb6",
+          "serverHandshake": "18d997b568bfcf1dfc1e716083b1076d6221fc214e7d215c73f4e5be0894f2796d0cad5da986edcc979a75d02550d8d8",
+          "clientFinished": "3b30d85506d6ae52f249344a22c60793031bbab23f4dde2cd9448c62fcf6596c326436a7fcace3dba38cf5a351fb69a3",
+          "serverFinished": "2cbd224c63fb25fa916393ef08d57331d4e4b229b49e0efe95f7fdc74fb4a769b8749a061e24ef74f44ef37b0b7564cf"
+        },
+        "tlsClientHelloLength": "508",
+        "tlsClientAuth": {
+          "certPresented": "0",
+          "certVerified": "NONE",
+          "certRevoked": "0",
+          "certIssuerDN": "",
+          "certSubjectDN": "",
+          "certIssuerDNRFC2253": "",
+          "certSubjectDNRFC2253": "",
+          "certIssuerDNLegacy": "",
+          "certSubjectDNLegacy": "",
+          "certSerial": "",
+          "certIssuerSerial": "",
+          "certSKI": "",
+          "certIssuerSKI": "",
+          "certFingerprintSHA1": "",
+          "certFingerprintSHA256": "",
+          "certNotBefore": "",
+          "certNotAfter": ""
+        },
+        "verifiedBotCategory": ""
+      }
+    },
+    "response": {
+      "status": 200
+    }
+  }
+}

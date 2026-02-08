@@ -1,0 +1,139 @@
+{
+  "wallTime": 16821,
+  "cpuTime": 9,
+  "truncated": false,
+  "executionModel": "stateless",
+  "outcome": "ok",
+  "scriptTags": [
+    "cf:service=zweepee"
+  ],
+  "scriptVersion": {
+    "id": "86d569e4-37bc-4801-b262-c8bbbe2c9ca9"
+  },
+  "scriptName": "zweepee",
+  "diagnosticsChannelEvents": [],
+  "exceptions": [],
+  "logs": [
+    {
+      "message": [
+        "Supabase fetch error:",
+        {
+          "code": "PGRST205",
+          "details": null,
+          "hint": null,
+          "message": "Could not find the table 'public.users' in the schema cache"
+        }
+      ],
+      "level": "error",
+      "timestamp": 1770543406563
+    },
+    {
+      "message": [
+        "Supabase insert error:",
+        {
+          "code": "PGRST205",
+          "details": null,
+          "hint": null,
+          "message": "Could not find the table 'public.users' in the schema cache"
+        }
+      ],
+      "level": "error",
+      "timestamp": 1770543406689
+    },
+    {
+      "message": [
+        "User creation error:",
+        "Error: Could not find the table 'public.users' in the schema cache"
+      ],
+      "level": "error",
+      "timestamp": 1770543406689
+    },
+    {
+      "message": [
+        "Whapi send error:",
+        "{\"error\":\"Channel not found\",\"requestId\":\"97d90e13-af8a-4595-9e5c-7d7ca5ba074e\"}"
+      ],
+      "level": "error",
+      "timestamp": 1770543422819
+    }
+  ],
+  "eventTimestamp": 1770543406122,
+  "event": {
+    "request": {
+      "url": "https://zweepee.busanigama.workers.dev/webhook",
+      "method": "POST",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, br",
+        "cf-connecting-ip": "35.224.132.190",
+        "cf-ipcountry": "US",
+        "cf-ray": "9caa25003c616191",
+        "cf-visitor": "{\"scheme\":\"https\"}",
+        "connection": "Keep-Alive",
+        "content-length": "68",
+        "content-type": "application/json",
+        "host": "zweepee.busanigama.workers.dev",
+        "user-agent": "curl/8.5.0",
+        "x-forwarded-proto": "https",
+        "x-real-ip": "35.224.132.190"
+      },
+      "cf": {
+        "httpProtocol": "HTTP/2",
+        "requestPriority": "weight=16;exclusive=0;group=0;group-weight=0",
+        "edgeRequestKeepAliveStatus": 1,
+        "requestHeaderNames": {},
+        "clientTcpRtt": 10,
+        "colo": "ORD",
+        "asn": 396982,
+        "asOrganization": "Google LLC",
+        "country": "US",
+        "isEUCountry": false,
+        "city": "Council Bluffs",
+        "continent": "NA",
+        "region": "Iowa",
+        "regionCode": "IA",
+        "timezone": "America/Chicago",
+        "longitude": "-95.86083",
+        "latitude": "41.26194",
+        "postalCode": "51502",
+        "metroCode": "652",
+        "tlsVersion": "TLSv1.3",
+        "tlsCipher": "AEAD-AES256-GCM-SHA384",
+        "tlsClientRandom": "azmjusGMRsVx9RWb6fxol6gt7ubqcdpIJYH1R3ASbG4=",
+        "tlsClientCiphersSha1": "GXSPDLP4G3X+prK73a4wBuOaHRc=",
+        "tlsClientExtensionsSha1": "tlH5gnoC5Z1HF45J5OgHEi338V0=",
+        "tlsClientExtensionsSha1Le": "mRCkyUCRFDTLCNHGQsZNFhkU1/4=",
+        "tlsExportedAuthenticator": {
+          "clientHandshake": "73f78afc3e39de03b43f70a5edf3bac037a526e61f29c638d5744660ef6f9564399441f6b1b404df0fe2ccd7ef77a1ca",
+          "serverHandshake": "5a6376a10c42f9f330d731e76364d01bd21545f9b52aee626187d64cff1d4cd72fb6bd2d00405a60821285213d624033",
+          "clientFinished": "ff9cac61af72dc199963b75c59dccea364a5df7554a00338578892a8ba4c059edcb894a339eeeeb12896d0a4024755ac",
+          "serverFinished": "5b0d93b10aa6d2140af434e6c47c3bf47c85e59ea1ff1d7201bcdc1c02452c293db8cf8b93bd6d6f91e4a13f9ae9f175"
+        },
+        "tlsClientHelloLength": "508",
+        "tlsClientAuth": {
+          "certPresented": "0",
+          "certVerified": "NONE",
+          "certRevoked": "0",
+          "certIssuerDN": "",
+          "certSubjectDN": "",
+          "certIssuerDNRFC2253": "",
+          "certSubjectDNRFC2253": "",
+          "certIssuerDNLegacy": "",
+          "certSubjectDNLegacy": "",
+          "certSerial": "",
+          "certIssuerSerial": "",
+          "certSKI": "",
+          "certIssuerSKI": "",
+          "certFingerprintSHA1": "",
+          "certFingerprintSHA256": "",
+          "certNotBefore": "",
+          "certNotAfter": ""
+        },
+        "verifiedBotCategory": ""
+      }
+    },
+    "response": {
+      "status": 200
+    }
+  }
+}
