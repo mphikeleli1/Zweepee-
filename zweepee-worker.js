@@ -193,12 +193,12 @@ async function runDiagnostics(env) {
 
   // 3. Check Gemini
   try {
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] })
     });
-    results.services.gemini = geminiRes.ok ? 'Healthy' : 'Invalid API Key';
+    results.services.gemini = geminiRes.ok ? 'Healthy' : 'Invalid API Key or Quota Exceeded (Limit 0)';
   } catch (e) {
     results.services.gemini = `Fatal: ${e.message}`;
   }
@@ -264,7 +264,7 @@ Rules:
 - "Same as last time" = conversational intent with context
 - Empty message or unclear = [{"intent": "help", "confidence": 0.5}]`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -525,23 +525,40 @@ async function handleFood(user, messageText, extractedData, memory, supabase, en
 }
 
 async function searchFood(query, lastAddress, env) {
-  // Mock data - TODO: Real API
-  const restaurant = query.toLowerCase().includes('kfc') ? 'KFC' :
-                     query.toLowerCase().includes('mcd') ? 'McDonald\'s' : 'KFC';
+  const q = query.toLowerCase();
+  const restaurant = q.includes('kfc') ? 'KFC' :
+                     q.includes('mcd') ? 'McDonald\'s' : 'KFC';
 
-  return [
-    {
-      id: `food_${Date.now()}_1`,
-      mirage: 'food',
-      name: '21-Piece Bucket',
-      restaurant: restaurant,
-      price: 189,
-      delivery_time: '35-45 min',
-      delivery_address: lastAddress || 'Your location',
-      concierge_fee: 10,
-      image_url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500'
-    }
-  ];
+  // Simulated menu database
+  const menus = {
+    'KFC': [
+      { name: 'Streetwise 2', price: 45, image: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=500' },
+      { name: '21-Piece Bucket', price: 189, image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500' },
+      { name: 'Zinger Burger', price: 55, image: 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=500' }
+    ],
+    'McDonald\'s': [
+      { name: 'Big Mac Meal', price: 75, image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500' },
+      { name: 'Quarter Pounder', price: 65, image: 'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500' }
+    ]
+  };
+
+  const options = menus[restaurant] || menus['KFC'];
+
+  // Find specific item or default to the first one
+  let matches = options.filter(item => q.includes(item.name.toLowerCase()));
+  if (matches.length === 0) matches = [options[0]];
+
+  return matches.map((item, i) => ({
+    id: `food_${Date.now()}_${i}`,
+    mirage: 'food',
+    name: item.name,
+    restaurant: restaurant,
+    price: item.price,
+    delivery_time: '35-45 min',
+    delivery_address: lastAddress || 'Your location',
+    concierge_fee: 10,
+    image_url: item.image
+  }));
 }
 
 async function getFoodQuickQuote(user, data, memory, env) {
