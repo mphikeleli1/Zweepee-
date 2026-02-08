@@ -264,7 +264,7 @@ Rules:
 - "Same as last time" = conversational intent with context
 - Empty message or unclear = [{"intent": "help", "confidence": 0.5}]`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+    const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -276,20 +276,23 @@ Rules:
       })
     });
 
+    if (!response.ok) throw new Error('Gemini API unreachable');
+
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
 
     const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/\[[\s\S]*\]/);
-    let intents = jsonMatch ? JSON.parse(jsonMatch[1] || jsonMatch[0]) : [{ intent: 'help', confidence: 0.5 }];
+    let intents = jsonMatch ? JSON.parse(jsonMatch[1] || jsonMatch[0]) : null;
 
+    if (!intents) throw new Error('Invalid Gemini response');
     if (!Array.isArray(intents)) intents = [intents];
-    if (intents.length === 0) intents = [{ intent: 'help', confidence: 0.5 }];
 
     return intents;
 
   } catch (error) {
-    console.error('Intent detection error:', error);
-    return [{ intent: 'help', confidence: 0.3 }];
+    console.error('⚠️ Gemini failing, activating Fallback Brain:', error.message);
+    // SELF-HEALING: Use keyword-based fallback if AI is down
+    return fallbackIntentParser(messageText);
   }
 }
 
@@ -1219,10 +1222,9 @@ async function saveChatMessage(userId, role, content, supabase) {
 
 async function sendWhatsAppMessage(to, text, env) {
   try {
-    // Whapi expects phone number without @ suffix for sending
     const cleanPhone = to.replace('@c.us', '');
 
-    const response = await fetch('https://gate.whapi.cloud/messages/text', {
+    const response = await fetchWithRetry('https://gate.whapi.cloud/messages/text', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${env.WHAPI_TOKEN}`,
@@ -1250,7 +1252,7 @@ async function sendWhatsAppImage(to, imageUrl, caption, env) {
   try {
     const cleanPhone = to.replace('@c.us', '');
 
-    const response = await fetch('https://gate.whapi.cloud/messages/image', {
+    const response = await fetchWithRetry('https://gate.whapi.cloud/messages/image', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${env.WHAPI_TOKEN}`,
@@ -1269,6 +1271,55 @@ async function sendWhatsAppImage(to, imageUrl, caption, env) {
   } catch (error) {
     console.error('❌ Image send error:', error);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 18. SELF-HEALING UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function fetchWithRetry(url, options = {}, retries = 3, backoff = 1000) {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok && retries > 0 && response.status >= 500) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+    return response;
+  } catch (error) {
+    if (retries > 0) {
+      console.log(`Retrying fetch to ${url}... (${retries} left)`);
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+    }
+    throw error;
+  }
+}
+
+function fallbackIntentParser(messageText) {
+  const text = messageText.toLowerCase();
+  const intents = [];
+
+  const patterns = {
+    shopping: ['buy', 'search', 'find', 'iphone', 'nike', 'dischem', 'pill', 'panado'],
+    food: ['eat', 'hungry', 'kfc', 'mcdonald', 'burger', 'pizza', 'streetwise'],
+    accommodation: ['hotel', 'airbnb', 'stay', 'cpt', 'cape town', 'durban', 'dbn'],
+    flights: ['flight', 'fly', 'plane', 'travel'],
+    car_rental: ['car', 'rent', 'polo'],
+    airtime: ['airtime', 'data', 'vodacom', 'mtn'],
+    electricity: ['electricity', 'meter', 'power'],
+    cart_action: ['cart', 'checkout', 'pay', 'clear']
+  };
+
+  for (const [intent, keywords] of Object.entries(patterns)) {
+    if (keywords.some(k => text.includes(k))) {
+      intents.push({
+        intent,
+        confidence: 0.8,
+        extracted_data: { product: messageText } // Best effort
+      });
+    }
+  }
+
+  return intents.length > 0 ? intents : [{ intent: 'help', confidence: 0.5 }];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
