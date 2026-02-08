@@ -55,6 +55,24 @@ export default {
 
 async function processMessage(body, env) {
   try {
+    // 🛠️ Initialize Supabase first for early checks
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+
+    // 🚧 Maintenance Mode Check
+    const { data: maintenance } = await supabase
+      .from('system_config')
+      .select('value')
+      .eq('key', 'maintenance_mode')
+      .single();
+
+    if (maintenance?.value === true || maintenance?.value === 'true') {
+      const userPhone = body.messages?.[0]?.from?.replace('@c.us', '');
+      if (userPhone) {
+        await sendWhatsAppMessage(userPhone, `🛠️ *ZWEEPEE MAINTENANCE*\n\nI'm taking a quick power nap while Jules performs some magic updates. I'll be back shortly! ✨`, env);
+      }
+      return;
+    }
+
     // Extract message from Whapi webhook format
     const message = body.messages?.[0];
     if (!message) return;
@@ -75,8 +93,7 @@ async function processMessage(body, env) {
                    message.interactive?.list_reply?.id || '';
     }
 
-    // Initialize Supabase
-    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+    // Initialize Supabase (Already initialized for maintenance check above)
 
     // Get or create user with full context
     const user = await getOrCreateUser(userPhone, supabase);
@@ -86,6 +103,18 @@ async function processMessage(body, env) {
 
     // Save incoming message to chat history
     await saveChatMessage(user.id, 'user', messageText, supabase);
+
+    // 🛠️ Admin Diagnostic Command
+    if (messageText.trim() === '!diag') {
+      const diagnostic = await runDiagnostics(env);
+      const diagMsg = `🛠️ *SYSTEM DIAGNOSTICS*\n\n` +
+                      `Supabase: ${diagnostic.services.supabase}\n` +
+                      `Whapi: ${diagnostic.services.whapi}\n` +
+                      `Gemini: ${diagnostic.services.gemini}\n\n` +
+                      `Status: ${diagnostic.status === 'healthy' ? '✅' : '❌'}`;
+      await sendWhatsAppMessage(userPhone, diagMsg, env);
+      return;
+    }
 
     // Detect intent(s) with Gemini - can return multiple intents
     const intents = await detectIntents(messageText, memory, env);
