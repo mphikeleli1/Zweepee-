@@ -440,6 +440,27 @@ async function handleShopping(user, messageText, mediaData, extractedData, memor
 }
 
 async function searchProducts(query, env) {
+  const q = query.toLowerCase();
+
+  // Specific mock for Dis-Chem / Pills
+  if (q.includes('pill') || q.includes('headache') || q.includes('dischem') || q.includes('panado')) {
+    return [
+      {
+        id: `prod_pill_1`,
+        name: `Panado Tablets 24s`,
+        mirage: 'shopping',
+        retailer: 'Dis-Chem',
+        price: 42,
+        rating: 4.8,
+        delivery: '1-2 hours',
+        has_affiliate: true,
+        concierge_fee: 5,
+        image_url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500',
+        url: 'https://dischem.co.za'
+      }
+    ];
+  }
+
   // Mock product data - TODO: Replace with real Takealot/Makro API or scraping
   return [
     {
@@ -456,20 +477,6 @@ async function searchProducts(query, env) {
       concierge_fee: 0,
       image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
       url: `https://takealot.com/search?q=${encodeURIComponent(query)}`
-    },
-    {
-      id: `prod_${Date.now()}_2`,
-      name: `${query} - Value`,
-      mirage: 'shopping',
-      retailer: 'Makro',
-      price: 1199,
-      rating: 4.3,
-      reviews: 64,
-      delivery: 'Collect today',
-      has_affiliate: true,
-      concierge_fee: 0,
-      image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
-      url: `https://makro.co.za/search?q=${encodeURIComponent(query)}`
     }
   ];
 }
@@ -477,16 +484,20 @@ async function searchProducts(query, env) {
 
 async function getShoppingQuickQuote(user, data, memory, env) {
   const products = await searchProducts(data.product || 'gift', env);
-  const cheapest = products[0];
+  const item = products[0];
+
+  if (item.image_url) {
+    await sendWhatsAppImage(user.phone_number, item.image_url, `🛍️ *${item.name}*\n${item.retailer} - R${item.price}`, env);
+  }
 
   return {
-    id: cheapest.id,
+    id: item.id,
     mirage: 'shopping',
-    name: cheapest.name,
-    retailer: cheapest.retailer,
-    price: cheapest.price,
-    concierge_fee: cheapest.concierge_fee || 0,
-    display: `🛍️ ${cheapest.name}\n   ${cheapest.retailer} - R${cheapest.price}`
+    name: item.name,
+    retailer: item.retailer,
+    price: item.price,
+    concierge_fee: item.concierge_fee || 0,
+    display: `🛍️ ${item.name}\n   ${item.retailer} - R${item.price}`
   };
 }
 
@@ -564,6 +575,10 @@ async function searchFood(query, lastAddress, env) {
 async function getFoodQuickQuote(user, data, memory, env) {
   const food = await searchFood(data.product || 'KFC', memory?.last_delivery_address, env);
   const item = food[0];
+
+  if (item.image_url) {
+    await sendWhatsAppImage(user.phone_number, item.image_url, `🍗 *${item.name}*\n${item.restaurant} - R${item.price}`, env);
+  }
 
   return {
     id: item.id,
@@ -647,6 +662,10 @@ async function getAccommodationQuickQuote(user, data, memory, env) {
   const hotels = await searchAccommodation(data.location || 'Cape Town', data.date || 'tomorrow', env);
   const hotel = hotels[0];
 
+  if (hotel.image_url) {
+    await sendWhatsAppImage(user.phone_number, hotel.image_url, `🏨 *${hotel.name}*\n${hotel.platform} - R${hotel.price}/night`, env);
+  }
+
   return {
     id: hotel.id,
     mirage: 'accommodation',
@@ -696,7 +715,8 @@ async function searchFlights(from, to, date, env) {
       stops: 'Direct',
       platform: 'TravelStart',
       has_affiliate: true,
-      concierge_fee: 0
+      concierge_fee: 0,
+      image_url: 'https://images.unsplash.com/photo-1436491865332-7a61a109c05d?w=500'
     }
   ];
 }
@@ -704,6 +724,10 @@ async function searchFlights(from, to, date, env) {
 async function getFlightsQuickQuote(user, data, memory, env) {
   const flights = await searchFlights(data.from || 'JNB', data.to || 'CPT', data.date || 'tomorrow', env);
   const flight = flights[0];
+
+  if (flight.image_url) {
+    await sendWhatsAppImage(user.phone_number, flight.image_url, `✈️ *${flight.airline} Flight*\n${flight.from} → ${flight.to} - R${flight.price}`, env);
+  }
 
   return {
     id: flight.id,
@@ -749,7 +773,8 @@ async function searchCarRentals(location, date, env) {
       features: ['Automatic', 'GPS', 'Insurance'],
       location: location,
       has_affiliate: true,
-      concierge_fee: 0
+      concierge_fee: 0,
+      image_url: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=500'
     }
   ];
 }
@@ -757,6 +782,10 @@ async function searchCarRentals(location, date, env) {
 async function getCarRentalQuickQuote(user, data, memory, env) {
   const cars = await searchCarRentals(data.location || 'Johannesburg', data.date || 'tomorrow', env);
   const car = cars[0];
+
+  if (car.image_url) {
+    await sendWhatsAppImage(user.phone_number, car.image_url, `🚗 *${car.name}*\n${car.platform} - R${car.price}/day`, env);
+  }
 
   return {
     id: car.id,
