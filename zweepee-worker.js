@@ -119,8 +119,16 @@ async function processMessage(body, env, ctx) {
     // Detect intent(s) with Gemini - can return multiple intents
     const intents = await detectIntents(messageText, memory, env);
 
+    // 🧠 LOG INTENT (Journey Forensics)
+    ctx.waitUntil(logSystemAlert({
+      severity: 'info',
+      source: 'brain',
+      message: 'Intent parsed',
+      context: { intents, messageText, userPhone }
+    }, env));
+
     // Route to appropriate handler
-    const response = await routeMessage(user, intents, messageText, mediaData, memory, supabase, env);
+    const response = await routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx);
 
     // Send response via Whapi
     if (response) {
@@ -380,7 +388,7 @@ Example: {"intents": [{"intent": "food", "confidence": 0.9, "extracted_data": {"
 // 4. MESSAGE ROUTER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env) {
+async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx) {
   // Ensure we have at least one intent
   if (!intents || intents.length === 0) {
     intents = [{ intent: 'help', confidence: 0.1 }];
@@ -388,12 +396,22 @@ async function routeMessage(user, intents, messageText, mediaData, memory, supab
 
   // Handle multiple intents (multi-product request)
   if (intents.length > 1) {
-    return await handleMultiIntent(user, intents, memory, supabase, env);
+    return await handleMultiIntent(user, intents, memory, supabase, env, ctx);
   }
 
   const primaryIntent = intents[0];
   const intent = primaryIntent?.intent || 'help';
   const data = primaryIntent.extracted_data || {};
+
+  // 📸 LOG MIRAGE (Journey Forensics)
+  if (!['greeting', 'help', 'conversational', 'cart_action'].includes(intent)) {
+    ctx.waitUntil(logSystemAlert({
+      severity: 'info',
+      source: 'mirage-router',
+      message: 'Mirage triggered',
+      context: { intent, data, userPhone: user.phone_number }
+    }, env));
+  }
 
   // Route to appropriate Mirage
   switch (intent) {
@@ -422,7 +440,7 @@ async function routeMessage(user, intents, messageText, mediaData, memory, supab
       return await handleElectricity(user, messageText, data, memory, supabase, env);
 
     case 'cart_action':
-      return await handleCartAction(user, messageText, data, memory, supabase, env);
+      return await handleCartAction(user, messageText, data, memory, supabase, env, ctx);
 
     case 'conversational':
       return await handleConversational(user, messageText, data, memory, supabase, env);
@@ -440,7 +458,7 @@ async function routeMessage(user, intents, messageText, mediaData, memory, supab
 // 5. MULTI-INTENT HANDLER (The Killer Feature)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function handleMultiIntent(user, intents, memory, supabase, env) {
+async function handleMultiIntent(user, intents, memory, supabase, env, ctx) {
   // User said: "KFC, flowers, hotel Cape Town"
   // We execute all Mirages in parallel, then show unified cart
 
@@ -475,7 +493,7 @@ async function handleMultiIntent(user, intents, memory, supabase, env) {
   }
 
   // Add all items to unified cart
-  await addItemsToCart(user.id, items, supabase);
+  await addItemsToCart(user.id, items, supabase, env, ctx);
 
   // Generate unified cart preview
   return generateUnifiedCart(items, user, memory);
@@ -959,9 +977,9 @@ async function handleElectricity(user, messageText, extractedData, memory, supab
 // 13. UNIFIED CART SYSTEM
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function handleCartAction(user, messageText, extractedData, memory, supabase, env) {
+async function handleCartAction(user, messageText, extractedData, memory, supabase, env, ctx) {
   if (messageText.toLowerCase().includes('checkout') || messageText.toLowerCase().includes('pay')) {
-    return await checkoutCart(user, supabase, env);
+    return await checkoutCart(user, supabase, env, ctx);
   }
 
   if (messageText.toLowerCase().includes('clear') || messageText.toLowerCase().includes('empty')) {
@@ -972,7 +990,7 @@ async function handleCartAction(user, messageText, extractedData, memory, supaba
   return await viewCart(user, supabase);
 }
 
-async function addItemsToCart(userId, items, supabase) {
+async function addItemsToCart(userId, items, supabase, env, ctx) {
   try {
     const { data: cart } = await supabase
       .from('carts')
@@ -988,6 +1006,16 @@ async function addItemsToCart(userId, items, supabase) {
       items: newItems,
       updated_at: new Date().toISOString()
     }], { onConflict: 'user_id' });
+
+    // 🛒 LOG CART (Journey Forensics)
+    if (ctx) {
+      ctx.waitUntil(logSystemAlert({
+        severity: 'info',
+        source: 'cart-system',
+        message: 'Cart updated',
+        context: { userId, itemsAdded: items.length, totalItems: newItems.length }
+      }, env));
+    }
 
   } catch (error) {
     console.error('Add to cart error:', error);
@@ -1054,7 +1082,7 @@ function generateUnifiedCart(items, user, memory) {
   return response;
 }
 
-async function checkoutCart(user, supabase, env) {
+async function checkoutCart(user, supabase, env, ctx) {
   const { data: cart } = await supabase
     .from('carts')
     .select('items')
@@ -1072,6 +1100,16 @@ async function checkoutCart(user, supabase, env) {
 
   // Generate PayFast payment link with split configuration
   const paymentUrl = await generatePayFastLink(user, items, total, env);
+
+  // 💳 LOG PAYMENT INITIATED (Journey Forensics)
+  if (ctx) {
+    ctx.waitUntil(logSystemAlert({
+      severity: 'info',
+      source: 'payment-system',
+      message: 'Checkout initiated',
+      context: { userId: user.id, total, itemCount: items.length }
+    }, env));
+  }
 
   let response = `💳 *Secure Checkout*\n\n`;
 
