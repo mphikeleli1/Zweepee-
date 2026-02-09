@@ -120,15 +120,22 @@ async function processMessage(body, env, ctx, startTime) {
 
     if (messageText.trim() === '!stats') {
       const analytics = await runAnalytics(env);
-      const statsMsg = `📈 *ZWEEPEE INTELLIGENCE*\n\n` +
-                       `*Performance:*\n` +
-                       `• Msg (24h): ${analytics.metrics.total_messages}\n` +
-                       `• Resp Time: ${analytics.metrics.avg_response_time}ms\n` +
-                       `• Errors: ${analytics.metrics.errors} (${analytics.metrics.auto_recovered} healed)\n\n` +
-                       `*Business:* \n` +
+      const statsMsg = `📊 *ZWEEPEE INTELLIGENCE REPORT*\n\n` +
+                       `⚡ *PERFORMANCE*\n` +
+                       `• Response Time: ${analytics.metrics.avg_response_time}ms avg\n` +
+                       `• Reliability: ${analytics.metrics.reliability}%\n` +
+                       `• Self-Heals: ${analytics.metrics.auto_recovered} (auto-fixed)\n\n` +
+                       `💰 *BUSINESS METRICS*\n` +
                        `• Conversion: ${analytics.business.conversion_rate}%\n` +
-                       `• Top Intent: ${analytics.business.top_intent}\n` +
-                       `• Bundle Rate: ${analytics.business.bundle_rate}%`;
+                       `• Total Orders: ${analytics.business.total_orders}\n` +
+                       `• Revenue: R${analytics.business.revenue.toLocaleString()}\n\n` +
+                       `🔥 *TOP REQUESTS*\n` +
+                       `• ${analytics.business.top_intent.charAt(0).toUpperCase() + analytics.business.top_intent.slice(1)}\n\n` +
+                       `🎁 *POPULAR BUNDLES*\n` +
+                       (analytics.business.top_bundles.length > 0
+                         ? analytics.business.top_bundles.map(b => `• ${b}`).join('\n')
+                         : '• None yet') + `\n\n` +
+                       `_Last updated: Just now_`;
       await sendWhatsAppMessage(userPhone, statsMsg, env);
       return;
     }
@@ -274,14 +281,17 @@ async function runAnalytics(env) {
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    // Fetch last 24h alerts for BI
+    // Fetch last 24h for current metrics
     const { data: alerts } = await supabase
       .from('system_alerts')
       .select('*')
       .gt('created_at', yesterday);
 
     if (!alerts || alerts.length === 0) {
-      return { metrics: { total_messages: 0, avg_response_time: 0, errors: 0, auto_recovered: 0 }, business: { conversion_rate: 0, top_intent: 'None', bundle_rate: 0 } };
+      return {
+        metrics: { total_messages: 0, avg_response_time: 0, errors: 0, auto_recovered: 0, reliability: 100 },
+        business: { conversion_rate: 0, top_intent: 'None', bundle_rate: 0, revenue: 0, total_orders: 0, top_bundles: [] }
+      };
     }
 
     // 1. Performance Metrics
@@ -290,6 +300,7 @@ async function runAnalytics(env) {
     const avgResp = perfLogs.length > 0 ? Math.round(perfLogs.reduce((a, b) => a + b, 0) / perfLogs.length) : 0;
     const errors = alerts.filter(a => a.severity === 'error' || a.severity === 'critical').length;
     const healed = alerts.filter(a => a.source === 'worker' && a.message?.includes('moment')).length;
+    const reliability = msgs > 0 ? Math.max(0, Math.min(100, Math.round(((msgs - errors) / msgs) * 10000) / 100)) : 100;
 
     // 2. Business Intelligence
     const intentLogs = alerts.filter(a => a.source === 'brain').map(a => a.context?.intents || []);
@@ -300,24 +311,46 @@ async function runAnalytics(env) {
     }, {});
 
     const topIntent = Object.entries(intentCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
-    const bundleCount = intentLogs.filter(group => group.length > 1).length;
-    const bundleRate = msgs > 0 ? Math.round((bundleCount / msgs) * 100) : 0;
+
+    // Checkout analysis
+    const checkoutLogs = alerts.filter(a => a.source === 'payment-system');
+    const revenue = checkoutLogs.reduce((sum, a) => sum + (a.context?.total || 0), 0);
+    const orderCount = checkoutLogs.length;
+
+    // Bundle Analysis
+    const bundles = checkoutLogs
+      .filter(a => a.context?.items?.length > 1)
+      .map(a => a.context.items.map(i => i.mirage).sort().join(' + '));
+
+    const bundleCounts = bundles.reduce((acc, b) => {
+      acc[b] = (acc[b] || 0) + 1;
+      return acc;
+    }, {});
+
+    const topBundles = Object.entries(bundleCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([bundle, count]) => bundle);
 
     const cartUpdates = alerts.filter(a => a.source === 'cart-system').length;
-    const checkouts = alerts.filter(a => a.source === 'payment-system').length;
-    const conversion = cartUpdates > 0 ? Math.round((checkouts / cartUpdates) * 100) : 0;
+    const conversion = cartUpdates > 0 ? Math.round((orderCount / cartUpdates) * 100) : 0;
+    const bundleRate = msgs > 0 ? Math.round((bundles.length / msgs) * 100) : 0;
 
     return {
       metrics: {
         total_messages: msgs,
         avg_response_time: avgResp,
         errors,
-        auto_recovered: healed
+        auto_recovered: healed,
+        reliability
       },
       business: {
         conversion_rate: conversion,
+        total_orders: orderCount,
+        revenue: Math.round(revenue),
         top_intent: topIntent,
-        bundle_rate: bundleRate
+        bundle_rate: bundleRate,
+        top_bundles: topBundles
       }
     };
 
@@ -1099,7 +1132,11 @@ async function addItemsToCart(userId, items, supabase, env, ctx) {
         severity: 'info',
         source: 'cart-system',
         message: 'Cart updated',
-        context: { userId, itemsAdded: items.length, totalItems: newItems.length }
+        context: {
+          userId,
+          itemsAdded: items.map(i => ({ name: i.name || i.display, mirage: i.mirage })),
+          totalItems: newItems.length
+        }
       }, env));
     }
 
@@ -1193,7 +1230,11 @@ async function checkoutCart(user, supabase, env, ctx) {
       severity: 'info',
       source: 'payment-system',
       message: 'Checkout initiated',
-      context: { userId: user.id, total, itemCount: items.length }
+      context: {
+        userId: user.id,
+        total,
+        items: items.map(i => ({ name: i.name || i.display, mirage: i.mirage }))
+      }
     }, env));
   }
 
