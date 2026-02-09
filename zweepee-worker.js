@@ -276,7 +276,9 @@ Available intents:
 - greeting (hi, hello, hey)
 - help (what can you do, help me)
 
-Return ONLY valid JSON array:
+Return ONLY valid JSON array.
+
+\`\`\`json
 [
   {
     "intent": "intent_name",
@@ -298,7 +300,8 @@ Rules:
 - Extract all relevant data (product names, locations, dates, quantities)
 - "KFC, flowers, hotel" = 3 intents: [food, shopping, accommodation]
 - "Same as last time" = conversational intent with context
-- Empty message or unclear = [{"intent": "help", "confidence": 0.5}]`;
+- Empty message or unclear = [{"intent": "help", "confidence": 0.5}]
+\`\`\``;
 
     const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
       method: 'POST',
@@ -337,9 +340,9 @@ async function detectIntentsOpenAI(messageText, memory, env) {
   const lastOrder = memory?.last_order?.items?.map(i => i.name).join(', ') || 'none';
 
   const systemPrompt = `You are the brain of Zweepee, a South African WhatsApp concierge.
-Detect ALL intents in the user message. Return a JSON array.
+Detect ALL intents in the user message. Return a JSON object with an "intents" key containing an array.
 Intents: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, cart_action, conversational, greeting, help.
-Example: [{"intent": "food", "confidence": 0.9, "extracted_data": {"product": "KFC"}}].`;
+Example: {"intents": [{"intent": "food", "confidence": 0.9, "extracted_data": {"product": "KFC"}}]}`;
 
   const userPrompt = `Message: "${messageText}"\nContext: Searches: ${historyContext}, Last order: ${lastOrder}`;
 
@@ -367,13 +370,10 @@ Example: [{"intent": "food", "confidence": 0.9, "extracted_data": {"product": "K
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  let result = JSON.parse(content);
 
-  // OpenAI JSON mode returns an object, we want the array inside or the object itself if it's already an array
-  let intents = result.intents || result;
-  if (!Array.isArray(intents)) intents = [intents];
-
-  return intents;
+  // JSON Mode guarantees valid JSON!
+  const result = JSON.parse(content);
+  return Array.isArray(result.intents) ? result.intents : [result];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
