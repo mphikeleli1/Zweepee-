@@ -22,7 +22,27 @@ export default {
       }
       const diagnostic = await runDiagnostics(env);
       const analytics = await runAnalytics(env);
-      return new Response(JSON.stringify({ ...diagnostic, intelligence: analytics }), {
+
+    // 🧠 GROK-SPEC JSON STRUCTURE
+    const grokHealth = {
+      status: diagnostic.status,
+      services: diagnostic.services,
+      performance: {
+        avg_response_time: `${analytics.metrics.avg_response_time}ms`,
+        uptime: `${analytics.metrics.reliability}%`,
+        self_heals_24h: analytics.metrics.auto_recovered
+      },
+      business_intelligence: {
+        conversion_rate: `${analytics.business.conversion_rate}%`,
+        total_orders: analytics.business.total_orders,
+        revenue: `R${analytics.business.revenue.toLocaleString()}`,
+        top_intent: analytics.business.top_intent,
+        top_bundles: analytics.business.top_bundles
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    return new Response(JSON.stringify(grokHealth), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -372,6 +392,12 @@ async function detectIntents(messageText, memory, env) {
       return await detectIntentsOpenAI(messageText, memory, env);
     } catch (e) {
       console.error('⚠️ OpenAI Brain glitched:', e.message);
+      // 🔧 Log Self-Heal
+      logSystemAlert({
+        severity: 'info',
+        source: 'worker',
+        message: 'OpenAI moment - auto-recovered via Gemini'
+      }, env);
     }
   }
 
@@ -457,6 +483,12 @@ Rules:
 
   } catch (error) {
     console.error('⚠️ Gemini Brain failing, activating Fallback Brain:', error.message);
+    // 🔧 Log Self-Heal
+    logSystemAlert({
+      severity: 'info',
+      source: 'worker',
+      message: 'AI failure moment - auto-recovered via Fallback'
+    }, env);
     // SELF-HEALING: Use keyword-based fallback if all AI models are down
     return fallbackIntentParser(messageText);
   }
