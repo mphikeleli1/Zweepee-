@@ -30,6 +30,15 @@ export default {
     if (request.method === 'POST' && url.pathname === '/webhook') {
       const body = await request.json();
 
+      // 📥 RAW INBOUND LOGGING (The "Black Box")
+      // This proves if Whapi is even reaching our worker
+      ctx.waitUntil(logSystemAlert({
+        severity: 'info',
+        source: 'whapi-webhook',
+        message: 'Raw inbound payload',
+        context: body
+      }, env));
+
       // Acknowledge immediately (Whapi expects fast response)
       ctx.waitUntil(processMessage(body, env, ctx));
 
