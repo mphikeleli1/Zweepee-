@@ -203,7 +203,21 @@ async function runDiagnostics(env) {
     results.services.gemini = `Fatal: ${e.message}`;
   }
 
-  const allHealthy = Object.values(results.services).every(v => v === 'Healthy');
+  // 4. Check OpenAI
+  try {
+    if (env.OPENAI_API_KEY) {
+      const openaiRes = await fetch('https://api.openai.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}` }
+      });
+      results.services.openai = openaiRes.ok ? 'Healthy' : `Error ${openaiRes.status}`;
+    } else {
+      results.services.openai = 'Missing Key';
+    }
+  } catch (e) {
+    results.services.openai = `Fatal: ${e.message}`;
+  }
+
+  const allHealthy = Object.values(results.services).every(v => v.includes('Healthy'));
   results.status = allHealthy ? 'healthy' : 'unhealthy';
 
   return results;
@@ -214,7 +228,19 @@ async function runDiagnostics(env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function detectIntents(messageText, memory, env) {
+  // 1. Try OpenAI First (New Brain)
+  if (env.OPENAI_API_KEY) {
+    try {
+      console.log('🧠 Activating OpenAI Brain...');
+      return await detectIntentsOpenAI(messageText, memory, env);
+    } catch (e) {
+      console.error('⚠️ OpenAI Brain glitched:', e.message);
+    }
+  }
+
+  // 2. Try Gemini (Old Brain)
   try {
+    console.log('🧠 Activating Gemini Brain...');
     const historyContext = memory?.recent_searches?.slice(0, 3).join(', ') || 'none';
     const lastOrder = memory?.last_order?.items?.map(i => i.name).join(', ') || 'none';
 
@@ -290,10 +316,54 @@ Rules:
     return intents;
 
   } catch (error) {
-    console.error('⚠️ Gemini failing, activating Fallback Brain:', error.message);
-    // SELF-HEALING: Use keyword-based fallback if AI is down
+    console.error('⚠️ Gemini Brain failing, activating Fallback Brain:', error.message);
+    // SELF-HEALING: Use keyword-based fallback if all AI models are down
     return fallbackIntentParser(messageText);
   }
+}
+
+async function detectIntentsOpenAI(messageText, memory, env) {
+  const historyContext = memory?.recent_searches?.slice(0, 3).join(', ') || 'none';
+  const lastOrder = memory?.last_order?.items?.map(i => i.name).join(', ') || 'none';
+
+  const systemPrompt = `You are the brain of Zweepee, a South African WhatsApp concierge.
+Detect ALL intents in the user message. Return a JSON array.
+Intents: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, cart_action, conversational, greeting, help.
+Example: [{"intent": "food", "confidence": 0.9, "extracted_data": {"product": "KFC"}}].`;
+
+  const userPrompt = `Message: "${messageText}"\nContext: Searches: ${historyContext}, Last order: ${lastOrder}`;
+
+  const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  let result = JSON.parse(content);
+
+  // OpenAI JSON mode returns an object, we want the array inside or the object itself if it's already an array
+  let intents = result.intents || result;
+  if (!Array.isArray(intents)) intents = [intents];
+
+  return intents;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
