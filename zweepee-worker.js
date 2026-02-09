@@ -21,13 +21,15 @@ export default {
         return new Response('Unauthorized', { status: 401 });
       }
       const diagnostic = await runDiagnostics(env);
-      return new Response(JSON.stringify(diagnostic), {
+      const analytics = await runAnalytics(env);
+      return new Response(JSON.stringify({ ...diagnostic, intelligence: analytics }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
     // Whapi webhook (POST only - no verification needed)
     if (request.method === 'POST' && url.pathname === '/webhook') {
+      const startTime = Date.now();
       const body = await request.json();
 
       // 📥 RAW INBOUND LOGGING (The "Black Box")
@@ -40,7 +42,7 @@ export default {
       }, env));
 
       // Acknowledge immediately (Whapi expects fast response)
-      ctx.waitUntil(processMessage(body, env, ctx));
+      ctx.waitUntil(processMessage(body, env, ctx, startTime));
 
       return new Response('OK', { status: 200 });
     }
@@ -53,7 +55,7 @@ export default {
 // 2. MESSAGE PROCESSING ORCHESTRATOR
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function processMessage(body, env, ctx) {
+async function processMessage(body, env, ctx, startTime) {
   try {
     // 🛠️ Initialize Supabase first for early checks
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
@@ -116,6 +118,21 @@ async function processMessage(body, env, ctx) {
       return;
     }
 
+    if (messageText.trim() === '!stats') {
+      const analytics = await runAnalytics(env);
+      const statsMsg = `📈 *ZWEEPEE INTELLIGENCE*\n\n` +
+                       `*Performance:*\n` +
+                       `• Msg (24h): ${analytics.metrics.total_messages}\n` +
+                       `• Resp Time: ${analytics.metrics.avg_response_time}ms\n` +
+                       `• Errors: ${analytics.metrics.errors} (${analytics.metrics.auto_recovered} healed)\n\n` +
+                       `*Business:* \n` +
+                       `• Conversion: ${analytics.business.conversion_rate}%\n` +
+                       `• Top Intent: ${analytics.business.top_intent}\n` +
+                       `• Bundle Rate: ${analytics.business.bundle_rate}%`;
+      await sendWhatsAppMessage(userPhone, statsMsg, env);
+      return;
+    }
+
     // Detect intent(s) with Gemini - can return multiple intents
     const intents = await detectIntents(messageText, memory, env);
 
@@ -132,7 +149,18 @@ async function processMessage(body, env, ctx) {
 
     // Send response via Whapi
     if (response) {
+      const duration = startTime ? (Date.now() - startTime) : null;
       await sendWhatsAppMessage(userPhone, response, env);
+
+      // 📊 LOG PERFORMANCE (Journey Forensics)
+      if (duration) {
+        ctx.waitUntil(logSystemAlert({
+          severity: 'info',
+          source: 'performance',
+          message: 'Request processed',
+          context: { duration_ms: duration, userPhone }
+        }, env));
+      }
 
       // Save bot response to chat history
       await saveChatMessage(user.id, 'assistant', response, supabase);
@@ -239,6 +267,64 @@ async function runDiagnostics(env) {
   results.status = allHealthy ? 'healthy' : 'unhealthy';
 
   return results;
+}
+
+async function runAnalytics(env) {
+  try {
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // Fetch last 24h alerts for BI
+    const { data: alerts } = await supabase
+      .from('system_alerts')
+      .select('*')
+      .gt('created_at', yesterday);
+
+    if (!alerts || alerts.length === 0) {
+      return { metrics: { total_messages: 0, avg_response_time: 0, errors: 0, auto_recovered: 0 }, business: { conversion_rate: 0, top_intent: 'None', bundle_rate: 0 } };
+    }
+
+    // 1. Performance Metrics
+    const msgs = alerts.filter(a => a.source === 'whapi-webhook').length;
+    const perfLogs = alerts.filter(a => a.source === 'performance').map(a => a.context?.duration_ms || 0);
+    const avgResp = perfLogs.length > 0 ? Math.round(perfLogs.reduce((a, b) => a + b, 0) / perfLogs.length) : 0;
+    const errors = alerts.filter(a => a.severity === 'error' || a.severity === 'critical').length;
+    const healed = alerts.filter(a => a.source === 'worker' && a.message?.includes('moment')).length;
+
+    // 2. Business Intelligence
+    const intentLogs = alerts.filter(a => a.source === 'brain').map(a => a.context?.intents || []);
+    const flattenedIntents = intentLogs.flat();
+    const intentCounts = flattenedIntents.reduce((acc, i) => {
+      acc[i.intent] = (acc[i.intent] || 0) + 1;
+      return acc;
+    }, {});
+
+    const topIntent = Object.entries(intentCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
+    const bundleCount = intentLogs.filter(group => group.length > 1).length;
+    const bundleRate = msgs > 0 ? Math.round((bundleCount / msgs) * 100) : 0;
+
+    const cartUpdates = alerts.filter(a => a.source === 'cart-system').length;
+    const checkouts = alerts.filter(a => a.source === 'payment-system').length;
+    const conversion = cartUpdates > 0 ? Math.round((checkouts / cartUpdates) * 100) : 0;
+
+    return {
+      metrics: {
+        total_messages: msgs,
+        avg_response_time: avgResp,
+        errors,
+        auto_recovered: healed
+      },
+      business: {
+        conversion_rate: conversion,
+        top_intent: topIntent,
+        bundle_rate: bundleRate
+      }
+    };
+
+  } catch (error) {
+    console.error('Analytics error:', error);
+    return { error: error.message };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
