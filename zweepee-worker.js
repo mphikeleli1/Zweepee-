@@ -186,7 +186,8 @@ async function runDiagnostics(env) {
       headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
     });
     const whapiData = await whapiRes.json();
-    results.services.whapi = whapiRes.ok ? 'Healthy' : whapiData.error || 'Unknown Error';
+    const maskedToken = env.WHAPI_TOKEN ? `${env.WHAPI_TOKEN.substring(0, 5)}...` : 'Missing';
+    results.services.whapi = whapiRes.ok ? 'Healthy' : `${whapiData.error || 'Unauthorized'} (Token: ${maskedToken})`;
   } catch (e) {
     results.services.whapi = `Fatal: ${e.message}`;
   }
