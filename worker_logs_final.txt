@@ -1,0 +1,191 @@
+{
+  "wallTime": 17744,
+  "cpuTime": 26,
+  "truncated": false,
+  "executionModel": "stateless",
+  "outcome": "ok",
+  "scriptTags": [
+    "cf:service=zweepee"
+  ],
+  "scriptVersion": {
+    "id": "be9acd6b-fdf6-4fa5-9694-252525d869e9"
+  },
+  "scriptName": "zweepee",
+  "diagnosticsChannelEvents": [],
+  "exceptions": [],
+  "logs": [],
+  "eventTimestamp": 1770745522278,
+  "event": {
+    "request": {
+      "url": "https://zweepee.busanigama.workers.dev/webhook",
+      "method": "POST",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, br",
+        "cf-connecting-ip": "35.224.132.190",
+        "cf-ipcountry": "US",
+        "cf-ray": "9cbd6b799c8a6203",
+        "cf-visitor": "{\"scheme\":\"https\"}",
+        "connection": "Keep-Alive",
+        "content-length": "232",
+        "content-type": "application/json",
+        "host": "zweepee.busanigama.workers.dev",
+        "user-agent": "curl/8.5.0",
+        "x-forwarded-proto": "https",
+        "x-real-ip": "35.224.132.190"
+      },
+      "cf": {
+        "clientTcpRtt": 12,
+        "requestHeaderNames": {},
+        "httpProtocol": "HTTP/2",
+        "tlsCipher": "AEAD-AES256-GCM-SHA384",
+        "continent": "NA",
+        "asn": 396982,
+        "verifiedBotCategory": "",
+        "country": "US",
+        "isEUCountry": false,
+        "region": "Iowa",
+        "tlsClientCiphersSha1": "GXSPDLP4G3X+prK73a4wBuOaHRc=",
+        "tlsClientAuth": {
+          "certIssuerDNLegacy": "",
+          "certIssuerSKI": "",
+          "certSubjectDNRFC2253": "",
+          "certSubjectDNLegacy": "",
+          "certFingerprintSHA256": "",
+          "certNotBefore": "",
+          "certSKI": "",
+          "certSerial": "",
+          "certIssuerDN": "",
+          "certVerified": "NONE",
+          "certNotAfter": "",
+          "certSubjectDN": "",
+          "certPresented": "0",
+          "certRevoked": "0",
+          "certIssuerSerial": "",
+          "certIssuerDNRFC2253": "",
+          "certFingerprintSHA1": ""
+        },
+        "tlsClientRandom": "qIKpadaGlbMw79ravU7ELXTle5ZgeD2vFG7fXKCIUlU=",
+        "tlsExportedAuthenticator": {
+          "clientFinished": "ca07257d7ecd9e6845a48a3e97959dd4afcf4960ae97dd292e7f5d27938764d1b1487bfee876201a5c46bd92fc02123e",
+          "clientHandshake": "c1a29ded9e32c08e3f22f837980586389fff1576197f71c65992f1a4a251ad6bbdea44865b007ac0089d782aa7e2a4ed",
+          "serverHandshake": "be37f4243996fbec905927310c899cdc1944df07ab4bbd549786b9bab2a6a76b61a6beef0217297dd3d2fa7478ea7c35",
+          "serverFinished": "5f8c38965b1872311a7f5a28048eb232bde65a678a537b526db2f41cfb89037510d1bfd551f34066eb6aa949802d83c9"
+        },
+        "tlsClientHelloLength": "508",
+        "colo": "ORD",
+        "timezone": "America/Chicago",
+        "longitude": "-95.86083",
+        "latitude": "41.26194",
+        "edgeRequestKeepAliveStatus": 1,
+        "requestPriority": "weight=16;exclusive=0;group=0;group-weight=0",
+        "postalCode": "51502",
+        "city": "Council Bluffs",
+        "tlsVersion": "TLSv1.3",
+        "regionCode": "IA",
+        "asOrganization": "Google LLC",
+        "metroCode": "652",
+        "tlsClientExtensionsSha1Le": "mRCkyUCRFDTLCNHGQsZNFhkU1/4=",
+        "tlsClientExtensionsSha1": "tlH5gnoC5Z1HF45J5OgHEi338V0="
+      }
+    },
+    "response": {
+      "status": 200
+    }
+  }
+}
+{
+  "wallTime": 821,
+  "cpuTime": 14,
+  "truncated": false,
+  "executionModel": "stateless",
+  "outcome": "ok",
+  "scriptTags": [
+    "cf:service=zweepee"
+  ],
+  "scriptVersion": {
+    "id": "be9acd6b-fdf6-4fa5-9694-252525d869e9"
+  },
+  "scriptName": "zweepee",
+  "diagnosticsChannelEvents": [],
+  "exceptions": [],
+  "logs": [],
+  "eventTimestamp": 1770745646319,
+  "event": {
+    "request": {
+      "url": "https://zweepee.busanigama.workers.dev/health",
+      "method": "GET",
+      "headers": {
+        "accept": "*/*",
+        "accept-encoding": "gzip, br",
+        "cf-connecting-ip": "35.224.132.190",
+        "cf-ipcountry": "US",
+        "cf-ray": "9cbd6e813df16203",
+        "cf-visitor": "{\"scheme\":\"https\"}",
+        "connection": "Keep-Alive",
+        "host": "zweepee.busanigama.workers.dev",
+        "user-agent": "curl/8.5.0",
+        "x-admin-key": "REDACTED",
+        "x-forwarded-proto": "https",
+        "x-real-ip": "35.224.132.190"
+      },
+      "cf": {
+        "clientTcpRtt": 11,
+        "requestHeaderNames": {},
+        "httpProtocol": "HTTP/2",
+        "tlsCipher": "AEAD-AES256-GCM-SHA384",
+        "continent": "NA",
+        "asn": 396982,
+        "verifiedBotCategory": "",
+        "country": "US",
+        "isEUCountry": false,
+        "region": "Iowa",
+        "tlsClientCiphersSha1": "GXSPDLP4G3X+prK73a4wBuOaHRc=",
+        "tlsClientAuth": {
+          "certIssuerDNLegacy": "",
+          "certIssuerSKI": "",
+          "certSubjectDNRFC2253": "",
+          "certSubjectDNLegacy": "",
+          "certFingerprintSHA256": "",
+          "certNotBefore": "",
+          "certSKI": "",
+          "certSerial": "",
+          "certIssuerDN": "",
+          "certVerified": "NONE",
+          "certNotAfter": "",
+          "certSubjectDN": "",
+          "certPresented": "0",
+          "certRevoked": "0",
+          "certIssuerSerial": "",
+          "certIssuerDNRFC2253": "",
+          "certFingerprintSHA1": ""
+        },
+        "tlsClientRandom": "2RFncCEbmuDaenvnbOfgydvXWYdQEVrHq6lsjeAb1qE=",
+        "tlsExportedAuthenticator": {
+          "clientFinished": "b2b04d5ac3da2c911f3edd88bbcb1b9569bc453b5f7a46d3a1b8f686562f8be77e8cdec3be349d1410c1aa60ba10bde0",
+          "clientHandshake": "4b89f20951140d6b797f57eb3d3ca2cefd61fdeb8b092d8befe44174370fbd9bab28734847a8469f9c3606d8398269cf",
+          "serverHandshake": "3feb2601d5e0f11c8e8bad12f6c33530290f70caf4e00000ee1a4fb36441e43b7d0cb10eca28b6051c8c657c6b7eed58",
+          "serverFinished": "98be8e7ed062ab5d693232d9362883f344d5b90cdccd1c38ef1e99751ebc7c0ae4ab651476115876ed3b44e9a5e5ed3d"
+        },
+        "tlsClientHelloLength": "508",
+        "colo": "ORD",
+        "timezone": "America/Chicago",
+        "longitude": "-95.86083",
+        "latitude": "41.26194",
+        "edgeRequestKeepAliveStatus": 1,
+        "requestPriority": "weight=16;exclusive=0;group=0;group-weight=0",
+        "postalCode": "51502",
+        "city": "Council Bluffs",
+        "tlsVersion": "TLSv1.3",
+        "regionCode": "IA",
+        "asOrganization": "Google LLC",
+        "metroCode": "652",
+        "tlsClientExtensionsSha1Le": "mRCkyUCRFDTLCNHGQsZNFhkU1/4=",
+        "tlsClientExtensionsSha1": "tlH5gnoC5Z1HF45J5OgHEi338V0="
+      }
+    },
+    "response": {
+      "status": 200
+    }
+  }
+}
