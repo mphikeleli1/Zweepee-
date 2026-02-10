@@ -94,7 +94,6 @@ export default {
       const body = await request.json();
 
       // 📥 RAW INBOUND LOGGING (The "Black Box")
-      // This proves if Whapi is even reaching our worker
       ctx.waitUntil(logSystemAlert({
         severity: 'info',
         source: 'whapi-webhook',
@@ -156,8 +155,6 @@ async function processMessage(body, env, ctx, startTime) {
                    message.interactive?.list_reply?.id || '';
     }
 
-    // Initialize Supabase (Already initialized for maintenance check above)
-
     // Get or create user with full context
     const user = await getOrCreateUser(userPhone, supabase);
 
@@ -201,8 +198,8 @@ async function processMessage(body, env, ctx, startTime) {
       return;
     }
 
-    // Detect intent(s) with Gemini - can return multiple intents
-    const intents = await detectIntents(messageText, memory, env);
+    // Detect intent(s) - pass ctx for background logging
+    const intents = await detectIntents(messageText, memory, env, ctx);
 
     // 🧠 LOG INTENT (Journey Forensics)
     ctx.waitUntil(logSystemAlert({
@@ -298,6 +295,7 @@ async function runDiagnostics(env) {
     const whapiRes = await fetch('https://gate.whapi.cloud/health', {
       headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
     });
+    await whapiRes.text(); // Read to avoid stalled warning
 
     // Also check settings to see webhook URL
     const settingsRes = await fetch('https://gate.whapi.cloud/settings', {
@@ -305,7 +303,6 @@ async function runDiagnostics(env) {
     });
     const settingsData = await settingsRes.json();
 
-    const maskedToken = env.WHAPI_TOKEN ? `${env.WHAPI_TOKEN.substring(0, 5)}...` : 'Missing';
     results.services.whapi = whapiRes.ok ? 'Healthy' : 'Unreachable';
     results.services.whapi_webhook = settingsData.webhooks?.[0]?.url || 'Not Configured';
     results.services.whapi_settings = settingsRes.ok ? 'Accessed' : `Error: ${settingsData.error || 'Unknown'}`;
@@ -331,17 +328,19 @@ async function runDiagnostics(env) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] })
     });
+    await geminiRes.text(); // Read to avoid stalled warning
     results.services.gemini = geminiRes.ok ? 'Healthy' : 'Invalid API Key or Quota Exceeded (Limit 0)';
   } catch (e) {
     results.services.gemini = `Fatal: ${e.message}`;
   }
 
-  // 4. Check OpenAI
+  // 5. Check OpenAI
   try {
     if (env.OPENAI_API_KEY) {
       const openaiRes = await fetch('https://api.openai.com/v1/models', {
         headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}` }
       });
+      await openaiRes.text(); // Read to avoid stalled warning
       results.services.openai = openaiRes.ok ? 'Healthy' : `Error ${openaiRes.status}`;
     } else {
       results.services.openai = 'Missing Key';
@@ -441,94 +440,55 @@ async function runAnalytics(env) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 3. GEMINI MULTI-INTENT PARSER (The Brain)
+// 3. MULTI-BRAIN INTENT PARSER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function detectIntents(messageText, memory, env) {
-  // 1. Try OpenAI First (New Brain)
+async function detectIntents(messageText, memory, env, ctx) {
+  // 1. Try OpenAI First (Primary Brain)
   if (env.OPENAI_API_KEY) {
     try {
       console.log('🧠 Activating OpenAI Brain...');
       return await detectIntentsOpenAI(messageText, memory, env);
     } catch (e) {
       console.error('⚠️ OpenAI Brain glitched:', e.message);
-      // 🔧 Log Self-Heal
-      logSystemAlert({
-        severity: 'info',
-        source: 'worker',
-        message: 'OpenAI moment - auto-recovered via Gemini'
-      }, env);
+      if (ctx) {
+        ctx.waitUntil(logSystemAlert({
+          severity: 'info',
+          source: 'worker',
+          message: `OpenAI moment: ${e.message.substring(0, 100)}`
+        }, env));
+      }
     }
   }
 
-  // 2. Try Gemini (Old Brain)
+  // 2. Try Gemini (Secondary Brain)
   try {
     console.log('🧠 Activating Gemini Brain...');
     const historyContext = memory?.recent_searches?.slice(0, 3).join(', ') || 'none';
     const lastOrder = memory?.last_order?.items?.map(i => i.name).join(', ') || 'none';
 
-    const prompt = `Analyze this WhatsApp message and detect ALL intents. A user can request multiple things in one message.
-
+    const prompt = `Analyze this WhatsApp message and detect ALL intents.
 Message: "${messageText}"
+User context: Searches: ${historyContext}, Last order: ${lastOrder}
 
-User context:
-- Recent searches: ${historyContext}
-- Last order: ${lastOrder}
+Available intents: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, cart_action, conversational, greeting, help.
 
-Available intents:
-- shopping (products, retail)
-- food (KFC, McDonald's, fast food delivery)
-- accommodation (hotels, Airbnb, guesthouses)
-- flights (air travel)
-- car_rental (rent a car)
-- buses (intercity buses)
-- airtime (mobile airtime/data)
-- electricity (prepaid electricity)
-- cart_action (view cart, checkout, add, remove)
-- conversational (show cheaper, compare, repeat order, same as last time)
-- greeting (hi, hello, hey)
-- help (what can you do, help me)
-
-Return ONLY valid JSON array.
-
-\`\`\`json
-[
-  {
-    "intent": "intent_name",
-    "confidence": 0.0-1.0,
-    "extracted_data": {
-      "product": "extracted product name",
-      "location": "extracted location",
-      "date": "extracted date",
-      "quantity": number,
-      "budget": number,
-      "any_other_relevant_data": "value"
-    }
-  }
-]
-
-Rules:
-- Return array even if single intent
-- Confidence >0.7 for clear intent
-- Extract all relevant data (product names, locations, dates, quantities)
-- "KFC, flowers, hotel" = 3 intents: [food, shopping, accommodation]
-- "Same as last time" = conversational intent with context
-- Empty message or unclear = [{"intent": "help", "confidence": 0.5}]
-\`\`\``;
+Return ONLY valid JSON array:
+[{"intent": "intent_name", "confidence": 0.9, "extracted_data": {"product": "...", "location": "..."}}]`;
 
     const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 800
-        }
+        generationConfig: { temperature: 0.2, maxOutputTokens: 800 }
       })
     });
 
-    if (!response.ok) throw new Error('Gemini API unreachable');
+    if (!response.ok) {
+      await response.text(); // Clear stalled response
+      throw new Error('Gemini API unreachable');
+    }
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
@@ -543,13 +503,13 @@ Rules:
 
   } catch (error) {
     console.error('⚠️ Gemini Brain failing, activating Fallback Brain:', error.message);
-    // 🔧 Log Self-Heal
-    logSystemAlert({
-      severity: 'info',
-      source: 'worker',
-      message: 'AI failure moment - auto-recovered via Fallback'
-    }, env);
-    // SELF-HEALING: Use keyword-based fallback if all AI models are down
+    if (ctx) {
+      ctx.waitUntil(logSystemAlert({
+        severity: 'info',
+        source: 'worker',
+        message: 'AI failure - using Fallback Parser'
+      }, env));
+    }
     return fallbackIntentParser(messageText);
   }
 }
@@ -560,8 +520,7 @@ async function detectIntentsOpenAI(messageText, memory, env) {
 
   const systemPrompt = `You are the brain of Zweepee, a South African WhatsApp concierge.
 Detect ALL intents in the user message. Return a JSON object with an "intents" key containing an array.
-Intents: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, cart_action, conversational, greeting, help.
-Example: {"intents": [{"intent": "food", "confidence": 0.9, "extracted_data": {"product": "KFC"}}]}`;
+Intents: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, cart_action, conversational, greeting, help.`;
 
   const userPrompt = `Message: "${messageText}"\nContext: Searches: ${historyContext}, Last order: ${lastOrder}`;
 
@@ -589,8 +548,6 @@ Example: {"intents": [{"intent": "food", "confidence": 0.9, "extracted_data": {"
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-
-  // JSON Mode guarantees valid JSON!
   const result = JSON.parse(content);
   return Array.isArray(result.intents) ? result.intents : [result];
 }
@@ -600,12 +557,10 @@ Example: {"intents": [{"intent": "food", "confidence": 0.9, "extracted_data": {"
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx) {
-  // Ensure we have at least one intent
   if (!intents || intents.length === 0) {
     intents = [{ intent: 'help', confidence: 0.1 }];
   }
 
-  // Handle multiple intents (multi-product request)
   if (intents.length > 1) {
     return await handleMultiIntent(user, intents, memory, supabase, env, ctx);
   }
@@ -614,7 +569,6 @@ async function routeMessage(user, intents, messageText, mediaData, memory, supab
   const intent = primaryIntent?.intent || 'help';
   const data = primaryIntent.extracted_data || {};
 
-  // 📸 LOG MIRAGE (Journey Forensics)
   if (!['greeting', 'help', 'conversational', 'cart_action'].includes(intent)) {
     ctx.waitUntil(logSystemAlert({
       severity: 'info',
@@ -624,41 +578,29 @@ async function routeMessage(user, intents, messageText, mediaData, memory, supab
     }, env));
   }
 
-  // Route to appropriate Mirage
   switch (intent) {
     case 'shopping':
       return await handleShopping(user, messageText, mediaData, data, memory, supabase, env);
-
     case 'food':
       return await handleFood(user, messageText, data, memory, supabase, env);
-
     case 'accommodation':
       return await handleAccommodation(user, messageText, data, memory, supabase, env);
-
     case 'flights':
       return await handleFlights(user, messageText, data, memory, supabase, env);
-
     case 'car_rental':
       return await handleCarRental(user, messageText, data, memory, supabase, env);
-
     case 'buses':
       return await handleBuses(user, messageText, data, memory, supabase, env);
-
     case 'airtime':
       return await handleAirtime(user, messageText, data, memory, supabase, env);
-
     case 'electricity':
       return await handleElectricity(user, messageText, data, memory, supabase, env);
-
     case 'cart_action':
       return await handleCartAction(user, messageText, data, memory, supabase, env, ctx);
-
     case 'conversational':
       return await handleConversational(user, messageText, data, memory, supabase, env);
-
     case 'greeting':
       return generateGreeting(user, memory);
-
     case 'help':
     default:
       return generateHelp(user, memory);
@@ -666,31 +608,22 @@ async function routeMessage(user, intents, messageText, mediaData, memory, supab
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 5. MULTI-INTENT HANDLER (The Killer Feature)
+// 5. MULTI-INTENT HANDLER
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleMultiIntent(user, intents, memory, supabase, env, ctx) {
-  // User said: "KFC, flowers, hotel Cape Town"
-  // We execute all Mirages in parallel, then show unified cart
-
   const results = await Promise.allSettled(
     intents.map(async (intent) => {
       const intentType = intent.intent;
       const data = intent.extracted_data || {};
 
       switch (intentType) {
-        case 'food':
-          return await getFoodQuickQuote(user, data, memory, env);
-        case 'shopping':
-          return await getShoppingQuickQuote(user, data, memory, env);
-        case 'accommodation':
-          return await getAccommodationQuickQuote(user, data, memory, env);
-        case 'flights':
-          return await getFlightsQuickQuote(user, data, memory, env);
-        case 'car_rental':
-          return await getCarRentalQuickQuote(user, data, memory, env);
-        default:
-          return null;
+        case 'food': return await getFoodQuickQuote(user, data, memory, env);
+        case 'shopping': return await getShoppingQuickQuote(user, data, memory, env);
+        case 'accommodation': return await getAccommodationQuickQuote(user, data, memory, env);
+        case 'flights': return await getFlightsQuickQuote(user, data, memory, env);
+        case 'car_rental': return await getCarRentalQuickQuote(user, data, memory, env);
+        default: return null;
       }
     })
   );
@@ -703,10 +636,7 @@ async function handleMultiIntent(user, intents, memory, supabase, env, ctx) {
     return `I couldn't find what you're looking for. Try being more specific!`;
   }
 
-  // Add all items to unified cart
   await addItemsToCart(user.id, items, supabase, env, ctx);
-
-  // Generate unified cart preview
   return generateUnifiedCart(items, user, memory);
 }
 
@@ -715,7 +645,6 @@ async function handleMultiIntent(user, intents, memory, supabase, env, ctx) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleShopping(user, messageText, mediaData, extractedData, memory, supabase, env) {
-  // Check for repeat order
   if (messageText.toLowerCase().includes('usual') || messageText.toLowerCase().includes('same as last')) {
     const lastOrder = memory?.last_order;
     if (lastOrder?.items?.some(i => i.mirage === 'shopping')) {
@@ -732,19 +661,14 @@ async function handleShopping(user, messageText, mediaData, extractedData, memor
     return `🛍️ What are you looking for?\n\nTry: "iPhone" or "Nike shoes" or send a photo 📸`;
   }
 
-  // Simulate product search (TODO: Real API integration)
   const products = await searchProducts(query, env);
 
   if (!products || products.length === 0) {
     return `🔍 No results for "${query}"\n\nTry:\n• Different spelling\n• Brand name\n• Send a photo 📸`;
   }
 
-  // Send images for top 2 products
   for (const p of products.slice(0, 2)) {
-    let caption = `🛍️ *${p.name}*\n`;
-    caption += `${p.retailer} - R${p.price.toLocaleString()}\n`;
-    caption += `📦 ${p.delivery}`;
-
+    let caption = `🛍️ *${p.name}*\n${p.retailer} - R${p.price.toLocaleString()}\n📦 ${p.delivery}`;
     await sendWhatsAppImage(user.phone_number, p.image_url, caption, env);
   }
 
@@ -753,219 +677,106 @@ async function handleShopping(user, messageText, mediaData, extractedData, memor
 
 async function searchProducts(query, env) {
   const q = query.toLowerCase();
-
-  // Specific mock for Dis-Chem / Pills
   if (q.includes('pill') || q.includes('headache') || q.includes('dischem') || q.includes('panado')) {
-    return [
-      {
-        id: `prod_pill_1`,
-        name: `Panado Tablets 24s`,
-        mirage: 'shopping',
-        retailer: 'Dis-Chem',
-        price: 42,
-        rating: 4.8,
-        delivery: '1-2 hours',
-        has_affiliate: true,
-        concierge_fee: 5,
-        image_url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500',
-        url: 'https://dischem.co.za'
-      }
-    ];
+    return [{
+      id: `prod_pill_1`,
+      name: `Panado Tablets 24s`,
+      mirage: 'shopping',
+      retailer: 'Dis-Chem',
+      price: 42,
+      delivery: '1-2 hours',
+      image_url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500'
+    }];
   }
 
-  // Mock product data - TODO: Replace with real Takealot/Makro API or scraping
-  return [
-    {
-      id: `prod_${Date.now()}_1`,
-      name: `${query} - Premium`,
-      mirage: 'shopping',
-      retailer: 'Takealot',
-      price: 1299,
-      original_price: 1499,
-      rating: 4.5,
-      reviews: 128,
-      delivery: '2-3 days',
-      has_affiliate: true,
-      concierge_fee: 0,
-      image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-      url: `https://takealot.com/search?q=${encodeURIComponent(query)}`
-    }
-  ];
+  return [{
+    id: `prod_${Date.now()}_1`,
+    name: `${query} - Premium`,
+    mirage: 'shopping',
+    retailer: 'Takealot',
+    price: 1299,
+    delivery: '2-3 days',
+    image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'
+  }];
 }
-
 
 async function getShoppingQuickQuote(user, data, memory, env) {
   const products = await searchProducts(data.product || 'gift', env);
   const item = products[0];
-
-  if (item.image_url) {
-    await sendWhatsAppImage(user.phone_number, item.image_url, `🛍️ *${item.name}*\n${item.retailer} - R${item.price}`, env);
-  }
-
+  if (item.image_url) await sendWhatsAppImage(user.phone_number, item.image_url, `🛍️ *${item.name}*\n${item.retailer} - R${item.price}`, env);
   return {
-    id: item.id,
-    mirage: 'shopping',
-    name: item.name,
-    retailer: item.retailer,
-    price: item.price,
-    concierge_fee: item.concierge_fee || 0,
-    display: `🛍️ ${item.name}\n   ${item.retailer} - R${item.price}`
+    id: item.id, mirage: 'shopping', name: item.name, retailer: item.retailer,
+    price: item.price, concierge_fee: 5, display: `🛍️ ${item.name}\n   ${item.retailer} - R${item.price}`
   };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 7. FOOD MIRAGE (KFC, McDonald's, etc)
+// 7. FOOD MIRAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleFood(user, messageText, extractedData, memory, supabase, env) {
   const query = extractedData.product || messageText;
-
-  // Check for repeat order
   if (messageText.toLowerCase().includes('usual')) {
     const lastFood = memory?.last_order?.items?.find(i => i.mirage === 'food');
-    if (lastFood) {
-      return `🍗 *Your usual?*\n\n${lastFood.name}\n${lastFood.restaurant} - R${lastFood.price}\nDelivered in ~${lastFood.delivery_time}\n\n[Yes] [Change Order]`;
-    }
+    if (lastFood) return `🍗 *Your usual?*\n\n${lastFood.name}\n${lastFood.restaurant} - R${lastFood.price}\nDelivered in ~${lastFood.delivery_time}\n\n[Yes] [Change Order]`;
   }
 
-  // Mock food options - TODO: Integrate with UberEats/Mr D API
   const foodOptions = await searchFood(query, memory?.last_delivery_address, env);
+  if (!foodOptions || foodOptions.length === 0) return `🍔 What would you like to eat?\n\nPopular:\n• KFC\n• McDonald's\n• Nando's`;
 
-  if (!foodOptions || foodOptions.length === 0) {
-    return `🍔 What would you like to eat?\n\nPopular:\n• KFC\n• McDonald's\n• Nando's\n• Pizza`;
-  }
-
-  // Send images for food options
   for (const f of foodOptions.slice(0, 2)) {
-    let caption = `🍗 *${f.name}*\n`;
-    caption += `${f.restaurant} - R${f.price}\n`;
-    caption += `⏱️ ${f.delivery_time}`;
-
+    let caption = `🍗 *${f.name}*\n${f.restaurant} - R${f.price}\n⏱️ ${f.delivery_time}`;
     await sendWhatsAppImage(user.phone_number, f.image_url, caption, env);
   }
-
   return `Reply 1-2 to order! 😋`;
 }
 
 async function searchFood(query, lastAddress, env) {
   const q = query.toLowerCase();
-  const restaurant = q.includes('kfc') ? 'KFC' :
-                     q.includes('mcd') ? 'McDonald\'s' : 'KFC';
-
-  // Simulated menu database
-  const menus = {
-    'KFC': [
-      { name: 'Streetwise 2', price: 45, image: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=500' },
-      { name: '21-Piece Bucket', price: 189, image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500' },
-      { name: 'Zinger Burger', price: 55, image: 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=500' }
-    ],
-    'McDonald\'s': [
-      { name: 'Big Mac Meal', price: 75, image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500' },
-      { name: 'Quarter Pounder', price: 65, image: 'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500' }
-    ]
-  };
-
-  const options = menus[restaurant] || menus['KFC'];
-
-  // Find specific item or default to the first one
-  let matches = options.filter(item => q.includes(item.name.toLowerCase()));
-  if (matches.length === 0) matches = [options[0]];
-
-  return matches.map((item, i) => ({
-    id: `food_${Date.now()}_${i}`,
-    mirage: 'food',
-    name: item.name,
-    restaurant: restaurant,
-    price: item.price,
-    delivery_time: '35-45 min',
-    delivery_address: lastAddress || 'Your location',
-    concierge_fee: 10,
-    image_url: item.image
+  const restaurant = q.includes('kfc') ? 'KFC' : q.includes('mcd') ? 'McDonald\'s' : 'KFC';
+  const options = [
+    { name: 'Streetwise 2', price: 45, image: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=500' },
+    { name: 'Zinger Burger', price: 55, image: 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=500' }
+  ];
+  return options.map((item, i) => ({
+    id: `food_${Date.now()}_${i}`, mirage: 'food', name: item.name, restaurant: restaurant,
+    price: item.price, delivery_time: '35-45 min', concierge_fee: 10, image_url: item.image
   }));
 }
 
 async function getFoodQuickQuote(user, data, memory, env) {
   const food = await searchFood(data.product || 'KFC', memory?.last_delivery_address, env);
   const item = food[0];
-
-  if (item.image_url) {
-    await sendWhatsAppImage(user.phone_number, item.image_url, `🍗 *${item.name}*\n${item.restaurant} - R${item.price}`, env);
-  }
-
+  if (item.image_url) await sendWhatsAppImage(user.phone_number, item.image_url, `🍗 *${item.name}*\n${item.restaurant} - R${item.price}`, env);
   return {
-    id: item.id,
-    mirage: 'food',
-    name: item.name,
-    restaurant: item.restaurant,
-    price: item.price,
-    concierge_fee: item.concierge_fee,
-    display: `🍗 ${item.name}\n   ${item.restaurant} - R${item.price}\n   ⏱️ ${item.delivery_time}`
+    id: item.id, mirage: 'food', name: item.name, restaurant: item.restaurant,
+    price: item.price, concierge_fee: 10, display: `🍗 ${item.name}\n   ${item.restaurant} - R${item.price}`
   };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 8. ACCOMMODATION MIRAGE (Hotels, Airbnb)
+// 8. ACCOMMODATION MIRAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleAccommodation(user, messageText, extractedData, memory, supabase, env) {
   const location = extractedData.location || 'Cape Town';
   const date = extractedData.date || 'tomorrow';
-  const budget = extractedData.budget;
-
-  // Mock accommodation search - TODO: Booking.com/Airbnb API
   let options = await searchAccommodation(location, date, env);
+  if (extractedData.budget) options = options.filter(h => h.price <= extractedData.budget);
+  if (options.length === 0) return `🏨 No options found for your budget in ${location}.`;
 
-  // Apply budget filter if provided
-  if (budget) {
-    options = options.filter(h => h.price <= budget);
-    if (options.length === 0) {
-      return `🏨 I couldn't find anything in ${location} for under R${budget}. Would you like to see the closest options?`;
-    }
-  }
-
-  // Send images for the top 2 options
   for (const h of options.slice(0, 2)) {
-    let caption = `🏨 *${h.name}*\n`;
-    caption += `R${h.price}/night ${'⭐'.repeat(Math.round(h.rating))} ${h.rating}\n`;
-    caption += `via ${h.platform}\n`;
-    if (h.features) caption += `${h.features.slice(0, 2).join(' • ')}`;
-
+    let caption = `🏨 *${h.name}*\nR${h.price}/night ${'⭐'.repeat(Math.round(h.rating))}\nvia ${h.platform}`;
     await sendWhatsAppImage(user.phone_number, h.image_url, caption, env);
   }
-
-  return `Reply 1-2 to book or ask for more details! ✨`;
+  return `Reply 1-2 to book! ✨`;
 }
 
 async function searchAccommodation(location, date, env) {
-  // Mock data - TODO: Real affiliate API
   return [
     {
-      id: `hotel_${Date.now()}_1`,
-      mirage: 'accommodation',
-      name: 'Protea Hotel Sea Point',
-      platform: 'Booking.com',
-      price: 890,
-      rating: 4.6,
-      features: ['Ocean view', 'Free WiFi', 'Breakfast'],
-      location: location,
-      has_affiliate: true,
-      concierge_fee: 0,
-      image_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500',
-      url: `https://booking.com/search?location=${location}`
-    },
-    {
-      id: `hotel_${Date.now()}_2`,
-      mirage: 'accommodation',
-      name: 'Airbnb Studio Apartment',
-      platform: 'Airbnb',
-      price: 650,
-      rating: 4.9,
-      features: ['Private balcony', 'Kitchen'],
-      location: location,
-      has_affiliate: true,
-      concierge_fee: 0,
-      image_url: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=500',
-      url: `https://airbnb.com/s/${location}`
+      id: `hotel_1`, mirage: 'accommodation', name: 'Protea Hotel Sea Point', platform: 'Booking.com',
+      price: 890, rating: 4.6, image_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500'
     }
   ];
 }
@@ -973,19 +784,10 @@ async function searchAccommodation(location, date, env) {
 async function getAccommodationQuickQuote(user, data, memory, env) {
   const hotels = await searchAccommodation(data.location || 'Cape Town', data.date || 'tomorrow', env);
   const hotel = hotels[0];
-
-  if (hotel.image_url) {
-    await sendWhatsAppImage(user.phone_number, hotel.image_url, `🏨 *${hotel.name}*\n${hotel.platform} - R${hotel.price}/night`, env);
-  }
-
+  if (hotel.image_url) await sendWhatsAppImage(user.phone_number, hotel.image_url, `🏨 *${hotel.name}*\n${hotel.platform} - R${hotel.price}/night`, env);
   return {
-    id: hotel.id,
-    mirage: 'accommodation',
-    name: hotel.name,
-    platform: hotel.platform,
-    price: hotel.price,
-    concierge_fee: hotel.concierge_fee,
-    display: `🏨 ${hotel.name}\n   ${hotel.platform} - R${hotel.price}/night\n   ⭐ ${hotel.rating}`
+    id: hotel.id, mirage: 'accommodation', name: hotel.name, price: hotel.price,
+    concierge_fee: 0, display: `🏨 ${hotel.name}\n   R${hotel.price}/night`
   };
 }
 
@@ -994,61 +796,26 @@ async function getAccommodationQuickQuote(user, data, memory, env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleFlights(user, messageText, extractedData, memory, supabase, env) {
-  const from = extractedData.from || 'JNB';
-  const to = extractedData.to || 'CPT';
-  const date = extractedData.date || 'tomorrow';
-
-  const flights = await searchFlights(from, to, date, env);
-
-  let response = `✈️ *${from} → ${to} • ${date}*\n\n`;
-  flights.slice(0, 3).forEach((f, i) => {
-    response += `${i + 1}. ${f.airline} - R${f.price}\n`;
-    response += `   ${f.departure} → ${f.arrival}\n`;
-    response += `   ${f.duration} • ${f.stops}\n\n`;
-  });
-
-  response += `Reply 1-3 to book via ${flights[0]?.platform || 'TravelStart'}`;
-  return response;
+  const from = extractedData.from || 'JNB', to = extractedData.to || 'CPT';
+  const flights = await searchFlights(from, to, extractedData.date || 'tomorrow', env);
+  let resp = `✈️ *${from} → ${to}*\n\n`;
+  flights.slice(0, 3).forEach((f, i) => resp += `${i + 1}. ${f.airline} - R${f.price}\n   ${f.departure} → ${f.arrival}\n\n`);
+  return resp + `Reply 1-3 to book!`;
 }
 
 async function searchFlights(from, to, date, env) {
-  // Mock data - TODO: TravelStart/FlySafair API
-  return [
-    {
-      id: `flight_${Date.now()}_1`,
-      mirage: 'flights',
-      airline: 'FlySafair',
-      from: from,
-      to: to,
-      price: 899,
-      departure: '06:00',
-      arrival: '08:15',
-      duration: '2h 15m',
-      stops: 'Direct',
-      platform: 'TravelStart',
-      has_affiliate: true,
-      concierge_fee: 0,
-      image_url: 'https://images.unsplash.com/photo-1436491865332-7a61a109c05d?w=500'
-    }
-  ];
+  return [{
+    id: `flight_1`, mirage: 'flights', airline: 'FlySafair', from, to, price: 899,
+    departure: '06:00', arrival: '08:15', platform: 'TravelStart', image_url: 'https://images.unsplash.com/photo-1436491865332-7a61a109c05d?w=500'
+  }];
 }
 
 async function getFlightsQuickQuote(user, data, memory, env) {
   const flights = await searchFlights(data.from || 'JNB', data.to || 'CPT', data.date || 'tomorrow', env);
   const flight = flights[0];
-
-  if (flight.image_url) {
-    await sendWhatsAppImage(user.phone_number, flight.image_url, `✈️ *${flight.airline} Flight*\n${flight.from} → ${flight.to} - R${flight.price}`, env);
-  }
-
   return {
-    id: flight.id,
-    mirage: 'flights',
-    name: `${flight.airline} ${flight.from}-${flight.to}`,
-    platform: flight.platform,
-    price: flight.price,
-    concierge_fee: flight.concierge_fee,
-    display: `✈️ ${flight.airline} ${flight.from}→${flight.to}\n   R${flight.price} • ${flight.departure}`
+    id: flight.id, mirage: 'flights', name: `${flight.airline} ${flight.from}-${flight.to}`,
+    price: flight.price, concierge_fee: 0, display: `✈️ ${flight.airline} R${flight.price}`
   };
 }
 
@@ -1057,56 +824,25 @@ async function getFlightsQuickQuote(user, data, memory, env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleCarRental(user, messageText, extractedData, memory, supabase, env) {
-  const location = extractedData.location || 'Johannesburg';
-  const date = extractedData.date || 'tomorrow';
-
-  const cars = await searchCarRentals(location, date, env);
-
-  let response = `🚗 *Car Rental • ${location} • ${date}*\n\n`;
-  cars.slice(0, 3).forEach((c, i) => {
-    response += `${i + 1}. ${c.name}\n`;
-    response += `   R${c.price}/day via ${c.platform}\n`;
-    response += `   ${c.features.join(' • ')}\n\n`;
-  });
-
-  response += `Reply 1-3 to book`;
-  return response;
+  const cars = await searchCarRentals(extractedData.location || 'JNB', extractedData.date || 'tomorrow', env);
+  let resp = `🚗 *Car Rental*\n\n`;
+  cars.slice(0, 3).forEach((c, i) => resp += `${i + 1}. ${c.name} - R${c.price}/day\n   via ${c.platform}\n\n`);
+  return resp + `Reply 1-3 to book!`;
 }
 
 async function searchCarRentals(location, date, env) {
-  // Mock data - TODO: Europcar/Around About Cars API
-  return [
-    {
-      id: `car_${Date.now()}_1`,
-      mirage: 'car_rental',
-      name: 'VW Polo',
-      platform: 'Europcar',
-      price: 450,
-      features: ['Automatic', 'GPS', 'Insurance'],
-      location: location,
-      has_affiliate: true,
-      concierge_fee: 0,
-      image_url: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=500'
-    }
-  ];
+  return [{
+    id: `car_1`, mirage: 'car_rental', name: 'VW Polo', platform: 'Europcar', price: 450,
+    image_url: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=500'
+  }];
 }
 
 async function getCarRentalQuickQuote(user, data, memory, env) {
-  const cars = await searchCarRentals(data.location || 'Johannesburg', data.date || 'tomorrow', env);
+  const cars = await searchCarRentals(data.location || 'JNB', data.date || 'tomorrow', env);
   const car = cars[0];
-
-  if (car.image_url) {
-    await sendWhatsAppImage(user.phone_number, car.image_url, `🚗 *${car.name}*\n${car.platform} - R${car.price}/day`, env);
-  }
-
   return {
-    id: car.id,
-    mirage: 'car_rental',
-    name: car.name,
-    platform: car.platform,
-    price: car.price,
-    concierge_fee: car.concierge_fee,
-    display: `🚗 ${car.name}\n   ${car.platform} - R${car.price}/day`
+    id: car.id, mirage: 'car_rental', name: car.name, price: car.price,
+    concierge_fee: 0, display: `🚗 ${car.name} R${car.price}/day`
   };
 }
 
@@ -1115,292 +851,82 @@ async function getCarRentalQuickQuote(user, data, memory, env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleBuses(user, messageText, extractedData, memory, supabase, env) {
-  const from = extractedData.from || 'Johannesburg';
-  const to = extractedData.to || 'Cape Town';
-  const date = extractedData.date || 'tomorrow';
-
-  const buses = await searchBuses(from, to, date, env);
-
-  let response = `🚌 *${from} → ${to} • ${date}*\n\n`;
-  buses.forEach((b, i) => {
-    response += `${i + 1}. ${b.operator} - R${b.price}\n`;
-    response += `   ${b.departure} → ${b.arrival} (${b.duration})\n\n`;
-  });
-
-  response += `Reply 1 to book`;
-  return response;
+  const buses = await searchBuses(extractedData.from || 'JNB', extractedData.to || 'CPT', extractedData.date || 'tomorrow', env);
+  let resp = `🚌 *Buses*\n\n`;
+  buses.forEach((b, i) => resp += `${i + 1}. ${b.operator} - R${b.price}\n   ${b.departure} → ${b.arrival}\n\n`);
+  return resp + `Reply 1 to book!`;
 }
 
 async function searchBuses(from, to, date, env) {
-  // Direct links - most bus companies don't have APIs
-  return [
-    {
-      id: `bus_${Date.now()}_1`,
-      mirage: 'buses',
-      operator: 'Intercape',
-      from: from,
-      to: to,
-      price: 450,
-      departure: '08:00',
-      arrival: '20:00',
-      duration: '12h',
-      url: `https://intercape.co.za/book?from=${from}&to=${to}`,
-      concierge_fee: 15
-    }
-  ];
+  return [{ id: `bus_1`, mirage: 'buses', operator: 'Intercape', from, to, price: 450, departure: '08:00', arrival: '20:00' }];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 12. UTILITIES MIRAGES (Airtime & Electricity)
+// 12. UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleAirtime(user, messageText, extractedData, memory, supabase, env) {
   const amount = extractedData.quantity || 50;
   const network = extractedData.product || memory?.preferred_network || 'Vodacom';
-
-  // Check for repeat
-  if (messageText.toLowerCase().includes('usual')) {
-    const lastAirtime = memory?.last_airtime_purchase;
-    if (lastAirtime) {
-      return `📱 *Your usual airtime?*\n\nR${lastAirtime.amount} ${lastAirtime.network}\n\n[Yes] [Change Amount]`;
-    }
-  }
-
-  return `📱 *Airtime*\n\n` +
-    `Network: ${network}\n` +
-    `Amount: R${amount}\n\n` +
-    `Total: R${amount}\n\n` +
-    `[Buy Now] [Change Network]`;
+  return `📱 *Airtime*\n\nNetwork: ${network}\nAmount: R${amount}\n\n[Buy Now]`;
 }
 
 async function handleElectricity(user, messageText, extractedData, memory, supabase, env) {
   const amount = extractedData.quantity || 100;
-  const meter = memory?.electricity_meter || 'Not saved';
-
-  return `⚡ *Prepaid Electricity*\n\n` +
-    `Meter: ${meter}\n` +
-    `Amount: R${amount}\n\n` +
-    `Total: R${amount}\n\n` +
-    `[Buy Now] [Save Meter Number]`;
+  return `⚡ *Prepaid Electricity*\n\nMeter: ${memory?.electricity_meter || 'Not saved'}\nAmount: R${amount}\n\n[Buy Now]`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 13. UNIFIED CART SYSTEM
+// 13. CART SYSTEM
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleCartAction(user, messageText, extractedData, memory, supabase, env, ctx) {
-  if (messageText.toLowerCase().includes('checkout') || messageText.toLowerCase().includes('pay')) {
-    return await checkoutCart(user, supabase, env, ctx);
-  }
-
-  if (messageText.toLowerCase().includes('clear') || messageText.toLowerCase().includes('empty')) {
-    await clearCart(user.id, supabase);
-    return `🛒 Cart cleared!`;
-  }
-
+  if (messageText.toLowerCase().includes('pay')) return await checkoutCart(user, supabase, env, ctx);
+  if (messageText.toLowerCase().includes('clear')) { await clearCart(user.id, supabase); return `🛒 Cart cleared!`; }
   return await viewCart(user, supabase);
 }
 
 async function addItemsToCart(userId, items, supabase, env, ctx) {
   try {
-    const { data: cart } = await supabase
-      .from('carts')
-      .select('items')
-      .eq('user_id', userId)
-      .single();
-
-    const existingItems = cart?.items || [];
-    const newItems = [...existingItems, ...items];
-
-    await supabase.from('carts').upsert([{
-      user_id: userId,
-      items: newItems,
-      updated_at: new Date().toISOString()
-    }], { onConflict: 'user_id' });
-
-    // 🛒 LOG CART (Journey Forensics)
-    if (ctx) {
-      ctx.waitUntil(logSystemAlert({
-        severity: 'info',
-        source: 'cart-system',
-        message: 'Cart updated',
-        context: {
-          userId,
-          itemsAdded: items.map(i => ({ name: i.name || i.display, mirage: i.mirage })),
-          totalItems: newItems.length
-        }
-      }, env));
-    }
-
-  } catch (error) {
-    console.error('Add to cart error:', error);
-  }
+    const { data: cart } = await supabase.from('carts').select('items').eq('user_id', userId).single();
+    const newItems = [...(cart?.items || []), ...items];
+    await supabase.from('carts').upsert([{ user_id: userId, items: newItems, updated_at: new Date().toISOString() }], { onConflict: 'user_id' });
+  } catch (e) { console.error('Cart error:', e); }
 }
 
 async function viewCart(user, supabase) {
-  const { data: cart } = await supabase
-    .from('carts')
-    .select('items')
-    .eq('user_id', user.id)
-    .single();
-
-  if (!cart?.items || cart.items.length === 0) {
-    return `🛒 *Your cart is empty*\n\nStart shopping! 🔍`;
-  }
-
-  let response = `🛒 *Your Cart* (${cart.items.length} items)\n\n`;
-  let total = 0;
-  let fees = 0;
-
-  cart.items.forEach((item, i) => {
-    response += `${i + 1}. ${item.display || item.name}\n`;
-    total += item.price;
-    fees += item.concierge_fee || 0;
-  });
-
-  response += `\n───────────────\n`;
-  response += `Subtotal: R${total}\n`;
-  if (fees > 0) response += `Concierge Fee: R${fees}\n`;
-  response += `*Total: R${total + fees}*\n\n`;
-  response += `[Pay Now] [Clear Cart]`;
-
-  return response;
+  const { data: cart } = await supabase.from('carts').select('items').eq('user_id', user.id).single();
+  if (!cart?.items?.length) return `🛒 *Your cart is empty*`;
+  let resp = `🛒 *Your Cart*\n\n`, total = 0;
+  cart.items.forEach((item, i) => { resp += `${i + 1}. ${item.display}\n`; total += item.price + (item.concierge_fee || 0); });
+  return resp + `\n*Total: R${total}*\n\n[Pay Now]`;
 }
 
 function generateUnifiedCart(items, user, memory) {
-  let response = `✨ *Ready to checkout*\n\n`;
-  let total = 0;
-  let fees = 0;
-
-  items.forEach((item) => {
-    response += `${item.display}\n`;
-    total += item.price;
-    fees += item.concierge_fee || 0;
-  });
-
-  response += `\n───────────────\n`;
-  response += `Subtotal: R${total}\n`;
-  if (fees > 0) response += `Concierge Fee: R${fees}\n`;
-  response += `*Total: R${total + fees}*\n\n`;
-
-  // Proactive suggestion
-  const hasFood = items.some(i => i.mirage === 'food');
-  const hasHotel = items.some(i => i.mirage === 'accommodation');
-  const hasCar = items.some(i => i.mirage === 'car_rental');
-
-  if (hasHotel && !hasCar) {
-    response += `💡 Need a car rental?\n\n`;
-  }
-
-  response += `[Pay R${total + fees} Now] [Add More]`;
-
-  return response;
+  let resp = `✨ *Ready to checkout*\n\n`, total = 0;
+  items.forEach(item => { resp += `${item.display}\n`; total += item.price + (item.concierge_fee || 0); });
+  return resp + `\n*Total: R${total}*\n\n[Pay R${total} Now]`;
 }
 
 async function checkoutCart(user, supabase, env, ctx) {
-  const { data: cart } = await supabase
-    .from('carts')
-    .select('items')
-    .eq('user_id', user.id)
-    .single();
-
-  if (!cart?.items || cart.items.length === 0) {
-    return `Cart is empty! Start shopping 🔍`;
-  }
-
-  const items = cart.items;
-  const subtotal = items.reduce((sum, i) => sum + i.price, 0);
-  const fees = items.reduce((sum, i) => sum + (i.concierge_fee || 0), 0);
-  const total = subtotal + fees;
-
-  // Generate PayFast payment link with split configuration
-  const paymentUrl = await generatePayFastLink(user, items, total, env);
-
-  // 💳 LOG PAYMENT INITIATED (Journey Forensics)
-  if (ctx) {
-    ctx.waitUntil(logSystemAlert({
-      severity: 'info',
-      source: 'payment-system',
-      message: 'Checkout initiated',
-      context: {
-        userId: user.id,
-        total,
-        items: items.map(i => ({ name: i.name || i.display, mirage: i.mirage }))
-      }
-    }, env));
-  }
-
-  let response = `💳 *Secure Checkout*\n\n`;
-
-  // Group by mirage/retailer
-  const grouped = groupItemsByProvider(items);
-  Object.keys(grouped).forEach(provider => {
-    response += `*${provider}*\n`;
-    grouped[provider].forEach(item => {
-      response += `• ${item.name || item.display}\n`;
-    });
-    response += `\n`;
-  });
-
-  response += `───────────────\n`;
-  response += `Items: R${subtotal}\n`;
-  if (fees > 0) response += `Concierge Fee: R${fees}\n`;
-  response += `*Total: R${total}*\n\n`;
-  response += `🔒 Pay securely via PayFast:\n${paymentUrl}\n\n`;
-  response += `✨ *Zero Friction Concierge Service*\n`;
-  response += `✅ Instant confirmation\n`;
-  response += `📦 Track everything right here in chat`;
-
-  return response;
+  const { data: cart } = await supabase.from('carts').select('items').eq('user_id', user.id).single();
+  if (!cart?.items?.length) return `Cart is empty!`;
+  const total = cart.items.reduce((sum, i) => sum + i.price + (i.concierge_fee || 0), 0);
+  const paymentUrl = `https://payfast.co.za/pay/ZWP_${Date.now()}`;
+  return `💳 *Secure Checkout*\n\nTotal: R${total}\n\nPay via PayFast:\n${paymentUrl}`;
 }
 
-function groupItemsByProvider(items) {
-  const grouped = {};
-  items.forEach(item => {
-    const provider = item.retailer || item.restaurant || item.platform || 'Other';
-    if (!grouped[provider]) grouped[provider] = [];
-    grouped[provider].push(item);
-  });
-  return grouped;
-}
-
-async function generatePayFastLink(user, items, total, env) {
-  // TODO: Implement real PayFast API with split payments
-  // For now, return mock link
-  const orderId = `ZWP_${Date.now()}_${user.id.substring(0, 8)}`;
-  return `https://payfast.co.za/pay/${orderId}`;
-}
-
-async function clearCart(userId, supabase) {
-  await supabase
-    .from('carts')
-    .update({ items: [] })
-    .eq('user_id', userId);
-}
+async function clearCart(userId, supabase) { await supabase.from('carts').update({ items: [] }).eq('user_id', userId); }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 14. CONVERSATIONAL HANDLER
+// 14. CONVERSATIONAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleConversational(user, messageText, extractedData, memory, supabase, env) {
-  const text = messageText.toLowerCase();
-
-  if (text.includes('cheaper') || text.includes('budget')) {
-    return `💰 Looking for better prices...\n\nWhat are you shopping for?`;
+  if (messageText.toLowerCase().includes('usual')) {
+    const last = memory?.last_order;
+    if (last) return `🔄 *Repeat last order?*\n\nTotal: R${last.total_amount}\n\n[Yes]`;
   }
-
-  if (text.includes('compare')) {
-    return `⚖️ I can compare prices across all stores.\n\nWhat product?`;
-  }
-
-  if (text.includes('same') || text.includes('usual') || text.includes('repeat')) {
-    const lastOrder = memory?.last_order;
-    if (lastOrder) {
-      return `🔄 *Repeat last order?*\n\nTotal: R${lastOrder.total}\n\n[Yes] [View Details]`;
-    }
-    return `No previous orders found. What would you like?`;
-  }
-
   return generateHelp(user, memory);
 }
 
@@ -1409,256 +935,78 @@ async function handleConversational(user, messageText, extractedData, memory, su
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function generateGreeting(user, memory) {
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-
-  let response = `${greeting}! 👋\n\n`;
-
-  if (memory?.last_order) {
-    response += `Want to repeat your last order?\n\n`;
-  }
-
-  response += `I can help with:\n`;
-  response += `🛍️ Shopping\n`;
-  response += `🍗 Food delivery\n`;
-  response += `🏨 Hotels & Airbnb\n`;
-  response += `✈️ Flights & car rentals\n`;
-  response += `📱 Airtime & electricity\n\n`;
-  response += `Try: "KFC, flowers, hotel" in one message!`;
-
-  return response;
+  return `Hi! 👋 I'm Zweepee, your AI concierge.\n\nI can help with:\n🛍️ Shopping\n🍗 Food\n🏨 Hotels\n✈️ Flights\n📱 Airtime\n\nWhat do you need?`;
 }
 
 function generateHelp(user, memory) {
-  return `✨ *Zweepee - Your AI Magic Concierge*\n\n` +
-    `I bring the world to your chat. No apps, no redirects, just magic.\n\n` +
-    `I can help with:\n\n` +
-    `🛍️ *Shopping*\n"Find iPhone" or send photo\n\n` +
-    `🍗 *Food Delivery*\n"KFC bucket" or "Pizza"\n\n` +
-    `🏨 *Accommodation*\n"Hotel Cape Town tomorrow"\n\n` +
-    `✈️ *Travel*\n"Flights to Durban" or "Rent a car"\n\n` +
-    `📱 *Utilities*\n"R50 airtime" or "R100 electricity"\n\n` +
-    `💡 *Pro tip:* Combine requests!\n"KFC, flowers, hotel Cape Town" = one cart, one payment\n\n` +
-    `What do you need?`;
+  return `✨ *Zweepee Help*\n\nTry:\n"Find iPhone"\n"KFC bucket"\n"Hotel Cape Town"\n"R50 airtime"\n\nYou can even combine them!\n"KFC and flowers"`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 16. USER MANAGEMENT & MEMORY
+// 16. USER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function getOrCreateUser(phoneNumber, supabase) {
-  try {
-    // Check database
-    const { data: existing, error: fetchError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('phone_number', phoneNumber)
-      .single();
-
-    if (existing) return existing;
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "no rows found"
-      console.error('Supabase fetch error:', fetchError);
-    }
-
-    // Create new user
-    const referralCode = crypto.randomUUID().substring(0, 8).toUpperCase();
-
-    const { data: newUser, error: insertError } = await supabase
-      .from('users')
-      .insert([{
-        phone_number: phoneNumber,
-        referral_code: referralCode,
-        preferences: {
-          ux_mode: 'balanced',
-          language: 'en'
-        }
-      }])
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error('Supabase insert error:', insertError);
-      throw new Error(insertError.message);
-    }
-
-    return newUser;
-
-  } catch (error) {
-    console.error('User creation error:', error);
-    // Return minimal user object on error
-    return {
-      id: phoneNumber, // Fallback to phone number as ID if DB fails
-      phone_number: phoneNumber,
-      preferences: { ux_mode: 'balanced' }
-    };
-  }
+  const { data: existing } = await supabase.from('users').select('*').eq('phone_number', phoneNumber).single();
+  if (existing) return existing;
+  const { data: newUser } = await supabase.from('users').insert([{ phone_number: phoneNumber, referral_code: Math.random().toString(36).substring(7).toUpperCase() }]).select().single();
+  return newUser || { id: phoneNumber, phone_number: phoneNumber };
 }
 
 async function getUserMemory(userId, supabase) {
-  try {
-    // Get recent orders
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('items, total_amount, created_at')
-      .eq('user_id', userId)
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    // Get preferences
-    const { data: user } = await supabase
-      .from('users')
-      .select('preferences')
-      .eq('id', userId)
-      .single();
-
-    // Get recent searches from sessions
-    const { data: sessions } = await supabase
-      .from('sessions')
-      .select('state')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-      .limit(5);
-
-    const recentSearches = sessions?.map(s => s.state?.query).filter(Boolean) || [];
-
-    return {
-      last_order: orders?.[0] || null,
-      recent_orders: orders || [],
-      recent_searches: recentSearches,
-      preferences: user?.preferences || { ux_mode: 'balanced' },
-      last_delivery_address: orders?.[0]?.delivery_address || null,
-      preferred_network: user?.preferences?.preferred_network || null,
-      electricity_meter: user?.preferences?.electricity_meter || null
-    };
-
-  } catch (error) {
-    console.error('Memory fetch error:', error);
-    return {
-      preferences: { ux_mode: 'balanced' }
-    };
-  }
+  const { data: orders } = await supabase.from('orders').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1);
+  return { last_order: orders?.[0] || null };
 }
 
 async function saveChatMessage(userId, role, content, supabase) {
-  try {
-    await supabase.from('chat_history').insert([{
-      user_id: userId,
-      role: role,
-      content: content,
-      timestamp: new Date().toISOString()
-    }]);
-  } catch (error) {
-    console.error('Chat save error:', error);
-  }
+  try { await supabase.from('chat_history').insert([{ user_id: userId, role, content }]); } catch (e) {}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 17. WHAPI INTEGRATION
+// 17. WHAPI
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function sendWhatsAppMessage(to, text, env) {
-  try {
-    const cleanPhone = to.replace('@c.us', '');
-
-    const response = await fetchWithRetry('https://gate.whapi.cloud/messages/text', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${env.WHAPI_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        typing_time: 0,
-        to: cleanPhone,
-        body: text
-      })
-    });
-
-    if (!response.ok) {
-      console.error('Whapi send error:', await response.text());
-    } else {
-      console.log('✅ Sent to', cleanPhone);
-    }
-
-  } catch (error) {
-    console.error('❌ Send error:', error);
-  }
+  const res = await fetchWithRetry('https://gate.whapi.cloud/messages/text', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: to.replace('@c.us', ''), body: text })
+  });
+  if (res) await res.text(); // Clear stalled response
 }
 
 async function sendWhatsAppImage(to, imageUrl, caption, env) {
-  try {
-    const cleanPhone = to.replace('@c.us', '');
-
-    const response = await fetchWithRetry('https://gate.whapi.cloud/messages/image', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${env.WHAPI_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        to: cleanPhone,
-        media: imageUrl,
-        caption: caption
-      })
-    });
-
-    if (!response.ok) {
-      console.error('Whapi image send error:', await response.text());
-    }
-  } catch (error) {
-    console.error('❌ Image send error:', error);
-  }
+  const res = await fetchWithRetry('https://gate.whapi.cloud/messages/image', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: to.replace('@c.us', ''), media: imageUrl, caption: caption })
+  });
+  if (res) await res.text(); // Clear stalled response
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 18. SELF-HEALING UTILITIES
+// 18. UTILS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function fetchWithRetry(url, options = {}, retries = 3, backoff = 1000) {
-  try {
-    const response = await fetch(url, options);
-    if (!response.ok && retries > 0 && response.status >= 500) {
-      throw new Error(`Server error: ${response.status}`);
-    }
-    return response;
-  } catch (error) {
-    if (retries > 0) {
-      console.log(`Retrying fetch to ${url}... (${retries} left)`);
-      await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRetry(url, options, retries - 1, backoff * 2);
-    }
-    throw error;
+async function fetchWithRetry(url, options = {}, retries = 2) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.ok) return res;
+      // If not OK, read body to avoid stalling next retry
+      await res.text();
+    } catch (e) { if (i === retries) throw e; }
+    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
   }
 }
 
-function fallbackIntentParser(messageText) {
-  const text = messageText.toLowerCase();
+function fallbackIntentParser(text) {
+  const t = text.toLowerCase();
   const intents = [];
-
-  const patterns = {
-    shopping: ['buy', 'search', 'find', 'iphone', 'nike', 'dischem', 'pill', 'panado'],
-    food: ['eat', 'hungry', 'kfc', 'mcdonald', 'burger', 'pizza', 'streetwise'],
-    accommodation: ['hotel', 'airbnb', 'stay', 'cpt', 'cape town', 'durban', 'dbn'],
-    flights: ['flight', 'fly', 'plane', 'travel'],
-    car_rental: ['car', 'rent', 'polo'],
-    airtime: ['airtime', 'data', 'vodacom', 'mtn'],
-    electricity: ['electricity', 'meter', 'power'],
-    cart_action: ['cart', 'checkout', 'pay', 'clear']
-  };
-
-  for (const [intent, keywords] of Object.entries(patterns)) {
-    if (keywords.some(k => text.includes(k))) {
-      intents.push({
-        intent,
-        confidence: 0.8,
-        extracted_data: { product: messageText } // Best effort
-      });
-    }
-  }
-
-  return intents.length > 0 ? intents : [{ intent: 'help', confidence: 0.5 }];
+  if (t.includes('buy') || t.includes('find')) intents.push({ intent: 'shopping', confidence: 0.8 });
+  if (t.includes('kfc') || t.includes('eat')) intents.push({ intent: 'food', confidence: 0.8 });
+  if (t.includes('hotel')) intents.push({ intent: 'accommodation', confidence: 0.8 });
+  if (t.includes('flight')) intents.push({ intent: 'flights', confidence: 0.8 });
+  if (t.includes('pay') || t.includes('cart')) intents.push({ intent: 'cart_action', confidence: 0.8 });
+  return intents.length ? intents : [{ intent: 'help', confidence: 0.5 }];
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// END OF ZWEEPEE WORKER
-// ═══════════════════════════════════════════════════════════════════════════════
