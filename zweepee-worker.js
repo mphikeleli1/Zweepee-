@@ -134,6 +134,9 @@ async function processMessage(body, env, ctx, startTime) {
     const userPhone = rawFrom.replace('@c.us', '');
     if (!userPhone) return;
 
+    // Show typing indicator immediately
+    ctx.waitUntil(sendWhatsAppTyping(userPhone, env));
+
     // Maintenance Mode Check
     const { data: maintenance } = await supabase.from('system_config').select('value').eq('key', 'maintenance_mode').single();
     if (maintenance?.value === true || maintenance?.value === 'true') {
@@ -164,8 +167,18 @@ async function processMessage(body, env, ctx, startTime) {
     const isNewUser = user.created_at && (Date.now() - new Date(user.created_at).getTime() < 60000); // Created in last minute
     const isReturning = !isNewUser && (Date.now() - new Date(user.last_active || 0).getTime() > 24 * 60 * 60 * 1000);
 
-    // Update last active
-    await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('id', user.id);
+    // Update last active and rate limit check
+    const now = new Date();
+    const lastActive = new Date(user.last_active || 0);
+    const diffMs = now - lastActive;
+
+    // Rate limit: Max 1 message every 2 seconds
+    if (diffMs < 2000 && userPhone !== (env.ADMIN_PHONE || '').replace('@c.us', '')) {
+      await sendUserMessage(userPhone, `🛑 *SLOW DOWN*\n\nYou're moving faster than a Springbok! 🇿🇦 Please wait a few seconds before your next request. ✨`, env, { path: 'rate_limited' });
+      return;
+    }
+
+    await supabase.from('users').update({ last_active: now.toISOString() }).eq('id', user.id);
 
     // Admin Commands
     if (messageText.trim() === '!diag') {
@@ -511,8 +524,12 @@ async function handleShopping(user, text, media, data, memory, db, env) {
 
   const product = results.find(p => query.toLowerCase().includes(p.name.toLowerCase().split(' ')[0])) || results[0];
 
-  await sendWhatsAppImage(user.phone_number, product.img, `🛍️ *ZWEEPEE SHOPPING*\n\n*${product.name}*\nPrice: R${product.price.toLocaleString()}\nConcierge Fee: R49\n\nReply "ADD ${product.id}" to put this in your cart! ✨`, env);
-  return `I found this for you! Should I add it to your cart?`;
+  await sendWhatsAppImage(user.phone_number, product.img, `🛍️ *ZWEEPEE SHOPPING*\n\n*${product.name}*\nPrice: R${product.price.toLocaleString()}\nConcierge Fee: R49`, env);
+  await sendWhatsAppInteractive(user.phone_number, `I found this for you! Should I add it to your cart?`, [
+    { id: `ADD_${product.id}`, title: 'Add to Cart 🛒' },
+    { id: 'SEARCH_MORE', title: 'Search More 🔍' }
+  ], env);
+  return null;
 }
 
 async function handleFood(user, text, data, memory, db, env) {
@@ -524,24 +541,36 @@ async function handleFood(user, text, data, memory, db, env) {
 
   const meal = options.find(o => query.toLowerCase().includes(o.name.toLowerCase().split(' ')[0])) || options[0];
 
-  await sendWhatsAppImage(user.phone_number, meal.img, `🍗 *ZWEEPEE FOOD*\n\n*${meal.name}*\nPrice: R${meal.price.toFixed(2)}\nDelivery: R35\n\nReply "ADD ${meal.id}" to order now! 🏃‍♂️`, env);
-  return `Found some options for your hunger! ✨`;
+  await sendWhatsAppImage(user.phone_number, meal.img, `🍗 *ZWEEPEE FOOD*\n\n*${meal.name}*\nPrice: R${meal.price.toFixed(2)}\nDelivery: R35`, env);
+  await sendWhatsAppInteractive(user.phone_number, `Found some options for your hunger! ✨`, [
+    { id: `ADD_${meal.id}`, title: 'Order Now 🏃‍♂️' },
+    { id: 'VIEW_MENU', title: 'View Menu 📋' }
+  ], env);
+  return null;
 }
 
 async function handleAccommodation(user, text, data, memory, db, env) {
   const location = data.location || 'Cape Town';
   const stay = { id: 'stay_1', name: 'Radisson Blu Waterfront', price: 4500, img: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800' };
 
-  await sendWhatsAppImage(user.phone_number, stay.img, `🏨 *ZWEEPEE STAYS*\n\n*${stay.name}* (${location})\nPrice: R${stay.price.toLocaleString()} per night\n\nReply "ADD ${stay.id}" to book your stay! ✨`, env);
-  return `Checking availability in ${location}...`;
+  await sendWhatsAppImage(user.phone_number, stay.img, `🏨 *ZWEEPEE STAYS*\n\n*${stay.name}* (${location})\nPrice: R${stay.price.toLocaleString()} per night`, env);
+  await sendWhatsAppInteractive(user.phone_number, `Checking availability in ${location}. Found this gem!`, [
+    { id: `ADD_${stay.id}`, title: 'Book This Stay 🏨' },
+    { id: 'SEARCH_HOTEL', title: 'See More Hotels 🔍' }
+  ], env);
+  return null;
 }
 
 async function handleFlights(user, text, data, memory, db, env) {
   const destination = data.to || 'Cape Town';
   const flight = { id: 'fly_1', name: 'Safair (JNB ➔ CPT)', price: 1250, img: 'https://images.unsplash.com/photo-1436491865332-7a61a109c055?w=800' };
 
-  await sendWhatsAppImage(user.phone_number, flight.img, `✈️ *ZWEEPEE FLIGHTS*\n\n*${flight.name}*\nPrice: R${flight.price.toLocaleString()}\n\nReply "ADD ${flight.id}" to secure this seat! 🎫`, env);
-  return `Searching for the best routes to ${destination}...`;
+  await sendWhatsAppImage(user.phone_number, flight.img, `✈️ *ZWEEPEE FLIGHTS*\n\n*${flight.name}*\nPrice: R${flight.price.toLocaleString()}`, env);
+  await sendWhatsAppInteractive(user.phone_number, `Searching for the best routes to ${destination}. Lowest fare found!`, [
+    { id: `ADD_${flight.id}`, title: 'Secure Seat 🎫' },
+    { id: 'SEARCH_FLIGHT', title: 'Other Times 🕒' }
+  ], env);
+  return null;
 }
 
 async function handleCarRental(user, text, data, memory, db, env) {
@@ -567,18 +596,25 @@ async function handleElectricity(user, text, data, memory, db, env) {
 
 async function handleCartAction(user, text, data, memory, db, env, ctx) {
   const t = text.toLowerCase();
-  if (t.includes('add')) {
+  if (t.includes('add') || t.includes('ADD_')) {
     const itemId = t.match(/(prod|food|stay|fly|car)_\d+/)?.[0] || 'unknown';
     await db.from('carts').insert([{ user_id: user.id, item_id: itemId, quantity: 1 }]);
-    return `🛒 Added to your cart! Reply "CHECKOUT" when you're ready. ✨`;
+    await sendWhatsAppInteractive(user.phone_number, `🛒 Added to your cart! Ready to checkout?`, [
+      { id: 'CHECKOUT', title: 'Checkout Now 🚀' },
+      { id: 'CONTINUE', title: 'Keep Shopping 🛍️' }
+    ], env);
+    return null;
   }
 
   if (t.includes('checkout') || t.includes('pay')) {
     const { data: items } = await db.from('carts').select('*').eq('user_id', user.id);
     if (!items?.length) return `🛒 Your cart is empty! Add something first. ✨`;
 
-    const payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=10000100&item_name=ZweepeeConcierge&amount=250.00`;
-    return `✨ *ZWEEPEE CHECKOUT*\n\nReady to go! Secure payment via PayFast:\n🔗 ${payfastUrl}\n\nI'll notify you once payment is confirmed! 🚀`;
+    // Dynamic PayFast URL generation
+    const total = items.length * 150; // Mock calculation
+    const payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_Order_${user.id.substring(0,5)}&amount=${total.toFixed(2)}&m_payment_id=${Date.now()}`;
+
+    return `✨ *ZWEEPEE CHECKOUT*\n\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast:\n🔗 ${payfastUrl}\n\nI'll notify you once payment is confirmed! 🚀`;
   }
 
   return `🛒 What would you like to do with your cart? (View/Checkout)`;
@@ -602,7 +638,12 @@ async function handleComplaints(user, text, data, memory, db, env) {
 }
 
 async function handleFAQ(user, text, data, memory, db, env) {
-  return `❓ *ZWEEPEE FAQ*\n\n*How do I pay?* Via secure PayFast link.\n*Where do you deliver?* Nationwide in South Africa!\n*Can I cancel?* Yes, before the order is processed. ✨`;
+  await sendWhatsAppInteractive(user.phone_number, `❓ *ZWEEPEE FAQ*\n\nHow can I help you understand our magic?`, [
+    { id: 'FAQ_PAYMENT', title: 'Payment Info 💳' },
+    { id: 'FAQ_DELIVERY', title: 'Delivery Info 🚚' },
+    { id: 'FAQ_CANCEL', title: 'Cancellations ❌' }
+  ], env);
+  return null;
 }
 
 async function handleRefunds(user, text, data, memory, db, env) {
@@ -619,7 +660,12 @@ async function handleGrocery(user, text, data, memory, db, env) {
 }
 
 async function handleOnboarding(user, text, data, memory, db, env) {
-  return `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I can help you buy anything, book travel, or pay utilities without leaving WhatsApp.\n\nTry saying: "I want a KFC Streetwise 2" or "Find flights to Cape Town". ✨`;
+  await sendWhatsAppInteractive(user.phone_number, `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I can help you buy anything, book travel, or pay utilities without leaving WhatsApp.`, [
+    { id: 'START_SHOPPING', title: 'Start Shopping 🛍️' },
+    { id: 'ORDER_FOOD', title: 'Order Food 🍗' },
+    { id: 'VIEW_FAQ', title: 'How it works? ❓' }
+  ], env);
+  return null;
 }
 
 async function handleReturningUser(user, text, data, memory, db, env) {
@@ -672,7 +718,11 @@ async function handleRateLimit(user, text, data, memory, db, env) {
 }
 
 async function handleDegraded(user, text, data, memory, db, env) {
-  return `⚠️ *SERVICE ADVISORY*\n\nOne of our partner APIs (e.g. Flights) is currently offline. Other services like Food and Shopping are still working perfectly! 🍗🛍️✨`;
+  await sendWhatsAppInteractive(user.phone_number, `⚠️ *SERVICE ADVISORY*\n\nOne of our partner APIs is currently offline. Other services are working perfectly!`, [
+    { id: 'CHECK_STATUS', title: 'System Status 🛠️' },
+    { id: 'CONTINUE_MAGIC', title: 'Try something else ✨' }
+  ], env);
+  return null;
 }
 
 async function handleLatency(user, text, data, memory, db, env) {
@@ -712,6 +762,35 @@ async function sendWhatsAppMessage(to, text, env) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ to: to.replace('@c.us', ''), body: text })
+  });
+  if (res) await res.text();
+}
+
+async function sendWhatsAppTyping(to, env) {
+  try {
+    await fetch('https://gate.whapi.cloud/messages/typing', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: to.replace('@c.us', '') })
+    });
+  } catch (e) {}
+}
+
+async function sendWhatsAppInteractive(to, text, buttons, env) {
+  const res = await fetchWithRetry('https://gate.whapi.cloud/messages/interactive', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: to.replace('@c.us', ''),
+      type: 'button',
+      body: { text },
+      action: {
+        buttons: buttons.map(b => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title }
+        }))
+      }
+    })
   });
   if (res) await res.text();
 }
