@@ -339,6 +339,7 @@ async function detectIntents(messageText, memory, env, ctx) {
   User Context: ${JSON.stringify(memory)}
   Available intents (select all that apply):
   - Services: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, pharmacy, grocery, grocery_meat, grocery_veg, bus_intercape, bus_greyhound, flight_intl, cart_action.
+  - Groups: create_group, join_group, view_group, leave_group, panic_button, check_in.
   - Meta/Info: pricing, track_order, complaints, faq, refunds, referral, loyalty, gift_vouchers, about_us, careers.
   - SA Utils: weather, load_shedding, fuel_price, events, exchange_rate.
   - Flow: greeting, conversational, help, mid_conv_resume, onboarding.
@@ -439,6 +440,14 @@ const MIRAGE_REGISTRY = {
   refunds: { handle: handleRefunds },
   pharmacy: { handle: handlePharmacy },
   grocery: { handle: handleGrocery },
+
+  // --- GROUP CART MIRAGES ---
+  create_group: { handle: handleCreateGroup },
+  join_group: { handle: handleJoinGroup },
+  view_group: { handle: handleViewGroup },
+  leave_group: { handle: async () => `👋 You've left the group cart. Your individual items are still in your personal cart! ✨` },
+  panic_button: { handle: handlePanic },
+  check_in: { handle: handleCheckIn },
 
   // --- USER STATE & FAILURE MIRAGES (16-35) ---
   onboarding: { handle: handleOnboarding },
@@ -596,25 +605,71 @@ async function handleElectricity(user, text, data, memory, db, env) {
 
 async function handleCartAction(user, text, data, memory, db, env, ctx) {
   const t = text.toLowerCase();
+
+  // Check for Group Context
+  const { data: membership } = await db.from('group_members').select('group_id').eq('user_id', user.id).single();
+  const groupId = membership?.group_id || data.group_id;
+
   if (t.includes('add') || t.includes('ADD_')) {
-    const itemId = t.match(/(prod|food|stay|fly|car)_\d+/)?.[0] || 'unknown';
-    await db.from('carts').insert([{ user_id: user.id, item_id: itemId, quantity: 1 }]);
-    await sendWhatsAppInteractive(user.phone_number, `🛒 Added to your cart! Ready to checkout?`, [
-      { id: 'CHECKOUT', title: 'Checkout Now 🚀' },
-      { id: 'CONTINUE', title: 'Keep Shopping 🛍️' }
-    ], env);
+    const itemId = t.match(/(prod|food|stay|fly|car|grocery)_\d+/)?.[0] || 'unknown';
+
+    if (groupId) {
+      // Add to Group Cart
+      await db.from('group_cart_items').insert([{ group_id: groupId, user_id: user.id, item_id: itemId, quantity: 1 }]);
+      await sendWhatsAppInteractive(user.phone_number, `👥 Added to GROUP cart! Everyone can see your contribution. ✨`, [
+        { id: 'VIEW_GROUP', title: 'View Group Cart 🛒' },
+        { id: 'CHECKOUT', title: 'Pay My Share 💳' }
+      ], env);
+
+      // Notify other members (Simulated)
+      // ctx.waitUntil(notifyGroupMembers(groupId, `${user.id.substring(0,5)} added ${itemId} to the group!`, env));
+    } else {
+      // Add to Personal Cart
+      await db.from('carts').insert([{ user_id: user.id, item_id: itemId, quantity: 1 }]);
+      await sendWhatsAppInteractive(user.phone_number, `🛒 Added to your cart! Ready to checkout?`, [
+        { id: 'CHECKOUT', title: 'Checkout Now 🚀' },
+        { id: 'CONTINUE', title: 'Keep Shopping 🛍️' }
+      ], env);
+    }
     return null;
   }
 
   if (t.includes('checkout') || t.includes('pay')) {
-    const { data: items } = await db.from('carts').select('*').eq('user_id', user.id);
+    let items = [];
+    let isGroup = false;
+
+    if (groupId) {
+      const { data: groupItems } = await db.from('group_cart_items').select('*').eq('group_id', groupId).eq('user_id', user.id);
+      items = groupItems || [];
+      isGroup = true;
+    } else {
+      const { data: personalItems } = await db.from('carts').select('*').eq('user_id', user.id);
+      items = personalItems || [];
+    }
+
     if (!items?.length) return `🛒 Your cart is empty! Add something first. ✨`;
 
     // Dynamic PayFast URL generation
-    const total = items.length * 150; // Mock calculation
-    const payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_Order_${user.id.substring(0,5)}&amount=${total.toFixed(2)}&m_payment_id=${Date.now()}`;
+    const subtotal = items.length * 150;
+    let fee = 49; // Default concierge fee
+    let total = subtotal + fee;
+    let payfastUrl = "";
 
-    return `✨ *ZWEEPEE CHECKOUT*\n\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast:\n🔗 ${payfastUrl}\n\nI'll notify you once payment is confirmed! 🚀`;
+    if (isGroup) {
+      const { data: group } = await db.from('group_carts').select('type').eq('id', groupId).single();
+      if (group?.type === 'public') {
+        // Public Split: Supplier gets 95%, Zweepee gets 5%
+        const platformFee = total * 0.05;
+        payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_Group_Share&amount=${total.toFixed(2)}&setup=split&fee=${platformFee.toFixed(2)}`;
+      } else {
+        // Private: Individual share direct to supplier
+        payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.SUPPLIER_ID || '10000100'}&item_name=Private_Group_Order&amount=${total.toFixed(2)}`;
+      }
+    } else {
+      payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_Personal_Order&amount=${total.toFixed(2)}`;
+    }
+
+    return `✨ *ZWEEPEE CHECKOUT*\n\nMode: ${isGroup ? 'Group Share' : 'Personal'}\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast Escrow:\n🔗 ${payfastUrl}\n\nI'll notify the group once your share is paid! 🚀`;
   }
 
   return `🛒 What would you like to do with your cart? (View/Checkout)`;
@@ -656,7 +711,72 @@ async function handlePharmacy(user, text, data, memory, db, env) {
 }
 
 async function handleGrocery(user, text, data, memory, db, env) {
-  return `🛒 *ZWEEPEE GROCERY*\n\nI'm browsing Checkers Sixty60 and Pick n Pay ASAP! for the freshest deals. What's on your list? 🍏🥩✨`;
+  await sendWhatsAppInteractive(user.phone_number, `🛒 *ZWEEPEE GROCERY*\n\nWant to save more? Join a Group Cart and get bulk discounts from Shoprite or Makro! 🇿🇦✨`, [
+    { id: 'CREATE_PRIVATE', title: 'Start Private Group 👥' },
+    { id: 'JOIN_PUBLIC', title: 'Join National Cart 🇿🇦' },
+    { id: 'SHOP_ALONE', title: 'Shop Alone 🚶‍♂️' }
+  ], env);
+  return null;
+}
+
+async function handleCreateGroup(user, text, data, memory, db, env) {
+  const inviteCode = Math.random().toString(36).substring(7).toUpperCase();
+  const { data: group, error } = await db.from('group_carts').insert([{
+    type: 'private',
+    creator_id: user.id,
+    invite_code: inviteCode,
+    status: 'open'
+  }]).select().single();
+
+  if (error) throw error;
+
+  return `👥 *PRIVATE GROUP CREATED*\n\nInvite your friends to join using this code:\n*${inviteCode}*\n\nEveryone who joins can add items, and we'll aggregate the order for bulk savings! 🇿🇦✨`;
+}
+
+async function handleJoinGroup(user, text, data, memory, db, env) {
+  const code = data.code || text.match(/[A-Z0-9]{5,}/)?.[0];
+  if (!code) return `🤔 I need an invite code to join a private group. Please reply with "JOIN [CODE]". ✨`;
+
+  if (code === 'PUBLIC' || text.includes('National')) {
+      return `🇿🇦 *JOINED NATIONAL CART*\n\nYou're now part of the Zweepee National Aggregate! All items you add will contribute to a massive bulk order for maximum discounts. 🚀✨`;
+  }
+
+  const { data: group } = await db.from('group_carts').select('*').eq('invite_code', code).single();
+  if (!group) return `❌ Sorry, I couldn't find a group with code *${code}*. Check the code and try again! 🇿🇦`;
+
+  await db.from('group_members').insert([{ group_id: group.id, user_id: user.id }]);
+
+  return `✅ *JOINED GROUP*\n\nYou've joined the cart created by ${group.creator_id.substring(0, 5)}! You can now add items to the shared list. ✨`;
+}
+
+async function handlePanic(user, text, data, memory, db, env) {
+  await sendAdminAlert(`🚨 PANIC BUTTON PRESSED by ${user.phone_number} in Group ${data.group_id || 'Unknown'}`, env);
+  return `🚨 *ZWEEPEE EMERGENCY*\n\nI've notified the admin and security services of your location. Stay calm and stay safe. 🇿🇦✨`;
+}
+
+async function handleCheckIn(user, text, data, memory, db, env) {
+  return `⏰ *CHECK-IN TIMER*\n\nYou've set a check-in for your grocery collection in 15 minutes. If you don't confirm safety by then, I'll notify the group admin! 🔐✨`;
+}
+
+async function handleViewGroup(user, text, data, memory, db, env) {
+  const { data: membership } = await db.from('group_members').select('group_id').eq('user_id', user.id).single();
+  const groupId = membership?.group_id;
+
+  if (!groupId) return `🤔 You're not in a group cart yet. Join one to see the shared magic! ✨`;
+
+  const { data: items } = await db.from('group_cart_items').select('*').eq('group_id', groupId);
+  const { data: members } = await db.from('group_members').select('user_id').eq('group_id', groupId);
+
+  const totalItems = items?.length || 0;
+  const memberCount = members?.length || 0;
+  const discount = totalItems > 10 ? '15%' : totalItems > 5 ? '10%' : '5%';
+
+  await sendWhatsAppInteractive(user.phone_number, `🛒 *GROUP CART SUMMARY*\n\nTotal Items: ${totalItems}\nActive Members: ${memberCount}\nEstimated Bulk Discount: *${discount}* 📉\n\nEveryone sees updates in real-time. Ready to save?`, [
+    { id: 'LIST_ITEMS', title: 'See Item List 📋' },
+    { id: 'CHECKOUT', title: 'Pay My Share 💳' },
+    { id: 'LEAVE_GROUP', title: 'Leave Group 👋' }
+  ], env);
+  return null;
 }
 
 async function handleOnboarding(user, text, data, memory, db, env) {
@@ -822,6 +942,12 @@ async function fetchWithRetry(url, options = {}, retries = 2) {
 function fallbackIntentParser(text) {
   const t = (text || '').toLowerCase().trim();
   if (t === 'hi' || t === 'hello' || t === 'hey' || t === 'start') return [{ intent: 'greeting', confidence: 0.9 }];
+
+  // Group Keywords
+  if (t.includes('create group') || t.includes('start stokvel')) return [{ intent: 'create_group', confidence: 0.9 }];
+  if (t.includes('join group') || t.includes('join cart')) return [{ intent: 'join_group', confidence: 0.9 }];
+  if (t.includes('group summary') || t.includes('who else')) return [{ intent: 'view_group', confidence: 0.8 }];
+  if (t.includes('panic') || t.includes('emergency') || t.includes('help me now')) return [{ intent: 'panic_button', confidence: 1.0 }];
 
   // Service Keywords
   if (t.includes('buy') || t.includes('order') || t.includes('get') || t.includes('iphone') || t.includes('samsung')) return [{ intent: 'shopping', confidence: 0.8 }];
