@@ -118,140 +118,84 @@ export default {
 
 async function processMessage(body, env, ctx, startTime) {
   try {
-    // 🛠️ Initialize Supabase first for early checks
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
 
-    // 🚧 Maintenance Mode Check
-    const { data: maintenance } = await supabase
-      .from('system_config')
-      .select('value')
-      .eq('key', 'maintenance_mode')
-      .single();
-
-    if (maintenance?.value === true || maintenance?.value === 'true') {
-      const rawFrom = body.messages?.[0]?.from || body.statuses?.[0]?.recipient_id || '';
-      const userPhone = rawFrom.replace('@c.us', '');
-      if (userPhone) {
-        await sendWhatsAppMessage(userPhone, `🛠️ *ZWEEPEE MAINTENANCE*\n\nI'm taking a quick power nap while Jules performs some magic updates. I'll be back shortly! ✨`, env);
-      }
-      return;
-    }
-
-    // Extract message from Whapi webhook format
+    // Extract message
     const message = body.messages?.[0];
-    if (!message) {
-      // It might be a status update or other event - log and ignore for now
-      console.log('Non-message event received');
-      return;
-    }
+    if (!message) return;
 
     const rawFrom = message.from || '';
     const userPhone = rawFrom.replace('@c.us', '');
     if (!userPhone) return;
 
-    const messageType = message.type;
-
-    let messageText = '';
-    let mediaData = null;
-
-    // ROBUST EXTRACTION
-    try {
-      if (messageType === 'text') {
-        messageText = message.text?.body || message.body || '';
-      } else if (messageType === 'image') {
-        messageText = message.caption || message.image?.caption || '[Image]';
-        mediaData = { type: 'image', url: message.image?.link };
-      } else if (messageType === 'interactive') {
-        messageText = message.interactive?.button_reply?.id ||
-                     message.interactive?.list_reply?.id ||
-                     message.interactive?.button_reply?.title || '';
-      }
-    } catch (e) {
-      console.error('Extraction error:', e);
-      messageText = '';
-    }
-
-    // Hardening: Force string type
-    messageText = (messageText || '').toString();
-
-    // Get or create user with full context
-    const user = await getOrCreateUser(userPhone, supabase);
-
-    // Get user memory (preferences, history, last cart)
-    const memory = await getUserMemory(user.id, supabase);
-
-    // Save incoming message to chat history
-    await saveChatMessage(user.id, 'user', messageText, supabase);
-
-    // 🛠️ Admin Commands
-    if (messageText.trim() === '!diag') {
-      const diagnostic = await runDiagnostics(env);
-      const diagMsg = `🛠️ *SYSTEM DIAGNOSTICS*\n\nSupabase: ${diagnostic.services.supabase}\nWhapi: ${diagnostic.services.whapi}\nGemini: ${diagnostic.services.gemini}\nStatus: ${diagnostic.status === 'healthy' ? '✅' : '❌'}`;
-      await sendWhatsAppMessage(userPhone, diagMsg, env);
+    // Maintenance Mode Check
+    const { data: maintenance } = await supabase.from('system_config').select('value').eq('key', 'maintenance_mode').single();
+    if (maintenance?.value === true || maintenance?.value === 'true') {
+      await sendUserMessage(userPhone, `🛠️ *ZWEEPEE MAINTENANCE*\n\nI'm taking a quick power nap while Jules performs some magic updates. I'll be back shortly! ✨`, env, { path: 'maintenance', incomingFrom: rawFrom });
       return;
     }
 
-    if (messageText.trim() === '!stats') {
-      const analytics = await runAnalytics(env);
-      const statsMsg = `📊 *ZWEEPEE INTELLIGENCE*\n\nPerformance: ${analytics.metrics.reliability}%\nLatency: ${analytics.metrics.avg_response_time}ms\nRevenue: R${analytics.business.revenue}`;
-      await sendWhatsAppMessage(userPhone, statsMsg, env);
+    const messageType = message.type;
+    let messageText = '';
+    let mediaData = null;
+
+    if (messageType === 'text') {
+      messageText = message.text?.body || message.body || '';
+    } else if (messageType === 'image') {
+      messageText = message.caption || message.image?.caption || '[Image]';
+      mediaData = { type: 'image', url: message.image?.link };
+    } else if (messageType === 'interactive') {
+      messageText = message.interactive?.button_reply?.id || message.interactive?.list_reply?.id || message.interactive?.button_reply?.title || '';
+    }
+
+    messageText = (messageText || '').toString();
+
+    const user = await getOrCreateUser(userPhone, supabase);
+    const memory = await getUserMemory(user.id, supabase);
+    await saveChatMessage(user.id, 'user', messageText, supabase);
+
+    // Admin Commands
+    if (messageText.trim() === '!diag') {
+      const diagnostic = await runDiagnostics(env);
+      await sendUserMessage(userPhone, `🛠️ *SYSTEM DIAGNOSTICS*\n\nSupabase: ${diagnostic.services.supabase}\nWhapi: ${diagnostic.services.whapi}\nGemini: ${diagnostic.services.gemini}\nStatus: ${diagnostic.status === 'healthy' ? '✅' : '❌'}`, env, { path: 'admin_cmd', userId: user.id, incomingFrom: rawFrom });
       return;
     }
 
     // Detect intent(s)
     const intents = await detectIntents(messageText, memory, env, ctx);
 
-    // 🧠 LOG INTENT
-    ctx.waitUntil(logSystemAlert({
-      severity: 'info',
-      source: 'brain',
-      message: 'Intent parsed',
-      context: { intents, messageText, userPhone }
-    }, env));
-
-    // Route to appropriate handler
+    // Route to handler
     const response = await routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx);
 
-    // Send response via Whapi
+    // Send response
     if (response) {
-      const duration = startTime ? (Date.now() - startTime) : null;
-      await sendWhatsAppMessage(userPhone, response, env);
-
-      if (duration) {
-        ctx.waitUntil(logSystemAlert({
-          severity: 'info',
-          source: 'performance',
-          message: 'Request processed',
-          context: { duration_ms: duration, userPhone }
-        }, env));
-      }
-
+      const path = (intents[0]?.intent === 'help' || !intents.length) ? 'fallback' : 'ai';
+      await sendUserMessage(userPhone, response, env, {
+        path,
+        userId: user.id,
+        incomingFrom: rawFrom
+      });
       await saveChatMessage(user.id, 'assistant', response, supabase);
+    }
+
+    if (startTime) {
+      const duration = Date.now() - startTime;
+      ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'performance', message: 'Request processed', context: { duration_ms: duration, userPhone, path: (intents[0]?.intent || 'unknown') } }, env));
     }
 
   } catch (error) {
     console.error('❌ Process error:', error);
-
-    ctx.waitUntil(logSystemAlert({
-      severity: 'error',
-      source: 'worker',
-      message: error.message,
-      stack_trace: error.stack,
-      context: { body }
-    }, env));
+    ctx.waitUntil(logSystemAlert({ severity: 'error', source: 'worker', message: error.message, stack_trace: error.stack, context: { body_summary: JSON.stringify(body).substring(0, 500) } }, env));
 
     try {
-      const rawFrom = body.messages?.[0]?.from || '';
-      const userPhone = rawFrom.replace('@c.us', '');
-      if (userPhone) {
-        await sendWhatsAppMessage(userPhone, `⚠️ Zweepee is having a moment. Jules is notified! ✨`, env);
-      }
+      const userPhone = body.messages?.[0]?.from?.replace('@c.us', '');
+      if (userPhone) await sendUserMessage(userPhone, `⚠️ Zweepee is having a moment. Jules is notified! ✨`, env, { path: 'error_recovery', incomingFrom: body.messages?.[0]?.from });
     } catch (e) {}
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ZWEEPEE SENTRY
+// ZWEEPEE SENTRY & COMMUNICATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function logSystemAlert(alert, env) {
@@ -260,12 +204,39 @@ async function logSystemAlert(alert, env) {
     await supabase.from('system_alerts').insert([alert]);
 
     if (alert.severity === 'critical' || alert.severity === 'error') {
-      const adminPhone = env.ADMIN_PHONE || env.WHAPI_PHONE;
-      await sendWhatsAppMessage(adminPhone, `🚨 *ZWEEPEE ALERT*\n\nError: ${alert.message}`, env);
+      await sendAdminAlert(`Error in ${alert.source}: ${alert.message}`, env);
     }
   } catch (e) {
     console.error('Failed to log alert:', e);
   }
+}
+
+async function sendUserMessage(to, text, env, metadata = {}) {
+  const cleanTo = to.replace('@c.us', '');
+  const path = metadata.path || 'unknown';
+  const userId = metadata.userId || 'unknown';
+  const incomingFrom = (metadata.incomingFrom || 'unknown').replace('@c.us', '');
+
+  console.log(`[OUTBOUND] [USER] To: ${cleanTo} | From: ${incomingFrom} | UserID: ${userId} | Path: ${path} | Length: ${text.length}`);
+
+  // Hard prevent admin leakage for user messages
+  const adminPhone = (env.ADMIN_PHONE || env.WHAPI_PHONE || '').replace('@c.us', '');
+  if (adminPhone && cleanTo === adminPhone && cleanTo !== incomingFrom) {
+    if (path !== 'admin_cmd' && path !== 'error_recovery' && path !== 'maintenance') {
+      console.warn(`⚠️ Potential leakage blocked: Attempted to send user response to admin phone (Target: ${cleanTo}, Source: ${incomingFrom}, Path: ${path})`);
+      return null;
+    }
+  }
+
+  return await sendWhatsAppMessage(cleanTo, text, env);
+}
+
+async function sendAdminAlert(text, env) {
+  const adminPhone = (env.ADMIN_PHONE || env.WHAPI_PHONE || '').replace('@c.us', '');
+  if (!adminPhone) return;
+
+  console.log(`[OUTBOUND] [ADMIN] To: ${adminPhone} | Alert: ${text.substring(0, 50)}...`);
+  return await sendWhatsAppMessage(adminPhone, `🚨 *ZWEEPEE ALERT*\n\n${text}`, env);
 }
 
 async function runDiagnostics(env) {
@@ -321,43 +292,50 @@ async function runAnalytics(env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function detectIntents(messageText, memory, env, ctx) {
+  const prompt = `Analyze this WhatsApp message from a user in South Africa: "${messageText}".
+  Available intents: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, cart_action, greeting, conversational, help.
+  Return a JSON array of objects: [{ "intent": "string", "confidence": 0-1, "extracted_data": {} }]`;
+
   if (env.OPENAI_API_KEY) {
     try {
-      return await detectIntentsOpenAI(messageText, memory, env);
+      const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: 'You are a South African concierge. Detect intents as JSON array.' }, { role: 'user', content: prompt }],
+          response_format: { type: 'json_object' }
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const res = JSON.parse(data.choices?.[0]?.message?.content);
+        const intents = Array.isArray(res.intents) ? res.intents : (res.intent ? [res] : []);
+        if (intents.length) return intents;
+      }
     } catch (e) {
-      if (ctx) ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'worker', message: `OpenAI fail: ${e.message.substring(0, 50)}` }, env));
+      if (ctx) ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'openai', message: `OpenAI fail: ${e.message.substring(0, 50)}` }, env));
     }
   }
 
-  try {
-    const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: `Analyze intents: ${messageText}` }] }] })
-    });
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-    const intents = JSON.parse(text.match(/\[.*\]/s)?.[0] || '[]');
-    return intents.length ? intents : fallbackIntentParser(messageText);
-  } catch (error) {
-    return fallbackIntentParser(messageText);
+  // Gemini Fallback
+  if (env.GEMINI_API_KEY) {
+    try {
+      const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt + "\nRespond ONLY with valid JSON array." }] }] })
+      });
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+      const intents = JSON.parse(text.match(/\[.*\]/s)?.[0] || '[]');
+      if (intents.length) return intents;
+    } catch (error) {
+      if (ctx) ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'gemini', message: `Gemini fail: ${error.message.substring(0, 50)}` }, env));
+    }
   }
-}
 
-async function detectIntentsOpenAI(messageText, memory, env) {
-  const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'system', content: 'Detect intents as JSON array.' }, { role: 'user', content: messageText }],
-      response_format: { type: 'json_object' }
-    })
-  });
-  if (!response.ok) { await response.text(); throw new Error('OpenAI error'); }
-  const data = await response.json();
-  const res = JSON.parse(data.choices?.[0]?.message?.content);
-  return Array.isArray(res.intents) ? res.intents : [res];
+  return fallbackIntentParser(messageText);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -365,8 +343,9 @@ async function detectIntentsOpenAI(messageText, memory, env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx) {
-  const intent = intents[0]?.intent || 'help';
-  const data = intents[0]?.extracted_data || {};
+  const intentObj = intents[0] || { intent: 'help' };
+  const intent = intentObj.intent;
+  const data = intentObj.extracted_data || {};
 
   if (intent === 'shopping') return await handleShopping(user, messageText, mediaData, data, memory, supabase, env);
   if (intent === 'food') return await handleFood(user, messageText, data, memory, supabase, env);
@@ -378,7 +357,9 @@ async function routeMessage(user, intents, messageText, mediaData, memory, supab
   if (intent === 'electricity') return await handleElectricity(user, messageText, data, memory, supabase, env);
   if (intent === 'cart_action') return await handleCartAction(user, messageText, data, memory, supabase, env, ctx);
   if (intent === 'conversational') return await handleConversational(user, messageText, data, memory, supabase, env);
-  return intent === 'greeting' ? `Hi! How can I help today?` : generateHelp(user, memory);
+  if (intent === 'greeting') return `👋 Hi! I'm Zweepee, your South African concierge. How can I help you today? ✨`;
+
+  return generateHelp(user, memory);
 }
 
 // MIRAGES (Simplified for stability)
@@ -391,10 +372,14 @@ async function handleBuses(user, text, data, memory, db, env) { return `🚌 Int
 async function handleAirtime(user, text, data, memory, db, env) { return `📱 R${data.quantity || 50} airtime for ${data.product || 'Vodacom'}?`; }
 async function handleElectricity(user, text, data, memory, db, env) { return `⚡ Prepaid electricity for R${data.quantity || 100}?`; }
 async function handleCartAction(user, text, data, memory, db, env, ctx) { return `🛒 Your cart is currently empty!`; }
-async function handleConversational(user, text, data, memory, db, env) { return `I understand. What else can I do for you?`; }
+async function handleConversational(user, text, data, memory, db, env) {
+  // If we get here, it means we want a conversational response but don't have a specific intent.
+  // We should try to be helpful.
+  return `I'm here to help with shopping, food, travel, and more in SA! What's on your mind? ✨`;
+}
 
 function generateHelp(user, memory) {
-  return `✨ *Zweepee Help*\n\nTry: "iPhone", "KFC", "Hotel in CPT", or "R50 airtime"!\n\nNo apps, just magic. ✨`;
+  return `✨ *ZWEEPEE MAGIC*\n\nI can help you with:\n🛍️ Shopping\n🍗 Food\n🏨 Hotels\n✈️ Flights\n📱 Airtime & ⚡ Electricity\n\nJust tell me what you need! ✨`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -455,10 +440,14 @@ async function fetchWithRetry(url, options = {}, retries = 2) {
 }
 
 function fallbackIntentParser(text) {
-  const t = (text || '').toLowerCase();
-  if (t.includes('buy') || t.includes('find')) return [{ intent: 'shopping', confidence: 0.8 }];
-  if (t.includes('kfc') || t.includes('eat')) return [{ intent: 'food', confidence: 0.8 }];
-  if (t.includes('hotel')) return [{ intent: 'accommodation', confidence: 0.8 }];
-  if (t.includes('flight')) return [{ intent: 'flights', confidence: 0.8 }];
+  const t = (text || '').toLowerCase().trim();
+  if (t === 'hi' || t === 'hello' || t === 'hey' || t === 'start') return [{ intent: 'greeting', confidence: 0.9 }];
+  if (t.includes('buy') || t.includes('find') || t.includes('price')) return [{ intent: 'shopping', confidence: 0.8 }];
+  if (t.includes('kfc') || t.includes('eat') || t.includes('food')) return [{ intent: 'food', confidence: 0.8 }];
+  if (t.includes('hotel') || t.includes('stay') || t.includes('sleep')) return [{ intent: 'accommodation', confidence: 0.8 }];
+  if (t.includes('flight') || t.includes('plane') || t.includes('fly')) return [{ intent: 'flights', confidence: 0.8 }];
+  if (t.includes('airtime') || t.includes('data') || t.includes('vodacom') || t.includes('mtn')) return [{ intent: 'airtime', confidence: 0.8 }];
+  if (t.includes('electricity') || t.includes('power') || t.includes('eskom')) return [{ intent: 'electricity', confidence: 0.8 }];
+  if (t.length > 20) return [{ intent: 'conversational', confidence: 0.6 }];
   return [{ intent: 'help', confidence: 0.5 }];
 }
