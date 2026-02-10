@@ -160,6 +160,13 @@ async function processMessage(body, env, ctx, startTime) {
     const memory = await getUserMemory(user.id, supabase);
     await saveChatMessage(user.id, 'user', messageText, supabase);
 
+    // Dynamic State Intent Injection
+    const isNewUser = user.created_at && (Date.now() - new Date(user.created_at).getTime() < 60000); // Created in last minute
+    const isReturning = !isNewUser && (Date.now() - new Date(user.last_active || 0).getTime() > 24 * 60 * 60 * 1000);
+
+    // Update last active
+    await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('id', user.id);
+
     // Admin Commands
     if (messageText.trim() === '!diag') {
       const diagnostic = await runDiagnostics(env);
@@ -168,7 +175,14 @@ async function processMessage(body, env, ctx, startTime) {
     }
 
     // Detect intent(s)
-    const intents = await detectIntents(messageText, memory, env, ctx);
+    let intents = await detectIntents(messageText, { ...memory, is_new: isNewUser, is_returning: isReturning }, env, ctx);
+
+    // State Interception
+    if (isNewUser && !intents.some(i => i.intent === 'onboarding')) {
+      intents.unshift({ intent: 'onboarding', confidence: 1.0 });
+    } else if (isReturning && (messageText.toLowerCase() === 'hi' || messageText.toLowerCase() === 'hello')) {
+      intents = [{ intent: 'returning_user', confidence: 1.0 }];
+    }
     const intent = intents[0]?.intent || 'none';
     console.log("INTENT:", intent);
 
@@ -309,7 +323,13 @@ async function runAnalytics(env) {
 
 async function detectIntents(messageText, memory, env, ctx) {
   const prompt = `Analyze this WhatsApp message from a user in South Africa: "${messageText}".
-  Available intents: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, cart_action, greeting, conversational, help.
+  User Context: ${JSON.stringify(memory)}
+  Available intents (select all that apply):
+  - Services: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, pharmacy, grocery, grocery_meat, grocery_veg, bus_intercape, bus_greyhound, flight_intl, cart_action.
+  - Meta/Info: pricing, track_order, complaints, faq, refunds, referral, loyalty, gift_vouchers, about_us, careers.
+  - SA Utils: weather, load_shedding, fuel_price, events, exchange_rate.
+  - Flow: greeting, conversational, help, mid_conv_resume, onboarding.
+  - Edge: unknown_input, did_you_mean, conflicting_intents.
   Return a JSON array of objects: [{ "intent": "string", "confidence": 0-1, "extracted_data": {} }]`;
 
   console.log(`[BRAIN] Analyzing: "${messageText}"`);
@@ -377,41 +397,104 @@ async function detectIntents(messageText, memory, env, ctx) {
 // 4. ROUTER
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4. MIRAGE REGISTRY & ROUTER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const MIRAGE_REGISTRY = {
+  // --- CORE SERVICE MIRAGES ---
+  shopping: { handle: handleShopping },
+  food: { handle: handleFood },
+  accommodation: { handle: handleAccommodation },
+  flights: { handle: handleFlights },
+  car_rental: { handle: handleCarRental },
+  buses: { handle: handleBuses },
+  airtime: { handle: handleAirtime },
+  electricity: { handle: handleElectricity },
+  cart_action: { handle: handleCartAction },
+
+  // --- META INTENTS ---
+  greeting: { handle: async () => `👋 Hi! I'm Zweepee, your South African concierge. How can I help you today? ✨` },
+  conversational: { handle: handleConversational },
+  help: { handle: async (user, text, media, data, memory) => generateHelp(user, memory) },
+
+  // --- META INTENTS (INTENTS 1-15) ---
+  pricing: { handle: handlePricing },
+  track_order: { handle: handleTrackOrder },
+  complaints: { handle: handleComplaints },
+  faq: { handle: handleFAQ },
+  refunds: { handle: handleRefunds },
+  pharmacy: { handle: handlePharmacy },
+  grocery: { handle: handleGrocery },
+
+  // --- USER STATE & FAILURE MIRAGES (16-35) ---
+  onboarding: { handle: handleOnboarding },
+  returning_user: { handle: handleReturningUser },
+  mid_conv_resume: { handle: handleResume },
+  unknown_input: { handle: handleUnknown },
+  did_you_mean: { handle: handlePartialMatch },
+  conflicting_intents: { handle: handleConflict },
+  ai_timeout: { handle: handleAiTimeout },
+  ai_error: { handle: handleAiError },
+
+  // --- BUSINESS RULES & SYSTEM CONDITIONS (36-50+) ---
+  out_of_stock: { handle: handleOutOfStock },
+  after_hours: { handle: handleAfterHours },
+  regional_unavail: { handle: handleRegionalUnavail },
+  max_cart_limit: { handle: handleMaxCart },
+  rate_limited: { handle: handleRateLimit },
+  degraded_mode: { handle: handleDegraded },
+  api_latency: { handle: handleLatency },
+  payment_issue: { handle: async () => `💳 *PAYMENT TROUBLE*\n\nIt looks like there was a glitch with the payment. Please check your card or try a different method. Jules is here if you need help! ✨` },
+  subscription_needed: { handle: async () => `👑 *PREMIUM FEATURE*\n\nThis feature is part of Zweepee Plus! Subscribe now for early access and zero concierge fees. 🇿🇦✨` },
+
+  // --- ADDITIONAL SERVICE CATEGORIES (GROCERY, TRAVEL, ETC) ---
+  grocery_meat: { handle: async () => `🥩 *ZWEEPEE MEAT*\n\nBrowsing local butchers and major retailers for the best cuts. Braai tonight? 🇿🇦🔥` },
+  grocery_veg: { handle: async () => `🥦 *ZWEEPEE FRESH*\n\nFinding the crispest fruits and veggies from local markets and supermarkets. 🍏🥬✨` },
+  bus_intercape: { handle: async () => `🚌 *INTERCAPE SEARCH*\n\nChecking Intercape Mainliner and Sleepliner availability for your route... 🎫` },
+  bus_greyhound: { handle: async () => `🚌 *GREYHOUND SEARCH*\n\nBrowsing Greyhound Dreamliner schedules... One moment! 🎫` },
+  flight_intl: { handle: async () => `✈️ *INTERNATIONAL FLIGHTS*\n\nSearching for global routes and connections. Cape Town to London? Jo'burg to Dubai? I've got you! 🌍✨` },
+
+  // --- META & INFO MIRAGES ---
+  referral: { handle: async () => `🎁 *ZWEEPEE REFERRALS*\n\nShare your code with friends! When they place their first order, you both get R50 concierge credit. 🇿🇦✨` },
+  loyalty: { handle: async () => `⭐ *ZWEEPEE REWARDS*\n\nYou've earned 150 magic points! Keep using Zweepee to unlock free deliveries and exclusive deals. ✨` },
+  careers: { handle: async () => `💼 *JOIN THE MAGIC*\n\nWant to help build the future of commerce in SA? Send your CV to careers@zweepee.com! 🚀` },
+  about_us: { handle: async () => `✨ *ABOUT ZWEEPEE*\n\nWe're an autonomous AI concierge designed specifically for South Africans. We make buying anything as easy as a text message. 🇿🇦` },
+  gift_vouchers: { handle: async () => `🎁 *GIFT VOUCHERS*\n\nNeed a last-minute gift? I can generate digital vouchers for Takealot, Netflix, and more! ✨` },
+
+  // --- EDGE CASES & ERRORS ---
+  invalid_address: { handle: async () => `📍 *ADDRESS ERROR*\n\nI couldn't quite pin that address on the map. Could you send it as a Location pin or type it again? 🇿🇦` },
+  low_balance: { handle: async () => `💸 *WALLET LOW*\n\nYour Zweepee balance is too low for this order. Top up now to continue the magic! ✨` },
+  phone_mismatch: { handle: async () => `📱 *VERIFICATION NEEDED*\n\nThe phone number provided doesn't match your WhatsApp. Please verify to continue. 🔐` },
+
+  // --- SOUTH AFRICA UTILITIES & NEWS ---
+  weather: { handle: async () => `☀️ *SA WEATHER*\n\nChecking conditions for your area... It looks like a great day for a braai! 🇿🇦🔥` },
+  load_shedding: { handle: async () => `💡 *LOAD SHEDDING UPDATE*\n\nStage 2 currently active. Checking schedules for your area... 🕯️` },
+  fuel_price: { handle: async () => `⛽ *FUEL PRICE ALERT*\n\nPetrol and Diesel prices updated. Checking the latest inland vs coastal rates for you... 🇿🇦` },
+  events: { handle: async () => `🎟️ *UPCOMING EVENTS*\n\nFrom rugby at Loftus to concerts in CPT Stadium, I'll find the best tickets for you! 🇿🇦✨` },
+  exchange_rate: { handle: async () => `💱 *RAND RATE*\n\nChecking USD/ZAR, GBP/ZAR, and EUR/ZAR live for you. The Rand is looking... interesting today! 🇿🇦📈` }
+};
+
 async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx) {
   if (!intents || intents.length === 0) {
-    console.log(`[ROUTER] No intent detected, providing general help.`);
-    return generateHelp(user, memory);
+    return await MIRAGE_REGISTRY.help.handle(user, messageText, mediaData, {}, memory, supabase, env, ctx);
   }
 
   console.log(`[ROUTER] Routing intents: ${intents.map(i => i.intent).join(', ')}`);
-
   let finalResponse = "";
 
   for (const intentObj of intents) {
     const intent = intentObj.intent;
     const data = intentObj.extracted_data || {};
-    console.log(`[ROUTER] Processing: ${intent}`);
+    console.log(`[ROUTER] Dispatching unit: ${intent}`);
 
-    let res = null;
+    const mirage = MIRAGE_REGISTRY[intent] || MIRAGE_REGISTRY.unknown_input;
     try {
-      if (intent === 'shopping') res = await handleShopping(user, messageText, mediaData, data, memory, supabase, env);
-      else if (intent === 'food') res = await handleFood(user, messageText, data, memory, supabase, env);
-      else if (intent === 'accommodation') res = await handleAccommodation(user, messageText, data, memory, supabase, env);
-      else if (intent === 'flights') res = await handleFlights(user, messageText, data, memory, supabase, env);
-      else if (intent === 'car_rental') res = await handleCarRental(user, messageText, data, memory, supabase, env);
-      else if (intent === 'buses') res = await handleBuses(user, messageText, data, memory, supabase, env);
-      else if (intent === 'airtime') res = await handleAirtime(user, messageText, data, memory, supabase, env);
-      else if (intent === 'electricity') res = await handleElectricity(user, messageText, data, memory, supabase, env);
-      else if (intent === 'cart_action') res = await handleCartAction(user, messageText, data, memory, supabase, env, ctx);
-      else if (intent === 'conversational') res = await handleConversational(user, messageText, data, memory, supabase, env);
-      else if (intent === 'greeting') res = `👋 Hi! I'm Zweepee, your South African concierge. How can I help you today? ✨`;
-      else if (intent === 'help') res = generateHelp(user, memory);
-
-      if (res) {
-        finalResponse += (finalResponse ? "\n\n" : "") + res;
-      }
+      const res = await mirage.handle(user, messageText, mediaData, data, memory, supabase, env, ctx);
+      if (res) finalResponse += (finalResponse ? "\n\n" : "") + res;
     } catch (e) {
-      console.error(`Error in ${intent} handler:`, e);
+      console.error(`Error in mirage unit [${intent}]:`, e);
+      finalResponse += (finalResponse ? "\n\n" : "") + "⚠️ My magic hiccuped. Jules is looking into it! ✨";
     }
   }
 
@@ -505,6 +588,97 @@ async function handleConversational(user, text, data, memory, db, env) {
   return `I'm Zweepee, your South African concierge! 🇿🇦\n\nI can help you buy anything, order food, book flights, or even get airtime and electricity. Just tell me what you need! ✨`;
 }
 
+async function handlePricing(user, text, data, memory, db, env) {
+  const item = data.product || 'items';
+  return `💰 *ZWEEPEE PRICING*\n\nOur concierge fee is typically R49 per order. Product prices for ${item} are fetched live from top SA retailers like Takealot, Woolworths, and Checkers Sixty60. ✨`;
+}
+
+async function handleTrackOrder(user, text, data, memory, db, env) {
+  return `📦 *ORDER TRACKING*\n\nI'm checking your recent orders... You'll receive a notification as soon as the driver is en route! 🏃‍♂️💨`;
+}
+
+async function handleComplaints(user, text, data, memory, db, env) {
+  return `🛠️ *ZWEEPEE SUPPORT*\n\nI'm sorry to hear you're having trouble! I've flagged this for Jules. One of our humans will reach out to you shortly. 🇿🇦✨`;
+}
+
+async function handleFAQ(user, text, data, memory, db, env) {
+  return `❓ *ZWEEPEE FAQ*\n\n*How do I pay?* Via secure PayFast link.\n*Where do you deliver?* Nationwide in South Africa!\n*Can I cancel?* Yes, before the order is processed. ✨`;
+}
+
+async function handleRefunds(user, text, data, memory, db, env) {
+  return `💸 *REFUND REQUEST*\n\nRefunds are processed within 3-5 business days to your original payment method. Please provide your Order ID to proceed. ✨`;
+}
+
+async function handlePharmacy(user, text, data, memory, db, env) {
+  const item = data.product || 'medication';
+  return `💊 *ZWEEPEE PHARMACY*\n\nSearching Dis-Chem and Clicks for ${item}... Please note that schedule 1+ meds require a valid prescription upload. 📝✨`;
+}
+
+async function handleGrocery(user, text, data, memory, db, env) {
+  return `🛒 *ZWEEPEE GROCERY*\n\nI'm browsing Checkers Sixty60 and Pick n Pay ASAP! for the freshest deals. What's on your list? 🍏🥩✨`;
+}
+
+async function handleOnboarding(user, text, data, memory, db, env) {
+  return `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I can help you buy anything, book travel, or pay utilities without leaving WhatsApp.\n\nTry saying: "I want a KFC Streetwise 2" or "Find flights to Cape Town". ✨`;
+}
+
+async function handleReturningUser(user, text, data, memory, db, env) {
+  return `✨ *WELCOME BACK*\n\nGood to see you again! Ready for some more magic? How can I help you today? 🇿🇦`;
+}
+
+async function handleResume(user, text, data, memory, db, env) {
+  return `🔄 *RESUMING CONVERSATION*\n\nI remember we were talking about ${memory.last_intent || 'your request'}. Should we pick up where we left off? ✨`;
+}
+
+async function handleUnknown(user, text, data, memory, db, env) {
+  return `🤔 *ZWEEPEE IS PUZZLED*\n\nI didn't quite catch that. I'm still learning! Try asking for food, shopping, or travel. ✨`;
+}
+
+async function handlePartialMatch(user, text, data, memory, db, env) {
+  const suggestion = data.suggestion || 'shopping';
+  return `🧐 *DID YOU MEAN?*\n\nI think you're asking about *${suggestion}*. Is that right? ✨`;
+}
+
+async function handleConflict(user, text, data, memory, db, env) {
+  return `⚖️ *ZWEEPEE CONFUSION*\n\nYou've asked for a few different things at once! Should we start with ${data.primary || 'the first one'}? ✨`;
+}
+
+async function handleAiTimeout(user, text, data, memory, db, env) {
+  return `⏳ *BRAIN FREEZE*\n\nMy AI brain is thinking a bit slowly today. I'm switching to my fallback magic to help you faster! ✨`;
+}
+
+async function handleAiError(user, text, data, memory, db, env) {
+  return `⚠️ *MAGIC HICCUP*\n\nSomething went wrong with my AI. Don't worry, Jules is notified and I'm using my backup systems! 🇿🇦✨`;
+}
+
+async function handleOutOfStock(user, text, data, memory, db, env) {
+  return `🚫 *OUT OF STOCK*\n\nI'm so sorry! The item "${data.product || 'you requested'}" just sold out at our local partner. Should I look for an alternative? 🧐✨`;
+}
+
+async function handleAfterHours(user, text, data, memory, db, env) {
+  return `🌙 *AFTER HOURS*\n\nWe're currently taking a quick nap! You can still add items to your cart, and we'll process them first thing in the morning (8 AM). 🇿🇦✨`;
+}
+
+async function handleRegionalUnavail(user, text, data, memory, db, env) {
+  return `📍 *LOCATION LIMIT*\n\nIt looks like we haven't brought our magic to "${data.location || 'that area'}" just yet. We're expanding fast—stay tuned! 🇿🇦🚀`;
+}
+
+async function handleMaxCart(user, text, data, memory, db, env) {
+  return `🛒 *CART IS FULL*\n\nWhoa there! You've reached the maximum number of items for a single concierge order. Please checkout now or remove something! ✨`;
+}
+
+async function handleRateLimit(user, text, data, memory, db, env) {
+  return `🛑 *SLOW DOWN*\n\nYou're moving faster than a Springbok! 🇿🇦 Please wait a few seconds before your next request so I can keep up. ✨`;
+}
+
+async function handleDegraded(user, text, data, memory, db, env) {
+  return `⚠️ *SERVICE ADVISORY*\n\nOne of our partner APIs (e.g. Flights) is currently offline. Other services like Food and Shopping are still working perfectly! 🍗🛍️✨`;
+}
+
+async function handleLatency(user, text, data, memory, db, env) {
+  return `🐢 *LATENCY ALERT*\n\nThe network is a bit sluggish today. I'm working hard to get your results—thanks for your patience! 🇿🇦✨`;
+}
+
 function generateHelp(user, memory) {
   return `✨ *ZWEEPEE MAGIC*\n\nI can help you with:\n🛍️ Shopping\n🍗 Food\n🏨 Hotels\n✈️ Flights\n📱 Airtime & ⚡ Electricity\n\nJust tell me what you need! ✨`;
 }
@@ -569,15 +743,27 @@ async function fetchWithRetry(url, options = {}, retries = 2) {
 function fallbackIntentParser(text) {
   const t = (text || '').toLowerCase().trim();
   if (t === 'hi' || t === 'hello' || t === 'hey' || t === 'start') return [{ intent: 'greeting', confidence: 0.9 }];
-  if (t.includes('buy') || t.includes('find') || t.includes('price') || t.includes('order') || t.includes('get')) return [{ intent: 'shopping', confidence: 0.8 }];
-  if (t.includes('kfc') || t.includes('eat') || t.includes('food') || t.includes('hungry') || t.includes('restaurant')) return [{ intent: 'food', confidence: 0.8 }];
-  if (t.includes('hotel') || t.includes('stay') || t.includes('sleep') || t.includes('accommodation') || t.includes('book')) return [{ intent: 'accommodation', confidence: 0.8 }];
-  if (t.includes('flight') || t.includes('plane') || t.includes('fly') || t.includes('ticket')) return [{ intent: 'flights', confidence: 0.8 }];
-  if (t.includes('airtime') || t.includes('data') || t.includes('vodacom') || t.includes('mtn') || t.includes('cell c') || t.includes('telkom')) return [{ intent: 'airtime', confidence: 0.8 }];
-  if (t.includes('electricity') || t.includes('power') || t.includes('eskom') || t.includes('token')) return [{ intent: 'electricity', confidence: 0.8 }];
 
-  // South African specific common queries
-  if (t.includes('iphone') || t.includes('samsung') || t.includes('phone')) return [{ intent: 'shopping', confidence: 0.8, extracted_data: { product: t } }];
+  // Service Keywords
+  if (t.includes('buy') || t.includes('order') || t.includes('get') || t.includes('iphone') || t.includes('samsung')) return [{ intent: 'shopping', confidence: 0.8 }];
+  if (t.includes('kfc') || t.includes('food') || t.includes('hungry') || t.includes('eat')) return [{ intent: 'food', confidence: 0.8 }];
+  if (t.includes('hotel') || t.includes('stay') || t.includes('book')) return [{ intent: 'accommodation', confidence: 0.8 }];
+  if (t.includes('flight') || t.includes('fly') || t.includes('ticket')) return [{ intent: 'flights', confidence: 0.8 }];
+  if (t.includes('airtime') || t.includes('data')) return [{ intent: 'airtime', confidence: 0.8 }];
+  if (t.includes('electricity') || t.includes('power') || t.includes('eskom') || t.includes('token')) return [{ intent: 'electricity', confidence: 0.8 }];
+  if (t.includes('med') || t.includes('pill') || t.includes('pharmacy')) return [{ intent: 'pharmacy', confidence: 0.8 }];
+  if (t.includes('grocery') || t.includes('milk') || t.includes('bread')) return [{ intent: 'grocery', confidence: 0.8 }];
+
+  // Meta Keywords
+  if (t.includes('price') || t.includes('cost') || t.includes('how much')) return [{ intent: 'pricing', confidence: 0.8 }];
+  if (t.includes('track') || t.includes('where is my')) return [{ intent: 'track_order', confidence: 0.8 }];
+  if (t.includes('wrong') || t.includes('complain') || t.includes('bad')) return [{ intent: 'complaints', confidence: 0.8 }];
+  if (t.includes('refund') || t.includes('money back')) return [{ intent: 'refunds', confidence: 0.8 }];
+
+  // SA Utils Keywords
+  if (t.includes('weather') || t.includes('rain')) return [{ intent: 'weather', confidence: 0.8 }];
+  if (t.includes('load shedding') || t.includes('loadshedding')) return [{ intent: 'load_shedding', confidence: 0.8 }];
+  if (t.includes('petrol') || t.includes('diesel') || t.includes('fuel')) return [{ intent: 'fuel_price', confidence: 0.8 }];
 
   if (t.length > 5) return [{ intent: 'conversational', confidence: 0.6 }];
   return [{ intent: 'help', confidence: 0.5 }];
