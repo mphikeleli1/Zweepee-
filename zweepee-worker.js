@@ -23,26 +23,67 @@ export default {
       const diagnostic = await runDiagnostics(env);
       const analytics = await runAnalytics(env);
 
-    // 🧠 GROK-SPEC JSON STRUCTURE
-    const grokHealth = {
-      status: diagnostic.status,
-      services: diagnostic.services,
-      performance: {
-        avg_response_time: `${analytics.metrics.avg_response_time}ms`,
-        uptime: `${analytics.metrics.reliability}%`,
-        self_heals_24h: analytics.metrics.auto_recovered
-      },
-      business_intelligence: {
-        conversion_rate: `${analytics.business.conversion_rate}%`,
-        total_orders: analytics.business.total_orders,
-        revenue: `R${analytics.business.revenue.toLocaleString()}`,
-        top_intent: analytics.business.top_intent,
-        top_bundles: analytics.business.top_bundles
-      },
-      timestamp: new Date().toISOString()
-    };
+      const grokHealth = {
+        status: diagnostic.status,
+        services: diagnostic.services,
+        performance: {
+          avg_response_time: `${analytics.metrics.avg_response_time}ms`,
+          uptime: `${analytics.metrics.reliability}%`,
+          self_heals_24h: analytics.metrics.auto_recovered
+        },
+        business_intelligence: {
+          conversion_rate: `${analytics.business.conversion_rate}%`,
+          total_orders: analytics.business.total_orders,
+          revenue: `R${analytics.business.revenue.toLocaleString()}`,
+          top_intent: analytics.business.top_intent,
+          top_bundles: analytics.business.top_bundles
+        },
+        timestamp: new Date().toISOString()
+      };
 
-    return new Response(JSON.stringify(grokHealth), {
+      return new Response(JSON.stringify(grokHealth), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Webhook Auto-Setup
+    if (url.pathname === '/setup' && request.method === 'POST') {
+      const adminKey = request.headers.get('x-admin-key');
+      if (adminKey !== env.ADMIN_KEY) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+
+      const webhookUrl = `https://${url.hostname}/webhook`;
+      const setupPayload = {
+        webhooks: [
+          {
+            url: webhookUrl,
+            events: [
+              { type: "messages", method: "post" },
+              { type: "statuses", method: "post" },
+              { type: "channel", method: "post" }
+            ],
+            active: true,
+            mode: "body"
+          }
+        ]
+      };
+
+      const setupRes = await fetch('https://gate.whapi.cloud/settings', {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${env.WHAPI_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(setupPayload)
+      });
+
+      const result = await setupRes.json();
+      return new Response(JSON.stringify({
+        success: setupRes.ok,
+        webhook_target: webhookUrl,
+        whapi_response: result
+      }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -257,14 +298,33 @@ async function runDiagnostics(env) {
     const whapiRes = await fetch('https://gate.whapi.cloud/health', {
       headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
     });
-    const whapiData = await whapiRes.json();
+
+    // Also check settings to see webhook URL
+    const settingsRes = await fetch('https://gate.whapi.cloud/settings', {
+      headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
+    });
+    const settingsData = await settingsRes.json();
+
     const maskedToken = env.WHAPI_TOKEN ? `${env.WHAPI_TOKEN.substring(0, 5)}...` : 'Missing';
-    results.services.whapi = whapiRes.ok ? 'Healthy' : `${whapiData.error || 'Unauthorized'} (Token: ${maskedToken})`;
+    results.services.whapi = whapiRes.ok ? 'Healthy' : 'Unreachable';
+    results.services.whapi_webhook = settingsData.webhooks?.[0]?.url || 'Not Configured';
+    results.services.whapi_settings = settingsRes.ok ? 'Accessed' : `Error: ${settingsData.error || 'Unknown'}`;
   } catch (e) {
     results.services.whapi = `Fatal: ${e.message}`;
   }
 
-  // 3. Check Gemini
+  // 3. Check Inbound Logs (Black Box)
+  try {
+    const { count, error } = await supabase
+      .from('system_alerts')
+      .select('*', { count: 'exact', head: true })
+      .eq('source', 'whapi-webhook');
+    results.services.inbound_logs = error ? `Error: ${error.message}` : `${count} messages logged`;
+  } catch (e) {
+    results.services.inbound_logs = `Fatal: ${e.message}`;
+  }
+
+  // 4. Check Gemini
   try {
     const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
       method: 'POST',
