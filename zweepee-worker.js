@@ -471,11 +471,11 @@ const MIRAGE_REGISTRY = {
   pharmacy: { handle: handlePharmacy },
   grocery: { handle: handleGrocery },
 
-  // --- GROUP CART MIRAGES ---
+  // --- GROUP-BUY MIRAGES ---
   create_group: { handle: handleCreateGroup },
   join_group: { handle: handleJoinGroup },
   view_group: { handle: handleViewGroup },
-  leave_group: { handle: async () => `👋 You've left the group cart. Your individual items are still in your personal cart! ✨` },
+  leave_group: { handle: async () => `👋 You've left the group-buy. Your individual items are still in your personal cart! ✨` },
   panic_button: { handle: handlePanic },
   check_in: { handle: handleCheckIn },
 
@@ -678,10 +678,10 @@ async function handleCartAction(user, text, data, memory, db, env, ctx) {
     const itemId = t.match(/(prod|food|stay|fly|car|grocery)_\d+/)?.[0] || 'unknown';
 
     if (groupId) {
-      // Add to Group Cart
+      // Add to Group-Buy
       await db.from('group_cart_items').insert([{ group_id: groupId, user_id: user.id, item_id: itemId, quantity: 1 }]);
-      await sendWhatsAppInteractive(user.phone_number, `👥 Added to GROUP cart! Everyone can see your contribution. ✨`, [
-        { id: 'VIEW_GROUP', title: 'View Group Cart 🛒' },
+      await sendWhatsAppInteractive(user.phone_number, `👥 Added to GROUP-BUY! Everyone can see your contribution. ✨`, [
+        { id: 'VIEW_GROUP', title: 'View Group-Buy 🛒' },
         { id: 'CHECKOUT', title: 'Pay My Share 💳' }
       ], env, { image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800' }, ctx);
     } else {
@@ -729,16 +729,16 @@ async function handleCartAction(user, text, data, memory, db, env, ctx) {
       if (group?.type === 'public') {
         // Public Split: Supplier gets 95%, Zweepee gets 5%
         const platformFee = total * 0.05;
-        payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_Group_Share&amount=${total.toFixed(2)}&setup=split&fee=${platformFee.toFixed(2)}`;
+        payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_GroupBuy_Share&amount=${total.toFixed(2)}&setup=split&fee=${platformFee.toFixed(2)}`;
       } else {
         // Private: Individual share direct to supplier
-        payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.SUPPLIER_ID || '10000100'}&item_name=Private_Group_Order&amount=${total.toFixed(2)}`;
+        payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.SUPPLIER_ID || '10000100'}&item_name=Private_GroupBuy_Order&amount=${total.toFixed(2)}`;
       }
     } else {
       payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_Personal_Order&amount=${total.toFixed(2)}`;
     }
 
-    const summary = `✨ *ZWEEPEE CHECKOUT*\n\nMode: ${isGroup ? 'Group Share' : 'Personal'}\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast Escrow:\n🔗 ${payfastUrl}\n\nI'll notify the group once your share is paid! 🚀`;
+    const summary = `✨ *ZWEEPEE CHECKOUT*\n\nMode: ${isGroup ? 'Group-Buy Share' : 'Personal'}\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast Escrow:\n🔗 ${payfastUrl}\n\nI'll notify the group once your share is paid! 🚀`;
 
     await sendWhatsAppInteractive(user.phone_number, summary, [
       { id: 'CHECKOUT_HELP', title: 'Payment Help ❓' },
@@ -788,9 +788,9 @@ async function handlePharmacy(user, text, data, memory, db, env) {
 
 async function handleGrocery(user, text, media, data, memory, db, env, ctx) {
   await sendWhatsAppInteractive(user.phone_number,
-    `🛒 *ZWEEPEE GROCERY*\n\nWant to save up to 20%? Join a Group Cart and get bulk discounts from Shoprite, Makro, or Woolworths! 🇿🇦✨`, [
-    { id: 'CREATE_PRIVATE', title: 'Start Private Group 👥' },
-    { id: 'join_public', title: 'Join National Cart 🇿🇦' },
+    `🛒 *ZWEEPEE GROCERY*\n\nWant to save up to 20%? Join a Group-Buy and get bulk discounts from Shoprite, Makro, or Woolworths! 🇿🇦✨`, [
+    { id: 'CREATE_PRIVATE', title: 'Start Private Group-Buy 👥' },
+    { id: 'join_public', title: 'Join Public Group-Buy 🇿🇦' },
     { id: 'SHOP_ALONE', title: 'Shop Alone 🚶‍♂️' }
   ], env, { image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800' }, ctx);
   return null;
@@ -807,12 +807,12 @@ async function handleCreateGroup(user, text, data, memory, db, env) {
 
   if (error) throw error;
 
-  return `👥 *PRIVATE GROUP CREATED*\n\nInvite your friends to join using this code:\n*${inviteCode}*\n\nEveryone who joins can add items, and we'll aggregate the order for bulk savings! 🇿🇦✨`;
+  return `👥 *PRIVATE GROUP-BUY CREATED*\n\nInvite your friends to join using this code:\n*${inviteCode}*\n\nEveryone who joins can add items, and we'll aggregate the order for bulk savings! 🇿🇦✨`;
 }
 
 async function handleJoinGroup(user, text, media, data, memory, db, env, ctx) {
   const code = data.code || text.match(/[A-Z0-9]{5,}/)?.[0];
-  if (!code) return `🤔 I need an invite code to join a private group. Please reply with "JOIN [CODE]". ✨`;
+  if (!code) return `🤔 I need an invite code to join a private group-buy. Please reply with "JOIN [CODE]". ✨`;
 
   if (code === 'PUBLIC' || text.includes('National')) {
       // Find or create the global public group
@@ -826,7 +826,7 @@ async function handleJoinGroup(user, text, media, data, memory, db, env, ctx) {
         await db.from('group_members').upsert([{ group_id: publicGroup.id, user_id: user.id }], { onConflict: 'group_id,user_id' });
       }
 
-      return `🇿🇦 *JOINED NATIONAL CART*\n\nYou're now part of the Zweepee National Aggregate! All items you add will contribute to a massive bulk order for maximum discounts. 🚀✨`;
+      return `🇿🇦 *JOINED PUBLIC GROUP-BUY*\n\nYou're now part of the Zweepee Public Group-Buy! All items you add will contribute to a massive bulk order for maximum discounts. 🚀✨`;
   }
 
   const { data: group } = await db.from('group_carts').select('*').eq('invite_code', code).single();
@@ -834,7 +834,7 @@ async function handleJoinGroup(user, text, media, data, memory, db, env, ctx) {
 
   await db.from('group_members').insert([{ group_id: group.id, user_id: user.id }]);
 
-  return `✅ *JOINED GROUP*\n\nYou've joined the cart created by ${group.creator_id.substring(0, 5)}! You can now add items to the shared list. ✨`;
+  return `✅ *JOINED GROUP-BUY*\n\nYou've joined the group-buy created by ${group.creator_id.substring(0, 5)}! You can now add items to the shared list. ✨`;
 }
 
 async function handlePanic(user, text, data, memory, db, env) {
@@ -850,7 +850,7 @@ async function handleViewGroup(user, text, media, data, memory, db, env, ctx) {
   const { data: membership } = await db.from('group_members').select('group_id').eq('user_id', user.id).single();
   const groupId = membership?.group_id;
 
-  if (!groupId) return `🤔 You're not in a group cart yet. Join one to see the shared magic! ✨`;
+  if (!groupId) return `🤔 You're not in a group-buy yet. Join one to see the shared magic! ✨`;
 
   const { data: items } = await db.from('group_cart_items').select('*').eq('group_id', groupId);
   const { data: members } = await db.from('group_members').select('user_id').eq('group_id', groupId);
@@ -860,7 +860,7 @@ async function handleViewGroup(user, text, media, data, memory, db, env, ctx) {
   const discount = totalItems > 10 ? '15%' : totalItems > 5 ? '10%' : '5%';
 
   await sendWhatsAppInteractive(user.phone_number,
-    `🛒 *GROUP CART SUMMARY*\n\nTotal Items: ${totalItems}\nActive Members: ${memberCount}\nEstimated Bulk Discount: *${discount}* 📉\n\nEveryone sees updates in real-time. Ready to save?`, [
+    `🛒 *GROUP-BUY SUMMARY*\n\nTotal Items: ${totalItems}\nActive Members: ${memberCount}\nEstimated Bulk Discount: *${discount}* 📉\n\nEveryone sees updates in real-time. Ready to save?`, [
     { id: 'LIST_ITEMS', title: 'See Item List 📋' },
     { id: 'CHECKOUT', title: 'Pay My Share 💳' },
     { id: 'LEAVE_GROUP', title: 'Leave Group 👋' }
