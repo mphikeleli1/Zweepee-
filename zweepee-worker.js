@@ -94,8 +94,17 @@ export default {
       const startTime = Date.now();
       const body = await request.json();
 
-      // Log first webhook entry as requested
+      // [PIPELINE] HARDCODED PING TEST
       const message = body.messages?.[0];
+      const pingText = (message?.text?.body || message?.body || "").toLowerCase().trim();
+      if (pingText === "pingtest") {
+        if (message?.from) {
+          ctx.waitUntil(sendWhatsAppMessage(message.from, "NEW_CODE_RUNNING", env));
+        }
+        return new Response("NEW_CODE_RUNNING", { status: 200 });
+      }
+
+      // Log first webhook entry as requested
       const from = message?.from || 'unknown';
       const text = message?.text?.body || message?.body || message?.caption || '';
       console.log("INCOMING:", from, text);
@@ -181,8 +190,9 @@ async function processMessage(body, env, ctx, startTime) {
     }
 
     // 3. Admin Commands
-    if (intents.length === 0 && messageText.trim() === '!diag') {
-      intents.push({ intent: 'admin_diag', confidence: 1.0 });
+    if (intents.length === 0 && (messageText.trim() === '!diag' || messageText.trim() === '!stats')) {
+      const isStats = messageText.trim() === '!stats';
+      intents.push({ intent: isStats ? 'admin_stats' : 'admin_diag', confidence: 1.0 });
     }
 
     // 4. Regular Intent Detection
@@ -482,6 +492,10 @@ const MIRAGE_REGISTRY = {
   admin_diag: { handle: async (user, text, media, data, memory, db, env) => {
     const diagnostic = await runDiagnostics(env);
     return `🛠️ *SYSTEM DIAGNOSTICS*\n\nSupabase: ${diagnostic.services.supabase}\nWhapi: ${diagnostic.services.whapi}\nGemini: ${diagnostic.services.gemini}\nStatus: ${diagnostic.status === 'healthy' ? '✅' : '❌'}`;
+  }},
+  admin_stats: { handle: async (user, text, media, data, memory, db, env) => {
+    const analytics = await runAnalytics(env);
+    return `📊 *BUSINESS INTELLIGENCE*\n\nReliability: ${analytics.metrics.reliability}%\nOrders: ${analytics.business.total_orders}\nRevenue: R${analytics.business.revenue}\nTop Intent: ${analytics.business.top_intent}`;
   }},
   subscription_needed: { handle: async () => `👑 *PREMIUM FEATURE*\n\nThis feature is part of Zweepee Plus! Subscribe now for early access and zero concierge fees. 🇿🇦✨` },
 
