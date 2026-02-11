@@ -165,6 +165,7 @@ async function processMessage(body, env, ctx, startTime) {
 
     // [PIPELINE] 1. RAW INCOMING TEXT
     console.log(`[PIPELINE] RAW_INBOUND: from=${userPhone} text="${messageText}"`);
+    ctx.waitUntil(logForensicEvent('INBOUND_RAW', userPhone, 'none', { text: messageText, type: messageType }, env));
 
     const memory = await getUserMemory(user.id, supabase);
     await saveChatMessage(user.id, 'user', messageText, supabase);
@@ -201,8 +202,10 @@ async function processMessage(body, env, ctx, startTime) {
       const isReturning = !isNewUser && (user.last_active && diffMs > 24 * 60 * 60 * 1000);
 
       console.log(`[PIPELINE] USER_STATE: new=${!!isNewUser} returning=${!!isReturning} last_active=${user.last_active}`);
+      ctx.waitUntil(logForensicEvent('USER_STATE', userPhone, 'none', { isNewUser, isReturning, last_active: user.last_active }, env));
 
       intents = await detectIntents(messageText, { ...memory, is_new: !!isNewUser, is_returning: !!isReturning }, env, ctx);
+      ctx.waitUntil(logForensicEvent('INTENT_RESULT', userPhone, 'none', { intents }, env));
 
       // State Interception
       const lowerText = messageText.toLowerCase().trim();
@@ -219,6 +222,7 @@ async function processMessage(body, env, ctx, startTime) {
     console.log(`[PIPELINE] INTENTS: ${JSON.stringify(intents)}`);
 
     // Route to handler
+    ctx.waitUntil(logForensicEvent('ROUTING_START', userPhone, intents[0]?.intent, { text: messageText }, env));
     const response = await routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx);
 
     // [PIPELINE] 4. RESPONSE
@@ -229,7 +233,7 @@ async function processMessage(body, env, ctx, startTime) {
       const isFallback = (intent === 'help' || intent === 'none');
       const path = isFallback ? 'fallback' : 'ai';
 
-      await sendUserMessage(userPhone, response, env, {
+      await sendSecureMessage(userPhone, response, env, {
         path,
         userId: user.id,
         incomingFrom: rawFrom
@@ -250,7 +254,7 @@ async function processMessage(body, env, ctx, startTime) {
 
     try {
       const userPhone = body.messages?.[0]?.from?.replace('@c.us', '');
-      if (userPhone) await sendUserMessage(userPhone, `⚠️ Zweepee is having a moment. Jules is notified! ✨`, env, { path: 'error_recovery', incomingFrom: body.messages?.[0]?.from });
+      if (userPhone) await sendSecureMessage(userPhone, `⚠️ Zweepee is having a moment. Jules is notified! ✨`, env, { path: 'error_recovery', incomingFrom: body.messages?.[0]?.from });
     } catch (e) {}
   }
 }
@@ -258,6 +262,20 @@ async function processMessage(body, env, ctx, startTime) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ZWEEPEE SENTRY & COMMUNICATION
 // ═══════════════════════════════════════════════════════════════════════════════
+
+async function logForensicEvent(type, userPhone, intent, context, env) {
+  try {
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+    await supabase.from('forensic_logs').insert([{
+      event_type: type,
+      user_phone: userPhone,
+      intent,
+      context: context || {}
+    }]);
+  } catch (e) {
+    console.error('Forensic log fail:', e);
+  }
+}
 
 async function logSystemAlert(alert, env) {
   try {
@@ -272,30 +290,45 @@ async function logSystemAlert(alert, env) {
   }
 }
 
-async function sendUserMessage(to, text, env, metadata = {}) {
+async function sendSecureMessage(to, text, env, metadata = {}, ctx) {
   const cleanTo = to.replace('@c.us', '');
   const path = metadata.path || 'unknown';
   const incomingFrom = (metadata.incomingFrom || 'unknown').replace('@c.us', '');
+  const type = metadata.type || 'text'; // text, interactive, image
+  const options = metadata.options || {};
 
-  // Log every outbound send
-  console.log("SENDING TO:", cleanTo, "TYPE:", path);
+  await logForensicEvent('OUTBOUND_ATTEMPT', cleanTo, path, { type, options, incomingFrom }, env);
 
-  // Hard-separate: ADMIN_ALERT_NUMBER
+  // 🛡️ SECURITY WALL: HARD SEPARATION
   const adminPhone = (env.ADMIN_ALERT_NUMBER || env.ADMIN_PHONE || env.WHAPI_PHONE || '').replace('@c.us', '');
 
-  // Strict assertion before every send
   if (adminPhone && cleanTo === adminPhone && cleanTo !== incomingFrom) {
-    if (path !== 'admin_cmd' && path !== 'error_recovery' && path !== 'maintenance') {
-      const errorMsg = `CRITICAL: USER MESSAGE SENT TO ADMIN (Target: ${cleanTo}, Path: ${path})`;
+    const isSpecialPath = ['admin_cmd', 'error_recovery', 'maintenance', 'admin_stats', 'admin_diag'].includes(path);
+    if (!isSpecialPath && type !== 'admin_alert') {
+      const errorMsg = `SECURITY_VIOLATION: USER MESSAGE ROUTED TO ADMIN (Target: ${cleanTo}, Path: ${path})`;
       console.error(errorMsg);
-      // As requested: throw new Error("USER MESSAGE SENT TO ADMIN");
-      // But we wrap it to prevent crashing the whole worker if possible,
-      // or just return to be safe. The user said "throw new Error".
+      await logForensicEvent('SECURITY_VIOLATION', cleanTo, path, { target: cleanTo, incomingFrom }, env);
       throw new Error("USER MESSAGE SENT TO ADMIN");
     }
   }
 
-  return await sendWhatsAppMessage(cleanTo, text, env);
+  // PHYSICAL SEND
+  let msgId = null;
+  if (type === 'interactive') {
+    msgId = await sendWhatsAppInteractive(cleanTo, text, options.buttons, env, options, ctx);
+  } else if (type === 'image') {
+    msgId = await sendWhatsAppImage(cleanTo, options.image, text, env);
+  } else {
+    msgId = await sendWhatsAppMessage(cleanTo, text, env, options, ctx);
+  }
+
+  if (msgId) {
+    await logForensicEvent('OUTBOUND_SUCCESS', cleanTo, path, { msgId, type }, env);
+  } else {
+    await logForensicEvent('OUTBOUND_FAILURE', cleanTo, path, { type }, env);
+  }
+
+  return msgId;
 }
 
 async function sendAdminAlert(text, env) {
@@ -303,6 +336,7 @@ async function sendAdminAlert(text, env) {
   if (!adminPhone) return;
 
   console.log(`[OUTBOUND] [ADMIN] To: ${adminPhone} | Alert: ${text.substring(0, 50)}...`);
+  // Use sendWhatsAppMessage directly for alerts to avoid recursion, but keep it minimal
   return await sendWhatsAppMessage(adminPhone, `🚨 *ZWEEPEE ALERT*\n\n${text}`, env);
 }
 
@@ -591,15 +625,25 @@ async function handleShopping(user, text, media, data, memory, db, env, ctx) {
 
   // Magical Unified Card with vanish delay for "Searching"
   if (query.length > 0 && !text.includes('ADD_')) {
-    await sendWhatsAppMessage(user.phone_number, `🔍 *ZWEEPEE MAGIC*\n\nSearching top SA retailers for "${query}"...`, env, { vanishDelay: 5000 }, ctx);
+    await sendSecureMessage(user.phone_number, `🔍 *ZWEEPEE MAGIC*\n\nSearching top SA retailers for "${query}"...`, env, {
+      path: 'shopping',
+      options: { vanishDelay: 10000 }
+    }, ctx);
     await sendWhatsAppTyping(user.phone_number, env);
   }
 
-  await sendWhatsAppInteractive(user.phone_number,
-    `🛍️ *ZWEEPEE SHOPPING*\n\n*${product.name}*\nPrice: R${product.price.toLocaleString()}\nConcierge Fee: R49\n\nI found the best price at iStore/Takealot! Ready to order? ✨`, [
-    { id: `ADD_${product.id}`, title: 'Add to Cart 🛒' },
-    { id: 'SEARCH_MORE', title: 'Search More 🔍' }
-  ], env, { image: product.img }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `🛍️ *ZWEEPEE SHOPPING*\n\n*${product.name}*\nPrice: R${product.price.toLocaleString()}\nConcierge Fee: R49\n\nI found the best price at iStore/Takealot! Ready to order? ✨`, env, {
+    path: 'shopping',
+    type: 'interactive',
+    options: {
+      image: product.img,
+      buttons: [
+        { id: `ADD_${product.id}`, title: 'Add to Cart 🛒' },
+        { id: 'SEARCH_MORE', title: 'Search More 🔍' }
+      ]
+    }
+  }, ctx);
 
   return null;
 }
@@ -614,15 +658,25 @@ async function handleFood(user, text, media, data, memory, db, env, ctx) {
   const meal = options.find(o => query.includes(o.name.toLowerCase().split(' ')[0])) || options[0];
 
   if (query.length > 0 && !text.includes('ADD_')) {
-    await sendWhatsAppMessage(user.phone_number, `🍗 *ZWEEPEE FOOD*\n\nFinding the nearest ${query === 'food' ? 'restaurants' : query} for you...`, env, { vanishDelay: 5000 }, ctx);
+    await sendSecureMessage(user.phone_number, `🍗 *ZWEEPEE FOOD*\n\nFinding the nearest ${query === 'food' ? 'restaurants' : query} for you...`, env, {
+      path: 'food',
+      options: { vanishDelay: 10000 }
+    }, ctx);
     await sendWhatsAppTyping(user.phone_number, env);
   }
 
-  await sendWhatsAppInteractive(user.phone_number,
-    `🍗 *ZWEEPEE FOOD*\n\n*${meal.name}*\nPrice: R${meal.price.toFixed(2)}\nDelivery: R35\n\nEstimated Arrival: 25-35 mins 🏃‍♂️💨`, [
-    { id: `ADD_${meal.id}`, title: 'Order Now 🏃‍♂️' },
-    { id: 'VIEW_MENU', title: 'View Menu 📋' }
-  ], env, { image: meal.img }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `🍗 *ZWEEPEE FOOD*\n\n*${meal.name}*\nPrice: R${meal.price.toFixed(2)}\nDelivery: R35\n\nEstimated Arrival: 25-35 mins 🏃‍♂️💨`, env, {
+    path: 'food',
+    type: 'interactive',
+    options: {
+      image: meal.img,
+      buttons: [
+        { id: `ADD_${meal.id}`, title: 'Order Now 🏃‍♂️' },
+        { id: 'VIEW_MENU', title: 'View Menu 📋' }
+      ]
+    }
+  }, ctx);
 
   return null;
 }
@@ -631,11 +685,18 @@ async function handleAccommodation(user, text, media, data, memory, db, env, ctx
   const location = data.location || 'Cape Town';
   const stay = { id: 'stay_1', name: 'Radisson Blu Waterfront', price: 4500, img: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800' };
 
-  await sendWhatsAppInteractive(user.phone_number,
-    `🏨 *ZWEEPEE STAYS*\n\n*${stay.name}* (${location})\nPrice: R${stay.price.toLocaleString()} per night\n\nI found this gem with a 4.8⭐ rating! Ready to book?`, [
-    { id: `ADD_${stay.id}`, title: 'Book This Stay 🏨' },
-    { id: 'SEARCH_HOTEL', title: 'See More Hotels 🔍' }
-  ], env, { image: stay.img }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `🏨 *ZWEEPEE STAYS*\n\n*${stay.name}* (${location})\nPrice: R${stay.price.toLocaleString()} per night\n\nI found this gem with a 4.8⭐ rating! Ready to book?`, env, {
+    path: 'accommodation',
+    type: 'interactive',
+    options: {
+      image: stay.img,
+      buttons: [
+        { id: `ADD_${stay.id}`, title: 'Book This Stay 🏨' },
+        { id: 'SEARCH_HOTEL', title: 'See More Hotels 🔍' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
@@ -643,17 +704,28 @@ async function handleFlights(user, text, media, data, memory, db, env, ctx) {
   const destination = data.to || 'Cape Town';
   const flight = { id: 'fly_1', name: 'Safair (JNB ➔ CPT)', price: 1250, img: 'https://images.unsplash.com/photo-1436491865332-7a61a109c055?w=800' };
 
-  await sendWhatsAppInteractive(user.phone_number,
-    `✈️ *ZWEEPEE FLIGHTS*\n\n*${flight.name}*\nPrice: R${flight.price.toLocaleString()}\n\nLowest fare found on FlySafair for your dates! ✨`, [
-    { id: `ADD_${flight.id}`, title: 'Secure Seat 🎫' },
-    { id: 'SEARCH_FLIGHT', title: 'Other Times 🕒' }
-  ], env, { image: flight.img }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `✈️ *ZWEEPEE FLIGHTS*\n\n*${flight.name}*\nPrice: R${flight.price.toLocaleString()}\n\nLowest fare found on FlySafair for your dates! ✨`, env, {
+    path: 'flights',
+    type: 'interactive',
+    options: {
+      image: flight.img,
+      buttons: [
+        { id: `ADD_${flight.id}`, title: 'Secure Seat 🎫' },
+        { id: 'SEARCH_FLIGHT', title: 'Other Times 🕒' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
-async function handleCarRental(user, text, data, memory, db, env) {
+async function handleCarRental(user, text, media, data, memory, db, env, ctx) {
   const car = { id: 'car_1', name: 'VW Polo Vivo', price: 450, img: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=800' };
-  await sendWhatsAppImage(user.phone_number, car.img, `🚗 *ZWEEPEE RENTAL*\n\n*${car.name}*\nPrice: R${car.price} / day\n\nReply "ADD ${car.id}" to reserve! 🗝️`, env);
+  await sendSecureMessage(user.phone_number, `🚗 *ZWEEPEE RENTAL*\n\n*${car.name}*\nPrice: R${car.price} / day\n\nReply "ADD ${car.id}" to reserve! 🗝️`, env, {
+    path: 'car_rental',
+    type: 'image',
+    options: { image: car.img }
+  }, ctx);
   return `Looking for reliable wheels...`;
 }
 
@@ -685,17 +757,31 @@ async function handleCartAction(user, text, data, memory, db, env, ctx) {
     if (groupId) {
       // Add to Group-Buy
       await db.from('group_cart_items').insert([{ group_id: groupId, user_id: user.id, item_id: itemId, quantity: 1 }]);
-      await sendWhatsAppInteractive(user.phone_number, `👥 Added to GROUP-BUY! Everyone can see your contribution. ✨`, [
-        { id: 'VIEW_GROUP', title: 'View Group-Buy 🛒' },
-        { id: 'CHECKOUT', title: 'Pay My Share 💳' }
-      ], env, { image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800' }, ctx);
+      await sendSecureMessage(user.phone_number, `👥 Added to GROUP-BUY! Everyone can see your contribution. ✨`, env, {
+        path: 'cart_action',
+        type: 'interactive',
+        options: {
+          image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800',
+          buttons: [
+            { id: 'VIEW_GROUP', title: 'View Group-Buy 🛒' },
+            { id: 'CHECKOUT', title: 'Pay My Share 💳' }
+          ]
+        }
+      }, ctx);
     } else {
       // Add to Personal Cart
       await db.from('carts').insert([{ user_id: user.id, item_id: itemId, quantity: 1 }]);
-      await sendWhatsAppInteractive(user.phone_number, `🛒 Added to your cart! Ready to checkout?`, [
-        { id: 'CHECKOUT', title: 'Checkout Now 🚀' },
-        { id: 'CONTINUE', title: 'Keep Shopping 🛍️' }
-      ], env, { image: 'https://images.unsplash.com/photo-1557821552-17105176677c?w=800' }, ctx);
+      await sendSecureMessage(user.phone_number, `🛒 Added to your cart! Ready to checkout?`, env, {
+        path: 'cart_action',
+        type: 'interactive',
+        options: {
+          image: 'https://images.unsplash.com/photo-1557821552-17105176677c?w=800',
+          buttons: [
+            { id: 'CHECKOUT', title: 'Checkout Now 🚀' },
+            { id: 'CONTINUE', title: 'Keep Shopping 🛍️' }
+          ]
+        }
+      }, ctx);
     }
     return null;
   }
@@ -745,10 +831,17 @@ async function handleCartAction(user, text, data, memory, db, env, ctx) {
 
     const summary = `✨ *ZWEEPEE CHECKOUT*\n\nMode: ${isGroup ? 'Group-Buy Share' : 'Personal'}\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast Escrow:\n🔗 ${payfastUrl}\n\nI'll notify the group once your share is paid! 🚀`;
 
-    await sendWhatsAppInteractive(user.phone_number, summary, [
-      { id: 'CHECKOUT_HELP', title: 'Payment Help ❓' },
-      { id: 'CANCEL_ORDER', title: 'Cancel Order ❌' }
-    ], env, { image: 'https://images.unsplash.com/photo-1556742044-3c52d6e88c62?w=800' }, ctx);
+    await sendSecureMessage(user.phone_number, summary, env, {
+      path: 'cart_action',
+      type: 'interactive',
+      options: {
+        image: 'https://images.unsplash.com/photo-1556742044-3c52d6e88c62?w=800',
+        buttons: [
+          { id: 'CHECKOUT_HELP', title: 'Payment Help ❓' },
+          { id: 'CANCEL_ORDER', title: 'Cancel Order ❌' }
+        ]
+      }
+    }, ctx);
 
     return null;
   }
@@ -774,11 +867,17 @@ async function handleComplaints(user, text, media, data, memory, db, env, ctx) {
 }
 
 async function handleFAQ(user, text, media, data, memory, db, env, ctx) {
-  await sendWhatsAppInteractive(user.phone_number, `❓ *ZWEEPEE FAQ*\n\nHow can I help you understand our magic?`, [
-    { id: 'FAQ_PAYMENT', title: 'Payment Info 💳' },
-    { id: 'FAQ_DELIVERY', title: 'Delivery Info 🚚' },
-    { id: 'FAQ_CANCEL', title: 'Cancellations ❌' }
-  ], env);
+  await sendSecureMessage(user.phone_number, `❓ *ZWEEPEE FAQ*\n\nHow can I help you understand our magic?`, env, {
+    path: 'faq',
+    type: 'interactive',
+    options: {
+      buttons: [
+        { id: 'FAQ_PAYMENT', title: 'Payment Info 💳' },
+        { id: 'FAQ_DELIVERY', title: 'Delivery Info 🚚' },
+        { id: 'FAQ_CANCEL', title: 'Cancellations ❌' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
@@ -792,12 +891,19 @@ async function handlePharmacy(user, text, data, memory, db, env) {
 }
 
 async function handleGrocery(user, text, media, data, memory, db, env, ctx) {
-  await sendWhatsAppInteractive(user.phone_number,
-    `🛒 *ZWEEPEE GROCERY*\n\nWant to save up to 20%? Join a Group-Buy and get bulk discounts from Shoprite, Makro, or Woolworths! 🇿🇦✨`, [
-    { id: 'CREATE_PRIVATE', title: 'Start Private Group-Buy 👥' },
-    { id: 'join_public', title: 'Join Public Group-Buy 🇿🇦' },
-    { id: 'SHOP_ALONE', title: 'Shop Alone 🚶‍♂️' }
-  ], env, { image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800' }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `🛒 *ZWEEPEE GROCERY*\n\nWant to save up to 20%? Join a Group-Buy and get bulk discounts from Shoprite, Makro, or Woolworths! 🇿🇦✨`, env, {
+    path: 'grocery',
+    type: 'interactive',
+    options: {
+      image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800',
+      buttons: [
+        { id: 'CREATE_PRIVATE', title: 'Start Private Group-Buy 👥' },
+        { id: 'join_public', title: 'Join Public Group-Buy 🇿🇦' },
+        { id: 'SHOP_ALONE', title: 'Shop Alone 🚶‍♂️' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
@@ -864,23 +970,37 @@ async function handleViewGroup(user, text, media, data, memory, db, env, ctx) {
   const memberCount = members?.length || 0;
   const discount = totalItems > 10 ? '15%' : totalItems > 5 ? '10%' : '5%';
 
-  await sendWhatsAppInteractive(user.phone_number,
-    `🛒 *GROUP-BUY SUMMARY*\n\nTotal Items: ${totalItems}\nActive Members: ${memberCount}\nEstimated Bulk Discount: *${discount}* 📉\n\nEveryone sees updates in real-time. Ready to save?`, [
-    { id: 'LIST_ITEMS', title: 'See Item List 📋' },
-    { id: 'CHECKOUT', title: 'Pay My Share 💳' },
-    { id: 'LEAVE_GROUP', title: 'Leave Group 👋' }
-  ], env, { image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800' }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `🛒 *GROUP-BUY SUMMARY*\n\nTotal Items: ${totalItems}\nActive Members: ${memberCount}\nEstimated Bulk Discount: *${discount}* 📉\n\nEveryone sees updates in real-time. Ready to save?`, env, {
+    path: 'view_group',
+    type: 'interactive',
+    options: {
+      image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800',
+      buttons: [
+        { id: 'LIST_ITEMS', title: 'See Item List 📋' },
+        { id: 'CHECKOUT', title: 'Pay My Share 💳' },
+        { id: 'LEAVE_GROUP', title: 'Leave Group 👋' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
 async function handleOnboarding(user, text, data, memory, db, env, ctx) {
   await sendWhatsAppTyping(user.phone_number, env);
-  await sendWhatsAppInteractive(user.phone_number,
-    `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I make buying anything as easy as a text message.\n\n*What can I help you with first?*`, [
-    { id: 'START_SHOPPING', title: 'Start Shopping 🛍️' },
-    { id: 'ORDER_FOOD', title: 'Order Food 🍗' },
-    { id: 'VIEW_FAQ', title: 'How it works? ❓' }
-  ], env, { image: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800' }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I make buying anything as easy as a text message.\n\n*What can I help you with first?*`, env, {
+    path: 'onboarding',
+    type: 'interactive',
+    options: {
+      image: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800',
+      buttons: [
+        { id: 'START_SHOPPING', title: 'Start Shopping 🛍️' },
+        { id: 'ORDER_FOOD', title: 'Order Food 🍗' },
+        { id: 'VIEW_FAQ', title: 'How it works? ❓' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
@@ -933,11 +1053,17 @@ async function handleRateLimit(user, text, data, memory, db, env) {
   return `🛑 *SLOW DOWN*\n\nYou're moving faster than a Springbok! 🇿🇦 Please wait a few seconds before your next request so I can keep up. ✨`;
 }
 
-async function handleDegraded(user, text, data, memory, db, env) {
-  await sendWhatsAppInteractive(user.phone_number, `⚠️ *SERVICE ADVISORY*\n\nOne of our partner APIs is currently offline. Other services are working perfectly!`, [
-    { id: 'CHECK_STATUS', title: 'System Status 🛠️' },
-    { id: 'CONTINUE_MAGIC', title: 'Try something else ✨' }
-  ], env);
+async function handleDegraded(user, text, media, data, memory, db, env, ctx) {
+  await sendSecureMessage(user.phone_number, `⚠️ *SERVICE ADVISORY*\n\nOne of our partner APIs is currently offline. Other services are working perfectly!`, env, {
+    path: 'degraded',
+    type: 'interactive',
+    options: {
+      buttons: [
+        { id: 'CHECK_STATUS', title: 'System Status 🛠️' },
+        { id: 'CONTINUE_MAGIC', title: 'Try something else ✨' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
@@ -950,12 +1076,19 @@ async function handleLatency(user, text, data, memory, db, env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleMrLiftHome(user, text, media, data, memory, db, env, ctx) {
-  await sendWhatsAppInteractive(user.phone_number,
-    `🚖 *MR LIFT CLUB*\n\n24/7 Auto-created minibus taxi groups. Safe, reliable, and SANTACO-registered.\n\n*Current Route:* Soweto ↔ JHB CBD\n*Fare:* R35 (Escrow Protected) 🛡️`, [
-    { id: 'LIFT_FORM', title: 'Request a Ride 🚖' },
-    { id: 'view_my_clubs', title: 'My Lift Clubs 👥' },
-    { id: 'LIFT_HELP', title: 'How it works? ❓' }
-  ], env, { image: 'https://images.unsplash.com/photo-1510613142234-803a6493649e?w=800' }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `🚖 *MR LIFT CLUB*\n\n24/7 Auto-created minibus taxi groups. Safe, reliable, and SANTACO-registered.\n\n*Current Route:* Soweto ↔ JHB CBD\n*Fare:* R35 (Escrow Protected) 🛡️`, env, {
+    path: 'mr_lift',
+    type: 'interactive',
+    options: {
+      image: 'https://images.unsplash.com/photo-1510613142234-803a6493649e?w=800',
+      buttons: [
+        { id: 'LIFT_FORM', title: 'Request a Ride 🚖' },
+        { id: 'view_my_clubs', title: 'My Lift Clubs 👥' },
+        { id: 'LIFT_HELP', title: 'How it works? ❓' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
@@ -977,35 +1110,59 @@ async function handleMrLiftForm(user, text, media, data, memory, db, env, ctx) {
     return await MIRAGE_REGISTRY.mr_lift_matching.handle(user, text, null, { time }, memory, db, env, ctx);
   }
 
-  await sendWhatsAppInteractive(user.phone_number,
-    `📍 *LIFT REQUEST FORM*\n\nPlease provide your details in this format:\n\n*PICKUP:* [Address]\n*DROPOFF:* [CBD / Address]\n*TIME:* [HH:MM or Now]`, [
-    { id: 'LIFT_HELP', title: 'How it works? ❓' }
-  ], env, { image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800' }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `📍 *LIFT REQUEST FORM*\n\nPlease provide your details in this format:\n\n*PICKUP:* [Address]\n*DROPOFF:* [CBD / Address]\n*TIME:* [HH:MM or Now]`, env, {
+    path: 'mr_lift',
+    type: 'interactive',
+    options: {
+      image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800',
+      buttons: [
+        { id: 'LIFT_HELP', title: 'How it works? ❓' }
+      ]
+    }
+  }, ctx);
 
   return null;
 }
 
 async function handleMrLiftMatching(user, text, media, data, memory, db, env, ctx) {
-  await sendWhatsAppMessage(user.phone_number, `🔄 *MATCHING RIDERS...*\n\nI'm scanning for other riders near you for a ${data.time || '17:00'} trip to CBD. I'll notify you once your club is 80% full! 🇿🇦💨`, env, { vanishDelay: 10000 }, ctx);
+  await sendSecureMessage(user.phone_number, `🔄 *MATCHING RIDERS...*\n\nI'm scanning for other riders near you for a ${data.time || '17:00'} trip to CBD. I'll notify you once your club is 80% full! 🇿🇦💨`, env, {
+    path: 'mr_lift',
+    options: { vanishDelay: 15000 }
+  }, ctx);
   return null;
 }
 
 async function handleMrLiftFound(user, text, media, data, memory, db, env, ctx) {
-  await sendWhatsAppInteractive(user.phone_number,
-    `🇿🇦 *NEW LIFT CLUB FOUND*\n\nRoute: Soweto ➔ JHB CBD\nTime: ~17:15\nFare: R35.00\n\nThere are 12 other riders ready to go! Want to join them?`, [
-    { id: 'PAY_LIFT', title: 'Join & Pay R35 💳' },
-    { id: 'DECLINE_LIFT', title: 'Maybe Later ⏳' }
-  ], env, { image: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800' }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `🇿🇦 *NEW LIFT CLUB FOUND*\n\nRoute: Soweto ➔ JHB CBD\nTime: ~17:15\nFare: R35.00\n\nThere are 12 other riders ready to go! Want to join them?`, env, {
+    path: 'mr_lift',
+    type: 'interactive',
+    options: {
+      image: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800',
+      buttons: [
+        { id: 'PAY_LIFT', title: 'Join & Pay R35 💳' },
+        { id: 'DECLINE_LIFT', title: 'Maybe Later ⏳' }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
 async function handleMrLiftJoined(user, text, media, data, memory, db, env, ctx) {
-  await sendWhatsAppInteractive(user.phone_number,
-    `✅ *LIFT CLUB READY!*\n\n*Route:* Soweto ➔ Gandhi Square\n*Departure:* 17:15\n*Fare:* R35 (Paid)\n\nCoordination tools below:`, [
-    { id: 'LIFT_ETA', title: 'Driver ETA 🕒' },
-    { id: 'LIFT_GPS', title: 'Live GPS Link 📍' },
-    { id: 'READY_AT_GATE', title: "I'm at the gate! 🙋‍♂️" }
-  ], env, { image: 'https://images.unsplash.com/photo-1510613142234-803a6493649e?w=800' }, ctx);
+  await sendSecureMessage(user.phone_number,
+    `✅ *LIFT CLUB READY!*\n\n*Route:* Soweto ➔ Gandhi Square\n*Departure:* 17:15\n*Fare:* R35 (Paid)\n\nCoordination tools below:`, env, {
+    path: 'mr_lift',
+    type: 'interactive',
+    options: {
+      image: 'https://images.unsplash.com/photo-1510613142234-803a6493649e?w=800',
+      buttons: [
+        { id: 'LIFT_ETA', title: 'Driver ETA 🕒' },
+        { id: 'LIFT_GPS', title: 'Live GPS Link 📍' },
+        { id: 'READY_AT_GATE', title: "I'm at the gate! 🙋‍♂️" }
+      ]
+    }
+  }, ctx);
   return null;
 }
 
@@ -1142,10 +1299,19 @@ async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
     const data = await res.json();
     const msgId = data.id || data.message?.id;
     if (msgId && options.vanishDelay && ctx) {
-      ctx.waitUntil(new Promise(resolve => setTimeout(async () => {
-        await deleteWhatsAppMessage(msgId, env);
-        resolve();
-      }, options.vanishDelay)));
+      console.log(`[VANISH] Scheduling deletion of ${msgId} in ${options.vanishDelay}ms`);
+      ctx.waitUntil(new Promise(resolve => {
+        setTimeout(async () => {
+            try {
+                await logForensicEvent('DELETE_ATTEMPT', to, 'none', { msgId }, env);
+                await deleteWhatsAppMessage(msgId, env);
+            } catch (e) {
+                console.error("Vanish fail:", e);
+            } finally {
+                resolve();
+            }
+        }, options.vanishDelay);
+      }));
     }
     return msgId;
   }
@@ -1155,10 +1321,17 @@ async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
 async function deleteWhatsAppMessage(msgId, env) {
   if (!msgId) return;
   try {
-    await fetch(`https://gate.whapi.cloud/messages/${msgId}`, {
+    await logForensicEvent('DELETE_ATTEMPT', 'none', 'none', { msgId }, env);
+    const res = await fetch(`https://gate.whapi.cloud/messages/${msgId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
     });
+    if (res.ok) {
+        await logForensicEvent('DELETE_SUCCESS', 'none', 'none', { msgId }, env);
+    } else {
+        const err = await res.text();
+        await logForensicEvent('DELETE_FAILURE', 'none', 'none', { msgId, error: err }, env);
+    }
   } catch (e) {
     console.error(`Failed to delete message ${msgId}:`, e);
   }
@@ -1205,10 +1378,19 @@ async function sendWhatsAppInteractive(to, text, buttons, env, options = {}, ctx
     const msgId = data.id || data.message?.id;
 
     if (msgId && options.vanishDelay && ctx) {
-      ctx.waitUntil(new Promise(resolve => setTimeout(async () => {
-        await deleteWhatsAppMessage(msgId, env);
-        resolve();
-      }, options.vanishDelay)));
+      console.log(`[VANISH] Scheduling deletion of interactive ${msgId} in ${options.vanishDelay}ms`);
+      ctx.waitUntil(new Promise(resolve => {
+        setTimeout(async () => {
+            try {
+                await logForensicEvent('DELETE_ATTEMPT', to, 'none', { msgId }, env);
+                await deleteWhatsAppMessage(msgId, env);
+            } catch (e) {
+                console.error("Vanish fail:", e);
+            } finally {
+                resolve();
+            }
+        }, options.vanishDelay);
+      }));
     }
     return msgId;
   }
