@@ -501,11 +501,13 @@ const MIRAGE_REGISTRY = {
   mr_lift_home: { handle: handleMrLiftHome },
   mr_lift_form: { handle: handleMrLiftForm },
   mr_lift_matching: { handle: handleMrLiftMatching },
+  mr_lift_found: { handle: handleMrLiftFound },
   mr_lift_joined: { handle: handleMrLiftJoined },
   mr_lift_noshow: { handle: handleMrLiftNoShow },
   mr_lift_rating: { handle: handleMrLiftRating },
   mr_lift_eta: { handle: handleMrLiftETA },
-  mr_lift_gps: { handle: handleMrLiftGPS }
+  mr_lift_gps: { handle: handleMrLiftGPS },
+  mr_lift_ready: { handle: handleReadyAtGate }
 };
 
 async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx) {
@@ -645,10 +647,17 @@ async function handleCartAction(user, text, data, memory, db, env, ctx) {
     return null;
   }
 
-  if (t.includes('checkout') || t.includes('pay') || t.includes('REQUEST_LIFT')) {
+  if (t.includes('checkout') || t.includes('pay') || t.includes('PAY_LIFT')) {
     let items = [];
     let isGroup = false;
-    let isLift = t.includes('REQUEST_LIFT');
+    let isLift = t.includes('PAY_LIFT');
+
+    if (isLift) {
+      // Mr Lift Escrow: R35 fixed for JHB-Soweto
+      const total = 35.00;
+      const payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=MrLift_Escrow_Ride&amount=${total.toFixed(2)}&m_payment_id=LIFT_${Date.now()}`;
+      return `✨ *MR LIFT BOOKING*\n\nRoute: Soweto ↔ JHB CBD\nFare: R35.00 (Held in Escrow) 🛡️\n\nSecure payment via PayFast:\n🔗 ${payfastUrl}\n\nFunds are only released to the driver when your trip starts! 🚖✨`;
+    }
 
     if (groupId) {
       const { data: groupItems } = await db.from('group_cart_items').select('*').eq('group_id', groupId).eq('user_id', user.id);
@@ -666,13 +675,6 @@ async function handleCartAction(user, text, data, memory, db, env, ctx) {
     let fee = 49; // Default concierge fee
     let total = subtotal + fee;
     let payfastUrl = "";
-
-    if (isLift) {
-      // Mr Lift Escrow: R35 fixed for JHB-Soweto
-      total = 35.00;
-      payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=MrLift_Escrow_Ride&amount=${total.toFixed(2)}&m_payment_id=LIFT_${Date.now()}`;
-      return `✨ *MR LIFT BOOKING*\n\nRoute: Soweto ↔ JHB CBD\nFare: R35.00 (Held in Escrow) 🛡️\n\nSecure payment via PayFast:\n🔗 ${payfastUrl}\n\nFunds are only released to the driver when your trip starts! 🚖✨`;
-    }
 
     if (isGroup) {
       const { data: group } = await db.from('group_carts').select('type').eq('id', groupId).single();
@@ -874,7 +876,7 @@ async function handleLatency(user, text, data, memory, db, env) {
 
 async function handleMrLiftHome(user, text, data, memory, db, env) {
   await sendWhatsAppInteractive(user.phone_number, `🚖 *MR LIFT CLUB*\n\n24/7 Auto-created minibus taxi groups. Safe, reliable, and SANTACO-registered.\n\n*Current Route:* Soweto ↔ JHB CBD\n*Fare:* R35 (Escrow Protected) 🛡️`, [
-    { id: 'REQUEST_LIFT', title: 'Request a Ride 🚖' },
+    { id: 'LIFT_FORM', title: 'Request a Ride 🚖' },
     { id: 'VIEW_MY_CLUBS', title: 'My Lift Clubs 👥' },
     { id: 'LIFT_HELP', title: 'How it works? ❓' }
   ], env);
@@ -907,6 +909,14 @@ async function handleMrLiftForm(user, text, data, memory, db, env) {
 
 async function handleMrLiftMatching(user, text, data, memory, db, env) {
   return `🔄 *MATCHING RIDERS...*\n\nI'm scanning for other riders in Soweto near you for a ${data.time || '17:00'} trip to CBD. I'll notify you once your club is 80% full! 🇿🇦💨`;
+}
+
+async function handleMrLiftFound(user, text, data, memory, db, env) {
+  await sendWhatsAppInteractive(user.phone_number, `🇿🇦 *NEW LIFT CLUB FOUND*\n\nRoute: Soweto ➔ JHB CBD\nTime: ~17:15\nFare: R35.00\n\nThere are 12 other riders ready to go! Want to join them?`, [
+    { id: 'PAY_LIFT', title: 'Join & Pay R35 💳' },
+    { id: 'DECLINE_LIFT', title: 'Maybe Later ⏳' }
+  ], env);
+  return null;
 }
 
 async function handleMrLiftJoined(user, text, data, memory, db, env) {
@@ -1077,6 +1087,15 @@ async function fetchWithRetry(url, options = {}, retries = 2) {
 function fallbackIntentParser(text) {
   const t = (text || '').toLowerCase().trim();
   if (t === 'hi' || t === 'hello' || t === 'hey' || t === 'start') return [{ intent: 'greeting', confidence: 0.9 }];
+
+  // Direct Action/Button Overrides
+  if (t === 'lift_form') return [{ intent: 'mr_lift_form', confidence: 1.0 }];
+  if (t === 'pay_lift') return [{ intent: 'cart_action', confidence: 1.0 }];
+  if (t === 'view_my_clubs') return [{ intent: 'mr_lift_joined', confidence: 1.0 }]; // For demo: show the active club
+  if (t === 'lift_eta') return [{ intent: 'mr_lift_eta', confidence: 1.0 }];
+  if (t === 'lift_gps') return [{ intent: 'mr_lift_gps', confidence: 1.0 }];
+  if (t === 'ready_at_gate') return [{ intent: 'mr_lift_ready', confidence: 1.0 }];
+  if (t.includes('pickup:') && t.includes('dropoff:')) return [{ intent: 'mr_lift_form', confidence: 1.0 }];
 
   // Group Keywords
   if (t.includes('create group') || t.includes('start stokvel')) return [{ intent: 'create_group', confidence: 0.9 }];
