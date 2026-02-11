@@ -146,7 +146,7 @@ async function processMessage(body, env, ctx, startTime) {
     // Show typing indicator immediately
     ctx.waitUntil(sendWhatsAppTyping(userPhone, env));
 
-    const messageType = message.type;
+    const messageType = message.type || 'text';
     let messageText = '';
     let mediaData = null;
 
