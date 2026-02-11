@@ -759,6 +759,17 @@ async function handleJoinGroup(user, text, data, memory, db, env) {
   if (!code) return `🤔 I need an invite code to join a private group. Please reply with "JOIN [CODE]". ✨`;
 
   if (code === 'PUBLIC' || text.includes('National')) {
+      // Find or create the global public group
+      let { data: publicGroup } = await db.from('group_carts').select('id').eq('invite_code', 'PUBLIC').single();
+      if (!publicGroup) {
+        const { data: newGroup } = await db.from('group_carts').insert([{ type: 'public', invite_code: 'PUBLIC', status: 'open', creator_id: 'SYSTEM' }]).select().single();
+        publicGroup = newGroup;
+      }
+
+      if (publicGroup) {
+        await db.from('group_members').upsert([{ group_id: publicGroup.id, user_id: user.id }], { onConflict: 'group_id,user_id' });
+      }
+
       return `🇿🇦 *JOINED NATIONAL CART*\n\nYou're now part of the Zweepee National Aggregate! All items you add will contribute to a massive bulk order for maximum discounts. 🚀✨`;
   }
 
@@ -1091,6 +1102,7 @@ function fallbackIntentParser(text) {
   // Direct Action/Button Overrides
   if (t === 'lift_form') return [{ intent: 'mr_lift_form', confidence: 1.0 }];
   if (t === 'pay_lift') return [{ intent: 'cart_action', confidence: 1.0 }];
+  if (t === 'join_public') return [{ intent: 'join_group', confidence: 1.0, extracted_data: { code: 'PUBLIC' } }];
   if (t === 'view_my_clubs') return [{ intent: 'mr_lift_joined', confidence: 1.0 }]; // For demo: show the active club
   if (t === 'lift_eta') return [{ intent: 'mr_lift_eta', confidence: 1.0 }];
   if (t === 'lift_gps') return [{ intent: 'mr_lift_gps', confidence: 1.0 }];
