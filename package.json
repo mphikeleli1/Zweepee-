@@ -2,6 +2,7 @@
   "name": "zweepee",
   "version": "1.0.0",
   "description": "Zweepee Magic WhatsApp Concierge",
+  "type": "module",
   "main": "zweepee-worker.js",
   "scripts": {
     "deploy": "wrangler deploy"

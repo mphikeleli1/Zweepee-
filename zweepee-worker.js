@@ -198,14 +198,19 @@ async function processMessage(body, env, ctx, startTime) {
     // 4. Regular Intent Detection
     if (intents.length === 0) {
       const isNewUser = user.created_at && (now.getTime() - new Date(user.created_at).getTime() < 60000);
-      const isReturning = !isNewUser && (diffMs > 24 * 60 * 60 * 1000);
+      const isReturning = !isNewUser && (user.last_active && diffMs > 24 * 60 * 60 * 1000);
 
-      intents = await detectIntents(messageText, { ...memory, is_new: isNewUser, is_returning: isReturning }, env, ctx);
+      console.log(`[PIPELINE] USER_STATE: new=${!!isNewUser} returning=${!!isReturning} last_active=${user.last_active}`);
+
+      intents = await detectIntents(messageText, { ...memory, is_new: !!isNewUser, is_returning: !!isReturning }, env, ctx);
 
       // State Interception
-      if (isNewUser && !intents.some(i => i.intent === 'onboarding')) {
+      const lowerText = messageText.toLowerCase().trim();
+      const isGreeting = lowerText === 'hi' || lowerText === 'hello' || lowerText === 'hey' || lowerText === 'start';
+
+      if (isNewUser && !intents.some(i => i.intent === 'onboarding') && isGreeting) {
         intents.unshift({ intent: 'onboarding', confidence: 1.0 });
-      } else if (isReturning && (messageText.toLowerCase() === 'hi' || messageText.toLowerCase() === 'hello')) {
+      } else if (isReturning && isGreeting) {
         intents = [{ intent: 'returning_user', confidence: 1.0 }];
       }
     }
@@ -1079,19 +1084,48 @@ function generateHelp(user, memory) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function getOrCreateUser(phone, supabase) {
-  const { data } = await supabase.from('users').select('*').eq('phone_number', phone).single();
-  if (data) return data;
-  const { data: newUser } = await supabase.from('users').insert([{ phone_number: phone, referral_code: Math.random().toString(36).substring(7).toUpperCase() }]).select().single();
-  return newUser || { id: phone, phone_number: phone };
+  try {
+    const { data, error } = await supabase.from('users').select('*').eq('phone_number', phone).single();
+    if (data) return data;
+    if (error && error.code !== 'PGRST116') {
+      console.error(`[DB] Select user error: ${error.message}`);
+    }
+
+    const { data: newUser, error: insertError } = await supabase.from('users').insert([{
+      phone_number: phone,
+      referral_code: Math.random().toString(36).substring(7).toUpperCase()
+    }]).select().single();
+
+    if (insertError) {
+      console.error(`[DB] Insert user error: ${insertError.message}`);
+      return { id: null, phone_number: phone, is_fallback: true };
+    }
+    return newUser;
+  } catch (e) {
+    console.error(`[DB] getOrCreateUser fatal: ${e.message}`);
+    return { id: null, phone_number: phone, is_fallback: true };
+  }
 }
 
 async function getUserMemory(userId, supabase) {
-  const { data } = await supabase.from('orders').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1);
-  return { last_order: data?.[0] || null };
+  if (!userId) return { last_order: null };
+  try {
+    const { data, error } = await supabase.from('orders').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1);
+    if (error) console.error(`[DB] getUserMemory error: ${error.message}`);
+    return { last_order: data?.[0] || null };
+  } catch (e) {
+    return { last_order: null };
+  }
 }
 
 async function saveChatMessage(userId, role, content, supabase) {
-  try { await supabase.from('chat_history').insert([{ user_id: userId, role, content: content.substring(0, 1000) }]); } catch (e) {}
+  if (!userId) return;
+  try {
+    const { error } = await supabase.from('chat_history').insert([{ user_id: userId, role, content: (content || '').substring(0, 1000) }]);
+    if (error) console.error(`[DB] saveChatMessage error: ${error.message}`);
+  } catch (e) {
+    console.error(`[DB] saveChatMessage fatal: ${e.message}`);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1233,7 +1267,7 @@ function fallbackIntentParser(text) {
   if (t.includes('taxi') || t.includes('minibus') || t.includes('lift') || t.includes('ride') || t.includes('soweto')) return [{ intent: 'mr_lift_home', confidence: 0.9 }];
 
   // Service Keywords
-  if (t.includes('buy') || t.includes('order') || t.includes('get') || t.includes('iphone') || t.includes('samsung') || t.includes('shop')) return [{ intent: 'shopping', confidence: 0.8 }];
+  if (t.includes('buy') || t.includes('order') || t.includes('get') || t.includes('iphone') || t.includes('samsung') || t.includes('phone') || t.includes('smartphone') || t.includes('cellphone') || t.includes('shop')) return [{ intent: 'shopping', confidence: 0.8 }];
   if (t.includes('kfc') || t.includes('food') || t.includes('hungry') || t.includes('eat') || t.includes('meal')) return [{ intent: 'food', confidence: 0.8 }];
   if (t.includes('hotel') || t.includes('stay') || t.includes('book')) return [{ intent: 'accommodation', confidence: 0.8 }];
   if (t.includes('flight') || t.includes('fly') || t.includes('ticket')) return [{ intent: 'flights', confidence: 0.8 }];
