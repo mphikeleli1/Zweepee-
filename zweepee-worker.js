@@ -366,61 +366,71 @@ async function detectIntents(messageText, memory, env, ctx) {
   - Edge: unknown_input, did_you_mean, conflicting_intents.
   Return a JSON array of objects: [{ "intent": "string", "confidence": 0-1, "extracted_data": {} }]`;
 
-  console.log(`[BRAIN] Analyzing: "${messageText}"`);
+  console.log(`[BRAIN] Analyzing (Parallel): "${messageText}"`);
 
+  const brains = [];
+
+  // OpenAI Brain Task
   if (env.OPENAI_API_KEY) {
-    console.log(`[BRAIN] Trying OpenAI...`);
-    try {
-      const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'system', content: 'You are a South African concierge. Detect intents as JSON array.' }, { role: 'user', content: prompt }],
-          response_format: { type: 'json_object' }
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const res = JSON.parse(data.choices?.[0]?.message?.content);
-        const intents = Array.isArray(res.intents) ? res.intents : (res.intent ? [res] : []);
-        if (intents.length && intents[0].intent !== 'help') {
-          console.log(`[BRAIN] OpenAI Success: ${intents[0].intent}`);
-          return intents;
+    brains.push((async () => {
+      try {
+        const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'system', content: 'You are a South African concierge. Detect intents as JSON array.' }, { role: 'user', content: prompt }],
+            response_format: { type: 'json_object' }
+          })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const res = JSON.parse(data.choices?.[0]?.message?.content);
+          const intents = Array.isArray(res.intents) ? res.intents : (res.intent ? [res] : (Array.isArray(res) ? res : []));
+          if (intents.length && intents[0].intent !== 'help') {
+            console.log(`[BRAIN] OpenAI Fast Success: ${intents[0].intent}`);
+            return intents;
+          }
         }
-      } else {
-        console.warn(`[BRAIN] OpenAI Error: ${response.status}`);
-      }
-    } catch (e) {
-      console.error(`[BRAIN] OpenAI Exception: ${e.message}`);
-      if (ctx) ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'openai', message: `OpenAI fail: ${e.message.substring(0, 50)}` }, env));
-    }
+        throw new Error('OpenAI invalid');
+      } catch (e) { throw e; }
+    })());
   }
 
-  // Gemini Fallback
+  // Gemini Brain Task
   if (env.GEMINI_API_KEY) {
-    console.log(`[BRAIN] Trying Gemini...`);
-    try {
-      const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt + "\nRespond ONLY with valid JSON array." }] }] })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-        const intents = JSON.parse(text.match(/\[.*\]/s)?.[0] || '[]');
-        if (intents.length && intents[0].intent !== 'help') {
-          console.log(`[BRAIN] Gemini Success: ${intents[0].intent}`);
-          return intents;
+    brains.push((async () => {
+      try {
+        const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt + "\nRespond ONLY with valid JSON array." }] }] })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+          const intents = JSON.parse(text.match(/\[.*\]/s)?.[0] || '[]');
+          if (intents.length && intents[0].intent !== 'help') {
+            console.log(`[BRAIN] Gemini Fast Success: ${intents[0].intent}`);
+            return intents;
+          }
         }
-      } else {
-        console.warn(`[BRAIN] Gemini Error: ${response.status}`);
-      }
-    } catch (error) {
-      console.error(`[BRAIN] Gemini Exception: ${error.message}`);
-      if (ctx) ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'gemini', message: `Gemini fail: ${error.message.substring(0, 50)}` }, env));
+        throw new Error('Gemini invalid');
+      } catch (e) { throw e; }
+    })());
+  }
+
+  // Race brains with an 8s timeout
+  try {
+    if (brains.length > 0) {
+      const result = await Promise.any([
+        ...brains,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Brain timeout')), 8000))
+      ]);
+      return result;
     }
+  } catch (e) {
+    console.warn(`[BRAIN] All brains failed or timed out: ${e.message}`);
   }
 
   console.log(`[BRAIN] Using Fallback Parser`);
@@ -565,61 +575,74 @@ async function routeMessage(user, intents, messageText, mediaData, memory, supab
 }
 
 // MIRAGES (Detailed Implementation)
-async function handleShopping(user, text, media, data, memory, db, env) {
-  const query = data.product || text;
+async function handleShopping(user, text, media, data, memory, db, env, ctx) {
+  const query = (data.product || text || '').toString().toLowerCase();
   const results = [
-    { id: 'prod_1', name: 'Apple iPhone 15 Pro (128GB)', price: 21999, img: 'https://images.unsplash.com/photo-1696446701796-da61225697cc?w=800' },
-    { id: 'prod_2', name: 'Samsung Galaxy S24 Ultra', price: 23499, img: 'https://images.unsplash.com/photo-1707223516664-8894101dec21?w=800' }
+    { id: 'prod_1', name: 'Apple iPhone 15 Pro (128GB) - Natural Titanium', price: 21999, img: 'https://www.istore.co.za/media/catalog/product/i/p/iphone_15_pro_natural_titanium_pdp_image_header_natural_titanium_2_1_1.jpg' },
+    { id: 'prod_2', name: 'Samsung Galaxy S24 Ultra - Titanium Gray', price: 23499, img: 'https://samsung-galaxy-s24.com/wp-content/uploads/2024/01/s24-ultra-titanium-gray.webp' }
   ];
 
-  const product = results.find(p => query.toLowerCase().includes(p.name.toLowerCase().split(' ')[0])) || results[0];
+  const product = results.find(p => query.includes(p.name.toLowerCase().split(' ')[1])) || results[0];
 
-  await sendWhatsAppImage(user.phone_number, product.img, `🛍️ *ZWEEPEE SHOPPING*\n\n*${product.name}*\nPrice: R${product.price.toLocaleString()}\nConcierge Fee: R49`, env);
-  await sendWhatsAppInteractive(user.phone_number, `I found this for you! Should I add it to your cart?`, [
+  // Magical Unified Card with vanish delay for "Searching"
+  if (query.length > 0 && !text.includes('ADD_')) {
+    await sendWhatsAppMessage(user.phone_number, `🔍 *ZWEEPEE MAGIC*\n\nSearching top SA retailers for "${query}"...`, env, { vanishDelay: 5000 }, ctx);
+    await sendWhatsAppTyping(user.phone_number, env);
+  }
+
+  await sendWhatsAppInteractive(user.phone_number,
+    `🛍️ *ZWEEPEE SHOPPING*\n\n*${product.name}*\nPrice: R${product.price.toLocaleString()}\nConcierge Fee: R49\n\nI found the best price at iStore/Takealot! Ready to order? ✨`, [
     { id: `ADD_${product.id}`, title: 'Add to Cart 🛒' },
     { id: 'SEARCH_MORE', title: 'Search More 🔍' }
-  ], env);
+  ], env, { image: product.img }, ctx);
+
   return null;
 }
 
-async function handleFood(user, text, data, memory, db, env) {
-  const query = data.product || text;
+async function handleFood(user, text, media, data, memory, db, env, ctx) {
+  const query = (data.product || text || '').toString().toLowerCase();
   const options = [
-    { id: 'food_1', name: 'KFC Streetwise 2', price: 49.90, img: 'https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=800' },
-    { id: 'food_2', name: 'Steers Wacky Wednesday', price: 59.90, img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800' }
+    { id: 'food_1', name: 'KFC Streetwise 2 with Regular Chips', price: 49.90, img: 'https://brand-uk.assets.kfc.co.za/1126/Streetwise-2-and-small-chips.png' },
+    { id: 'food_2', name: 'Steers Wacky Wednesday (2 Burgers)', price: 59.90, img: 'https://brand-uk.assets.steers.co.za/128/Wacky-Wednesday.png' }
   ];
 
-  const meal = options.find(o => query.toLowerCase().includes(o.name.toLowerCase().split(' ')[0])) || options[0];
+  const meal = options.find(o => query.includes(o.name.toLowerCase().split(' ')[0])) || options[0];
 
-  await sendWhatsAppImage(user.phone_number, meal.img, `🍗 *ZWEEPEE FOOD*\n\n*${meal.name}*\nPrice: R${meal.price.toFixed(2)}\nDelivery: R35`, env);
-  await sendWhatsAppInteractive(user.phone_number, `Found some options for your hunger! ✨`, [
+  if (query.length > 0 && !text.includes('ADD_')) {
+    await sendWhatsAppMessage(user.phone_number, `🍗 *ZWEEPEE FOOD*\n\nFinding the nearest ${query === 'food' ? 'restaurants' : query} for you...`, env, { vanishDelay: 5000 }, ctx);
+    await sendWhatsAppTyping(user.phone_number, env);
+  }
+
+  await sendWhatsAppInteractive(user.phone_number,
+    `🍗 *ZWEEPEE FOOD*\n\n*${meal.name}*\nPrice: R${meal.price.toFixed(2)}\nDelivery: R35\n\nEstimated Arrival: 25-35 mins 🏃‍♂️💨`, [
     { id: `ADD_${meal.id}`, title: 'Order Now 🏃‍♂️' },
     { id: 'VIEW_MENU', title: 'View Menu 📋' }
-  ], env);
+  ], env, { image: meal.img }, ctx);
+
   return null;
 }
 
-async function handleAccommodation(user, text, data, memory, db, env) {
+async function handleAccommodation(user, text, media, data, memory, db, env, ctx) {
   const location = data.location || 'Cape Town';
   const stay = { id: 'stay_1', name: 'Radisson Blu Waterfront', price: 4500, img: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800' };
 
-  await sendWhatsAppImage(user.phone_number, stay.img, `🏨 *ZWEEPEE STAYS*\n\n*${stay.name}* (${location})\nPrice: R${stay.price.toLocaleString()} per night`, env);
-  await sendWhatsAppInteractive(user.phone_number, `Checking availability in ${location}. Found this gem!`, [
+  await sendWhatsAppInteractive(user.phone_number,
+    `🏨 *ZWEEPEE STAYS*\n\n*${stay.name}* (${location})\nPrice: R${stay.price.toLocaleString()} per night\n\nI found this gem with a 4.8⭐ rating! Ready to book?`, [
     { id: `ADD_${stay.id}`, title: 'Book This Stay 🏨' },
     { id: 'SEARCH_HOTEL', title: 'See More Hotels 🔍' }
-  ], env);
+  ], env, { image: stay.img }, ctx);
   return null;
 }
 
-async function handleFlights(user, text, data, memory, db, env) {
+async function handleFlights(user, text, media, data, memory, db, env, ctx) {
   const destination = data.to || 'Cape Town';
   const flight = { id: 'fly_1', name: 'Safair (JNB ➔ CPT)', price: 1250, img: 'https://images.unsplash.com/photo-1436491865332-7a61a109c055?w=800' };
 
-  await sendWhatsAppImage(user.phone_number, flight.img, `✈️ *ZWEEPEE FLIGHTS*\n\n*${flight.name}*\nPrice: R${flight.price.toLocaleString()}`, env);
-  await sendWhatsAppInteractive(user.phone_number, `Searching for the best routes to ${destination}. Lowest fare found!`, [
+  await sendWhatsAppInteractive(user.phone_number,
+    `✈️ *ZWEEPEE FLIGHTS*\n\n*${flight.name}*\nPrice: R${flight.price.toLocaleString()}\n\nLowest fare found on FlySafair for your dates! ✨`, [
     { id: `ADD_${flight.id}`, title: 'Secure Seat 🎫' },
     { id: 'SEARCH_FLIGHT', title: 'Other Times 🕒' }
-  ], env);
+  ], env, { image: flight.img }, ctx);
   return null;
 }
 
@@ -660,17 +683,14 @@ async function handleCartAction(user, text, data, memory, db, env, ctx) {
       await sendWhatsAppInteractive(user.phone_number, `👥 Added to GROUP cart! Everyone can see your contribution. ✨`, [
         { id: 'VIEW_GROUP', title: 'View Group Cart 🛒' },
         { id: 'CHECKOUT', title: 'Pay My Share 💳' }
-      ], env);
-
-      // Notify other members (Simulated)
-      // ctx.waitUntil(notifyGroupMembers(groupId, `${user.id.substring(0,5)} added ${itemId} to the group!`, env));
+      ], env, { image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800' }, ctx);
     } else {
       // Add to Personal Cart
       await db.from('carts').insert([{ user_id: user.id, item_id: itemId, quantity: 1 }]);
       await sendWhatsAppInteractive(user.phone_number, `🛒 Added to your cart! Ready to checkout?`, [
         { id: 'CHECKOUT', title: 'Checkout Now 🚀' },
         { id: 'CONTINUE', title: 'Keep Shopping 🛍️' }
-      ], env);
+      ], env, { image: 'https://images.unsplash.com/photo-1557821552-17105176677c?w=800' }, ctx);
     }
     return null;
   }
@@ -718,30 +738,37 @@ async function handleCartAction(user, text, data, memory, db, env, ctx) {
       payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_Personal_Order&amount=${total.toFixed(2)}`;
     }
 
-    return `✨ *ZWEEPEE CHECKOUT*\n\nMode: ${isGroup ? 'Group Share' : 'Personal'}\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast Escrow:\n🔗 ${payfastUrl}\n\nI'll notify the group once your share is paid! 🚀`;
+    const summary = `✨ *ZWEEPEE CHECKOUT*\n\nMode: ${isGroup ? 'Group Share' : 'Personal'}\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast Escrow:\n🔗 ${payfastUrl}\n\nI'll notify the group once your share is paid! 🚀`;
+
+    await sendWhatsAppInteractive(user.phone_number, summary, [
+      { id: 'CHECKOUT_HELP', title: 'Payment Help ❓' },
+      { id: 'CANCEL_ORDER', title: 'Cancel Order ❌' }
+    ], env, { image: 'https://images.unsplash.com/photo-1556742044-3c52d6e88c62?w=800' }, ctx);
+
+    return null;
   }
 
   return `🛒 What would you like to do with your cart? (View/Checkout)`;
 }
 
-async function handleConversational(user, text, data, memory, db, env) {
+async function handleConversational(user, text, media, data, memory, db, env, ctx) {
   return `I'm Zweepee, your South African concierge! 🇿🇦\n\nI can help you buy anything, order food, book flights, or even get airtime and electricity. Just tell me what you need! ✨`;
 }
 
-async function handlePricing(user, text, data, memory, db, env) {
+async function handlePricing(user, text, media, data, memory, db, env, ctx) {
   const item = data.product || 'items';
   return `💰 *ZWEEPEE PRICING*\n\nOur concierge fee is typically R49 per order. Product prices for ${item} are fetched live from top SA retailers like Takealot, Woolworths, and Checkers Sixty60. ✨`;
 }
 
-async function handleTrackOrder(user, text, data, memory, db, env) {
+async function handleTrackOrder(user, text, media, data, memory, db, env, ctx) {
   return `📦 *ORDER TRACKING*\n\nI'm checking your recent orders... You'll receive a notification as soon as the driver is en route! 🏃‍♂️💨`;
 }
 
-async function handleComplaints(user, text, data, memory, db, env) {
+async function handleComplaints(user, text, media, data, memory, db, env, ctx) {
   return `🛠️ *ZWEEPEE SUPPORT*\n\nI'm sorry to hear you're having trouble! I've flagged this for Jules. One of our humans will reach out to you shortly. 🇿🇦✨`;
 }
 
-async function handleFAQ(user, text, data, memory, db, env) {
+async function handleFAQ(user, text, media, data, memory, db, env, ctx) {
   await sendWhatsAppInteractive(user.phone_number, `❓ *ZWEEPEE FAQ*\n\nHow can I help you understand our magic?`, [
     { id: 'FAQ_PAYMENT', title: 'Payment Info 💳' },
     { id: 'FAQ_DELIVERY', title: 'Delivery Info 🚚' },
@@ -759,12 +786,13 @@ async function handlePharmacy(user, text, data, memory, db, env) {
   return `💊 *ZWEEPEE PHARMACY*\n\nSearching Dis-Chem and Clicks for ${item}... Please note that schedule 1+ meds require a valid prescription upload. 📝✨`;
 }
 
-async function handleGrocery(user, text, data, memory, db, env) {
-  await sendWhatsAppInteractive(user.phone_number, `🛒 *ZWEEPEE GROCERY*\n\nWant to save more? Join a Group Cart and get bulk discounts from Shoprite or Makro! 🇿🇦✨`, [
+async function handleGrocery(user, text, media, data, memory, db, env, ctx) {
+  await sendWhatsAppInteractive(user.phone_number,
+    `🛒 *ZWEEPEE GROCERY*\n\nWant to save up to 20%? Join a Group Cart and get bulk discounts from Shoprite, Makro, or Woolworths! 🇿🇦✨`, [
     { id: 'CREATE_PRIVATE', title: 'Start Private Group 👥' },
-    { id: 'JOIN_PUBLIC', title: 'Join National Cart 🇿🇦' },
+    { id: 'join_public', title: 'Join National Cart 🇿🇦' },
     { id: 'SHOP_ALONE', title: 'Shop Alone 🚶‍♂️' }
-  ], env);
+  ], env, { image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800' }, ctx);
   return null;
 }
 
@@ -782,7 +810,7 @@ async function handleCreateGroup(user, text, data, memory, db, env) {
   return `👥 *PRIVATE GROUP CREATED*\n\nInvite your friends to join using this code:\n*${inviteCode}*\n\nEveryone who joins can add items, and we'll aggregate the order for bulk savings! 🇿🇦✨`;
 }
 
-async function handleJoinGroup(user, text, data, memory, db, env) {
+async function handleJoinGroup(user, text, media, data, memory, db, env, ctx) {
   const code = data.code || text.match(/[A-Z0-9]{5,}/)?.[0];
   if (!code) return `🤔 I need an invite code to join a private group. Please reply with "JOIN [CODE]". ✨`;
 
@@ -818,7 +846,7 @@ async function handleCheckIn(user, text, data, memory, db, env) {
   return `⏰ *CHECK-IN TIMER*\n\nYou've set a check-in for your grocery collection in 15 minutes. If you don't confirm safety by then, I'll notify the group admin! 🔐✨`;
 }
 
-async function handleViewGroup(user, text, data, memory, db, env) {
+async function handleViewGroup(user, text, media, data, memory, db, env, ctx) {
   const { data: membership } = await db.from('group_members').select('group_id').eq('user_id', user.id).single();
   const groupId = membership?.group_id;
 
@@ -831,20 +859,23 @@ async function handleViewGroup(user, text, data, memory, db, env) {
   const memberCount = members?.length || 0;
   const discount = totalItems > 10 ? '15%' : totalItems > 5 ? '10%' : '5%';
 
-  await sendWhatsAppInteractive(user.phone_number, `🛒 *GROUP CART SUMMARY*\n\nTotal Items: ${totalItems}\nActive Members: ${memberCount}\nEstimated Bulk Discount: *${discount}* 📉\n\nEveryone sees updates in real-time. Ready to save?`, [
+  await sendWhatsAppInteractive(user.phone_number,
+    `🛒 *GROUP CART SUMMARY*\n\nTotal Items: ${totalItems}\nActive Members: ${memberCount}\nEstimated Bulk Discount: *${discount}* 📉\n\nEveryone sees updates in real-time. Ready to save?`, [
     { id: 'LIST_ITEMS', title: 'See Item List 📋' },
     { id: 'CHECKOUT', title: 'Pay My Share 💳' },
     { id: 'LEAVE_GROUP', title: 'Leave Group 👋' }
-  ], env);
+  ], env, { image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800' }, ctx);
   return null;
 }
 
-async function handleOnboarding(user, text, data, memory, db, env) {
-  await sendWhatsAppInteractive(user.phone_number, `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I can help you buy anything, book travel, or pay utilities without leaving WhatsApp.`, [
+async function handleOnboarding(user, text, data, memory, db, env, ctx) {
+  await sendWhatsAppTyping(user.phone_number, env);
+  await sendWhatsAppInteractive(user.phone_number,
+    `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I make buying anything as easy as a text message.\n\n*What can I help you with first?*`, [
     { id: 'START_SHOPPING', title: 'Start Shopping 🛍️' },
     { id: 'ORDER_FOOD', title: 'Order Food 🍗' },
     { id: 'VIEW_FAQ', title: 'How it works? ❓' }
-  ], env);
+  ], env, { image: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800' }, ctx);
   return null;
 }
 
@@ -913,16 +944,17 @@ async function handleLatency(user, text, data, memory, db, env) {
 // MR LIFT HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function handleMrLiftHome(user, text, data, memory, db, env) {
-  await sendWhatsAppInteractive(user.phone_number, `🚖 *MR LIFT CLUB*\n\n24/7 Auto-created minibus taxi groups. Safe, reliable, and SANTACO-registered.\n\n*Current Route:* Soweto ↔ JHB CBD\n*Fare:* R35 (Escrow Protected) 🛡️`, [
+async function handleMrLiftHome(user, text, media, data, memory, db, env, ctx) {
+  await sendWhatsAppInteractive(user.phone_number,
+    `🚖 *MR LIFT CLUB*\n\n24/7 Auto-created minibus taxi groups. Safe, reliable, and SANTACO-registered.\n\n*Current Route:* Soweto ↔ JHB CBD\n*Fare:* R35 (Escrow Protected) 🛡️`, [
     { id: 'LIFT_FORM', title: 'Request a Ride 🚖' },
-    { id: 'VIEW_MY_CLUBS', title: 'My Lift Clubs 👥' },
+    { id: 'view_my_clubs', title: 'My Lift Clubs 👥' },
     { id: 'LIFT_HELP', title: 'How it works? ❓' }
-  ], env);
+  ], env, { image: 'https://images.unsplash.com/photo-1510613142234-803a6493649e?w=800' }, ctx);
   return null;
 }
 
-async function handleMrLiftForm(user, text, data, memory, db, env) {
+async function handleMrLiftForm(user, text, media, data, memory, db, env, ctx) {
   const pickup = text.match(/PICKUP:\s*(.*)/i)?.[1];
   const dropoff = text.match(/DROPOFF:\s*(.*)/i)?.[1];
   const time = text.match(/TIME:\s*(.*)/i)?.[1];
@@ -937,33 +969,38 @@ async function handleMrLiftForm(user, text, data, memory, db, env) {
       status: 'pending'
     }]);
 
-    // Trigger matching check (non-blocking)
-    // ctx.waitUntil(matchLiftRequests(db, env));
-
-    return await MIRAGE_REGISTRY.mr_lift_matching.handle(user, text, { time }, memory, db, env);
+    return await MIRAGE_REGISTRY.mr_lift_matching.handle(user, text, null, { time }, memory, db, env, ctx);
   }
 
-  return `📍 *LIFT REQUEST FORM*\n\nPlease provide your details in this format:\n\n*PICKUP:* [Home Address]\n*DROPOFF:* [JHB CBD / Address]\n*TIME:* [HH:MM or Now]\n\nI'll match you with 10-15 other riders on your route! 🇿🇦✨`;
-}
+  await sendWhatsAppInteractive(user.phone_number,
+    `📍 *LIFT REQUEST FORM*\n\nPlease provide your details in this format:\n\n*PICKUP:* [Address]\n*DROPOFF:* [CBD / Address]\n*TIME:* [HH:MM or Now]`, [
+    { id: 'LIFT_HELP', title: 'How it works? ❓' }
+  ], env, { image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800' }, ctx);
 
-async function handleMrLiftMatching(user, text, data, memory, db, env) {
-  return `🔄 *MATCHING RIDERS...*\n\nI'm scanning for other riders in Soweto near you for a ${data.time || '17:00'} trip to CBD. I'll notify you once your club is 80% full! 🇿🇦💨`;
-}
-
-async function handleMrLiftFound(user, text, data, memory, db, env) {
-  await sendWhatsAppInteractive(user.phone_number, `🇿🇦 *NEW LIFT CLUB FOUND*\n\nRoute: Soweto ➔ JHB CBD\nTime: ~17:15\nFare: R35.00\n\nThere are 12 other riders ready to go! Want to join them?`, [
-    { id: 'PAY_LIFT', title: 'Join & Pay R35 💳' },
-    { id: 'DECLINE_LIFT', title: 'Maybe Later ⏳' }
-  ], env);
   return null;
 }
 
-async function handleMrLiftJoined(user, text, data, memory, db, env) {
-  await sendWhatsAppInteractive(user.phone_number, `✅ *LIFT CLUB READY!*\n\n*Route:* Soweto ➔ Gandhi Square\n*Departure:* 17:15\n*Fare:* R35 (Paid)\n\nCoordination tools below:`, [
+async function handleMrLiftMatching(user, text, media, data, memory, db, env, ctx) {
+  await sendWhatsAppMessage(user.phone_number, `🔄 *MATCHING RIDERS...*\n\nI'm scanning for other riders near you for a ${data.time || '17:00'} trip to CBD. I'll notify you once your club is 80% full! 🇿🇦💨`, env, { vanishDelay: 10000 }, ctx);
+  return null;
+}
+
+async function handleMrLiftFound(user, text, media, data, memory, db, env, ctx) {
+  await sendWhatsAppInteractive(user.phone_number,
+    `🇿🇦 *NEW LIFT CLUB FOUND*\n\nRoute: Soweto ➔ JHB CBD\nTime: ~17:15\nFare: R35.00\n\nThere are 12 other riders ready to go! Want to join them?`, [
+    { id: 'PAY_LIFT', title: 'Join & Pay R35 💳' },
+    { id: 'DECLINE_LIFT', title: 'Maybe Later ⏳' }
+  ], env, { image: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800' }, ctx);
+  return null;
+}
+
+async function handleMrLiftJoined(user, text, media, data, memory, db, env, ctx) {
+  await sendWhatsAppInteractive(user.phone_number,
+    `✅ *LIFT CLUB READY!*\n\n*Route:* Soweto ➔ Gandhi Square\n*Departure:* 17:15\n*Fare:* R35 (Paid)\n\nCoordination tools below:`, [
     { id: 'LIFT_ETA', title: 'Driver ETA 🕒' },
     { id: 'LIFT_GPS', title: 'Live GPS Link 📍' },
     { id: 'READY_AT_GATE', title: "I'm at the gate! 🙋‍♂️" }
-  ], env);
+  ], env, { image: 'https://images.unsplash.com/photo-1510613142234-803a6493649e?w=800' }, ctx);
   return null;
 }
 
@@ -1061,13 +1098,36 @@ async function saveChatMessage(userId, role, content, supabase) {
 // WHAPI
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function sendWhatsAppMessage(to, text, env) {
+async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
   const res = await fetchWithRetry('https://gate.whapi.cloud/messages/text', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ to: to.replace('@c.us', ''), body: text })
   });
-  if (res) await res.text();
+  if (res) {
+    const data = await res.json();
+    const msgId = data.id || data.message?.id;
+    if (msgId && options.vanishDelay && ctx) {
+      ctx.waitUntil(new Promise(resolve => setTimeout(async () => {
+        await deleteWhatsAppMessage(msgId, env);
+        resolve();
+      }, options.vanishDelay)));
+    }
+    return msgId;
+  }
+  return null;
+}
+
+async function deleteWhatsAppMessage(msgId, env) {
+  if (!msgId) return;
+  try {
+    await fetch(`https://gate.whapi.cloud/messages/${msgId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
+    });
+  } catch (e) {
+    console.error(`Failed to delete message ${msgId}:`, e);
+  }
 }
 
 async function sendWhatsAppTyping(to, env) {
@@ -1080,23 +1140,45 @@ async function sendWhatsAppTyping(to, env) {
   } catch (e) {}
 }
 
-async function sendWhatsAppInteractive(to, text, buttons, env) {
+async function sendWhatsAppInteractive(to, text, buttons, env, options = {}, ctx) {
+  const payload = {
+    to: to.replace('@c.us', ''),
+    type: 'button',
+    body: { text },
+    action: {
+      buttons: (buttons || []).map(b => ({
+        type: 'reply',
+        reply: { id: b.id, title: b.title }
+      }))
+    }
+  };
+
+  if (options.image) {
+    payload.header = { type: 'image', image: { link: options.image } };
+  }
+  if (options.footer) {
+    payload.footer = { text: options.footer };
+  }
+
   const res = await fetchWithRetry('https://gate.whapi.cloud/messages/interactive', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      to: to.replace('@c.us', ''),
-      type: 'button',
-      body: { text },
-      action: {
-        buttons: buttons.map(b => ({
-          type: 'reply',
-          reply: { id: b.id, title: b.title }
-        }))
-      }
-    })
+    body: JSON.stringify(payload)
   });
-  if (res) await res.text();
+
+  if (res) {
+    const data = await res.json();
+    const msgId = data.id || data.message?.id;
+
+    if (msgId && options.vanishDelay && ctx) {
+      ctx.waitUntil(new Promise(resolve => setTimeout(async () => {
+        await deleteWhatsAppMessage(msgId, env);
+        resolve();
+      }, options.vanishDelay)));
+    }
+    return msgId;
+  }
+  return null;
 }
 
 async function sendWhatsAppImage(to, url, caption, env) {
@@ -1105,7 +1187,11 @@ async function sendWhatsAppImage(to, url, caption, env) {
     headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ to: to.replace('@c.us', ''), media: url, caption })
   });
-  if (res) await res.text();
+  if (res) {
+    const data = await res.json();
+    return data.id || data.message?.id;
+  }
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
