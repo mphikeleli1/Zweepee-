@@ -137,13 +137,6 @@ async function processMessage(body, env, ctx, startTime) {
     // Show typing indicator immediately
     ctx.waitUntil(sendWhatsAppTyping(userPhone, env));
 
-    // Maintenance Mode Check
-    const { data: maintenance } = await supabase.from('system_config').select('value').eq('key', 'maintenance_mode').single();
-    if (maintenance?.value === true || maintenance?.value === 'true') {
-      await sendUserMessage(userPhone, `🛠️ *ZWEEPEE MAINTENANCE*\n\nI'm taking a quick power nap while Jules performs some magic updates. I'll be back shortly! ✨`, env, { path: 'maintenance', incomingFrom: rawFrom });
-      return;
-    }
-
     const messageType = message.type;
     let messageText = '';
     let mediaData = null;
@@ -160,50 +153,64 @@ async function processMessage(body, env, ctx, startTime) {
     messageText = (messageText || '').toString();
 
     const user = await getOrCreateUser(userPhone, supabase);
+
+    // [PIPELINE] 1. RAW INCOMING TEXT
+    console.log(`[PIPELINE] RAW_INBOUND: from=${userPhone} text="${messageText}"`);
+
     const memory = await getUserMemory(user.id, supabase);
     await saveChatMessage(user.id, 'user', messageText, supabase);
 
-    // Dynamic State Intent Injection
-    const isNewUser = user.created_at && (Date.now() - new Date(user.created_at).getTime() < 60000); // Created in last minute
-    const isReturning = !isNewUser && (Date.now() - new Date(user.last_active || 0).getTime() > 24 * 60 * 60 * 1000);
-
-    // Update last active and rate limit check
+    // Update last active
     const now = new Date();
     const lastActive = new Date(user.last_active || 0);
     const diffMs = now - lastActive;
-
-    // Rate limit: Max 1 message every 2 seconds
-    if (diffMs < 2000 && userPhone !== (env.ADMIN_PHONE || '').replace('@c.us', '')) {
-      await sendUserMessage(userPhone, `🛑 *SLOW DOWN*\n\nYou're moving faster than a Springbok! 🇿🇦 Please wait a few seconds before your next request. ✨`, env, { path: 'rate_limited' });
-      return;
-    }
-
     await supabase.from('users').update({ last_active: now.toISOString() }).eq('id', user.id);
 
-    // Admin Commands
-    if (messageText.trim() === '!diag') {
-      const diagnostic = await runDiagnostics(env);
-      await sendUserMessage(userPhone, `🛠️ *SYSTEM DIAGNOSTICS*\n\nSupabase: ${diagnostic.services.supabase}\nWhapi: ${diagnostic.services.whapi}\nGemini: ${diagnostic.services.gemini}\nStatus: ${diagnostic.status === 'healthy' ? '✅' : '❌'}`, env, { path: 'admin_cmd', userId: user.id, incomingFrom: rawFrom });
-      return;
+    // Collect Intents (System + AI)
+    let intents = [];
+
+    // 1. Maintenance Mode Check
+    const { data: maintenance } = await supabase.from('system_config').select('value').eq('key', 'maintenance_mode').single();
+    if (maintenance?.value === true || maintenance?.value === 'true') {
+      intents.push({ intent: 'maintenance', confidence: 1.0 });
     }
 
-    // Detect intent(s)
-    let intents = await detectIntents(messageText, { ...memory, is_new: isNewUser, is_returning: isReturning }, env, ctx);
-
-    // State Interception
-    if (isNewUser && !intents.some(i => i.intent === 'onboarding')) {
-      intents.unshift({ intent: 'onboarding', confidence: 1.0 });
-    } else if (isReturning && (messageText.toLowerCase() === 'hi' || messageText.toLowerCase() === 'hello')) {
-      intents = [{ intent: 'returning_user', confidence: 1.0 }];
+    // 2. Rate limit Check
+    if (intents.length === 0 && diffMs < 2000 && userPhone !== (env.ADMIN_PHONE || '').replace('@c.us', '')) {
+      intents.push({ intent: 'rate_limited', confidence: 1.0 });
     }
-    const intent = intents[0]?.intent || 'none';
-    console.log("INTENT:", intent);
+
+    // 3. Admin Commands
+    if (intents.length === 0 && messageText.trim() === '!diag') {
+      intents.push({ intent: 'admin_diag', confidence: 1.0 });
+    }
+
+    // 4. Regular Intent Detection
+    if (intents.length === 0) {
+      const isNewUser = user.created_at && (now.getTime() - new Date(user.created_at).getTime() < 60000);
+      const isReturning = !isNewUser && (diffMs > 24 * 60 * 60 * 1000);
+
+      intents = await detectIntents(messageText, { ...memory, is_new: isNewUser, is_returning: isReturning }, env, ctx);
+
+      // State Interception
+      if (isNewUser && !intents.some(i => i.intent === 'onboarding')) {
+        intents.unshift({ intent: 'onboarding', confidence: 1.0 });
+      } else if (isReturning && (messageText.toLowerCase() === 'hi' || messageText.toLowerCase() === 'hello')) {
+        intents = [{ intent: 'returning_user', confidence: 1.0 }];
+      }
+    }
+
+    // [PIPELINE] 2. INTENT CLASSIFIER OUTPUT
+    console.log(`[PIPELINE] INTENTS: ${JSON.stringify(intents)}`);
 
     // Route to handler
     const response = await routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx);
 
-    // Send response
+    // [PIPELINE] 4. RESPONSE
     if (response) {
+      console.log(`[PIPELINE] FINAL_RESPONSE: "${response.substring(0, 50)}..."`);
+
+      const intent = intents[0]?.intent || 'none';
       const isFallback = (intent === 'help' || intent === 'none');
       const path = isFallback ? 'fallback' : 'ai';
 
@@ -213,6 +220,8 @@ async function processMessage(body, env, ctx, startTime) {
         incomingFrom: rawFrom
       });
       await saveChatMessage(user.id, 'assistant', response, supabase);
+    } else {
+      console.log(`[PIPELINE] FINAL_RESPONSE: [No response generated]`);
     }
 
     if (startTime) {
@@ -469,6 +478,11 @@ const MIRAGE_REGISTRY = {
   degraded_mode: { handle: handleDegraded },
   api_latency: { handle: handleLatency },
   payment_issue: { handle: async () => `💳 *PAYMENT TROUBLE*\n\nIt looks like there was a glitch with the payment. Please check your card or try a different method. Jules is here if you need help! ✨` },
+  maintenance: { handle: async () => `🛠️ *ZWEEPEE MAINTENANCE*\n\nI'm taking a quick power nap while Jules performs some magic updates. I'll be back shortly! ✨` },
+  admin_diag: { handle: async (user, text, media, data, memory, db, env) => {
+    const diagnostic = await runDiagnostics(env);
+    return `🛠️ *SYSTEM DIAGNOSTICS*\n\nSupabase: ${diagnostic.services.supabase}\nWhapi: ${diagnostic.services.whapi}\nGemini: ${diagnostic.services.gemini}\nStatus: ${diagnostic.status === 'healthy' ? '✅' : '❌'}`;
+  }},
   subscription_needed: { handle: async () => `👑 *PREMIUM FEATURE*\n\nThis feature is part of Zweepee Plus! Subscribe now for early access and zero concierge fees. 🇿🇦✨` },
 
   // --- ADDITIONAL SERVICE CATEGORIES (GROCERY, TRAVEL, ETC) ---
@@ -511,17 +525,17 @@ const MIRAGE_REGISTRY = {
 };
 
 async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx) {
-  if (!intents || intents.length === 0) {
-    return await MIRAGE_REGISTRY.help.handle(user, messageText, mediaData, {}, memory, supabase, env, ctx);
-  }
+  // Ensure we always have at least one intent to route
+  const routingIntents = (intents && intents.length > 0) ? intents : [{ intent: 'help', confidence: 0 }];
 
-  console.log(`[ROUTER] Routing intents: ${intents.map(i => i.intent).join(', ')}`);
   let finalResponse = "";
 
-  for (const intentObj of intents) {
+  for (const intentObj of routingIntents) {
     const intent = intentObj.intent;
     const data = intentObj.extracted_data || {};
-    console.log(`[ROUTER] Dispatching unit: ${intent}`);
+
+    // [PIPELINE] 3. SELECTED MIRAGE ID
+    console.log(`[PIPELINE] MIRAGE_ID: ${intent}`);
 
     const mirage = MIRAGE_REGISTRY[intent] || MIRAGE_REGISTRY.unknown_input;
     try {
@@ -1119,8 +1133,8 @@ function fallbackIntentParser(text) {
   if (t.includes('taxi') || t.includes('minibus') || t.includes('lift') || t.includes('ride') || t.includes('soweto')) return [{ intent: 'mr_lift_home', confidence: 0.9 }];
 
   // Service Keywords
-  if (t.includes('buy') || t.includes('order') || t.includes('get') || t.includes('iphone') || t.includes('samsung')) return [{ intent: 'shopping', confidence: 0.8 }];
-  if (t.includes('kfc') || t.includes('food') || t.includes('hungry') || t.includes('eat')) return [{ intent: 'food', confidence: 0.8 }];
+  if (t.includes('buy') || t.includes('order') || t.includes('get') || t.includes('iphone') || t.includes('samsung') || t.includes('shop')) return [{ intent: 'shopping', confidence: 0.8 }];
+  if (t.includes('kfc') || t.includes('food') || t.includes('hungry') || t.includes('eat') || t.includes('meal')) return [{ intent: 'food', confidence: 0.8 }];
   if (t.includes('hotel') || t.includes('stay') || t.includes('book')) return [{ intent: 'accommodation', confidence: 0.8 }];
   if (t.includes('flight') || t.includes('fly') || t.includes('ticket')) return [{ intent: 'flights', confidence: 0.8 }];
   if (t.includes('airtime') || t.includes('data')) return [{ intent: 'airtime', confidence: 0.8 }];
@@ -1139,6 +1153,6 @@ function fallbackIntentParser(text) {
   if (t.includes('load shedding') || t.includes('loadshedding')) return [{ intent: 'load_shedding', confidence: 0.8 }];
   if (t.includes('petrol') || t.includes('diesel') || t.includes('fuel')) return [{ intent: 'fuel_price', confidence: 0.8 }];
 
-  if (t.length > 5) return [{ intent: 'conversational', confidence: 0.6 }];
-  return [{ intent: 'help', confidence: 0.5 }];
+  if (t.length > 3) return [{ intent: 'conversational', confidence: 0.3 }];
+  return [{ intent: 'help', confidence: 0.1 }];
 }
