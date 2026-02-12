@@ -89,6 +89,7 @@ export default {
       });
     }
 
+
     // Whapi webhook (POST only - no verification needed)
     if (request.method === 'POST' && url.pathname === '/webhook') {
       const startTime = Date.now();
@@ -144,9 +145,11 @@ async function processMessage(body, env, ctx, startTime) {
     }
 
     const rawFrom = message.from || '';
-    const userPhone = rawFrom.replace('@c.us', '');
+    // Standardize userPhone to plain number for Whapi Sandbox compatibility
+    const userPhone = rawFrom.replace('@s.whatsapp.net', '').replace('@c.us', '');
+
     if (!userPhone) {
-      console.log(`[PIPELINE] No userPhone extracted from ${rawFrom}`);
+      console.log(`[PIPELINE] No sender found in ${JSON.stringify(body).substring(0, 100)}`);
       return;
     }
 
@@ -280,35 +283,46 @@ async function processMessage(body, env, ctx, startTime) {
 
 async function logForensicEvent(type, userPhone, intent, context, env) {
   try {
+    if (!env?.SUPABASE_URL) return;
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
-    await supabase.from('forensic_logs').insert([{
+    const { error } = await supabase.from('forensic_logs').insert([{
       event_type: type,
       user_phone: userPhone,
       intent,
       context: context || {}
     }]);
+    if (error) {
+      console.warn(`[FORENSIC] DB Insert Error: ${error.message} (Event: ${type})`);
+    }
   } catch (e) {
-    console.error('Forensic log fail:', e);
+    // Suppress all forensic errors to prevent worker crash
+    console.error(`[FORENSIC] Fatal Error: ${e.message}`);
   }
 }
 
 async function logSystemAlert(alert, env) {
   try {
+    if (!env?.SUPABASE_URL) return;
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
-    await supabase.from('system_alerts').insert([alert]);
+    const { error } = await supabase.from('system_alerts').insert([alert]);
+
+    if (error) console.warn(`[ALERT] DB Insert Error: ${error.message}`);
 
     if (alert.severity === 'critical' || alert.severity === 'error') {
-      await sendAdminAlert(`Error in ${alert.source}: ${alert.message}`, env);
+      // Background admin notification
+      try {
+        await sendAdminAlert(`Error in ${alert.source}: ${alert.message}`, env);
+      } catch (e) {}
     }
   } catch (e) {
-    console.error('Failed to log alert:', e);
+    console.error(`[ALERT] Fatal Error: ${e.message}`);
   }
 }
 
 async function sendSecureMessage(to, text, env, metadata = {}, ctx) {
-  const cleanTo = to.replace('@c.us', '');
+  const cleanTo = to.replace('@s.whatsapp.net', '').replace('@c.us', '');
   const path = metadata.path || 'unknown';
-  const incomingFrom = (metadata.incomingFrom || 'unknown').replace('@c.us', '');
+  const incomingFrom = (metadata.incomingFrom || 'unknown').replace('@s.whatsapp.net', '').replace('@c.us', '');
   const type = metadata.type || 'text'; // text, interactive, image
   const options = metadata.options || {}; // This is subOptions
 
@@ -380,6 +394,16 @@ async function runDiagnostics(env) {
     results.services.gemini = geminiRes.ok ? 'Healthy' : 'Quota Exceeded';
   } catch (e) { results.services.gemini = `Fatal: ${e.message}`; }
 
+  try {
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 })
+    });
+    await openaiRes.text(); // Consume body
+    results.services.openai = openaiRes.ok ? 'Healthy' : `Error: ${openaiRes.status}`;
+  } catch (e) { results.services.openai = `Fatal: ${e.message}`; }
+
   const allHealthy = Object.values(results.services).every(v => v.includes('Healthy'));
   results.status = allHealthy ? 'healthy' : 'unhealthy';
   return results;
@@ -424,7 +448,7 @@ async function detectIntents(messageText, memory, env, ctx) {
 
   const brains = [];
 
-  // OpenAI Brain Task
+  // 1. OpenAI (PRIMARY)
   if (env.OPENAI_API_KEY) {
     brains.push((async () => {
       try {
@@ -442,19 +466,22 @@ async function detectIntents(messageText, memory, env, ctx) {
           const res = JSON.parse(data.choices?.[0]?.message?.content);
           const intents = Array.isArray(res.intents) ? res.intents : (res.intent ? [res] : (Array.isArray(res) ? res : []));
           if (intents.length && intents[0].intent !== 'help') {
-            console.log(`[BRAIN] OpenAI Fast Success: ${intents[0].intent}`);
+            console.log(`[BRAIN] OpenAI Primary Success: ${intents[0].intent}`);
             return intents;
           }
         }
-        throw new Error('OpenAI invalid');
+        throw new Error(`OpenAI Error: ${response?.status}`);
       } catch (e) { throw e; }
     })());
   }
 
-  // Gemini Brain Task
+  // 2. Gemini (SECONDARY - with slight delay to favor OpenAI)
   if (env.GEMINI_API_KEY) {
     brains.push((async () => {
       try {
+        // Slight staggered start to prioritize OpenAI if it's healthy
+        await new Promise(r => setTimeout(r, 500));
+
         const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -465,11 +492,11 @@ async function detectIntents(messageText, memory, env, ctx) {
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
           const intents = JSON.parse(text.match(/\[.*\]/s)?.[0] || '[]');
           if (intents.length && intents[0].intent !== 'help') {
-            console.log(`[BRAIN] Gemini Fast Success: ${intents[0].intent}`);
+            console.log(`[BRAIN] Gemini Secondary Success: ${intents[0].intent}`);
             return intents;
           }
         }
-        throw new Error('Gemini invalid');
+        throw new Error(`Gemini Error: ${response?.status}`);
       } catch (e) { throw e; }
     })());
   }
@@ -1344,7 +1371,7 @@ async function saveChatMessage(userId, role, content, supabase) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
-  const cleanTo = to.toString().replace('@c.us', '');
+  const cleanTo = to.toString().replace('@s.whatsapp.net', '').replace('@c.us', '');
   console.log(`[OUTBOUND] Sending Text to ${cleanTo}: "${text.substring(0, 50)}..."`);
   const res = await fetchWithRetry('https://gate.whapi.cloud/messages/text', {
     method: 'POST',
@@ -1399,7 +1426,7 @@ async function sendWhatsAppTyping(to, env) {
 }
 
 async function sendWhatsAppInteractive(to, text, buttons, env, options = {}, ctx) {
-  const cleanTo = to.toString().replace('@c.us', '');
+  const cleanTo = to.toString().replace('@s.whatsapp.net', '').replace('@c.us', '');
   console.log(`[OUTBOUND] Sending Interactive to ${cleanTo}: "${text.substring(0, 50)}..."`);
   const payload = {
     to: cleanTo,
@@ -1455,10 +1482,11 @@ async function sendWhatsAppInteractive(to, text, buttons, env, options = {}, ctx
 }
 
 async function sendWhatsAppImage(to, url, caption, env) {
+  const cleanTo = to.toString().replace('@s.whatsapp.net', '').replace('@c.us', '');
   const res = await fetchWithRetry('https://gate.whapi.cloud/messages/image', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to: to.replace('@c.us', ''), media: url, caption })
+    body: JSON.stringify({ to: cleanTo, media: url, caption })
   });
   if (res) {
     const data = await res.json();
@@ -1472,6 +1500,7 @@ async function sendWhatsAppImage(to, url, caption, env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function fetchWithRetry(url, options = {}, retries = 2, timeoutMs = 10000) {
+  let lastError = null;
   for (let i = 0; i <= retries; i++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -1481,15 +1510,19 @@ async function fetchWithRetry(url, options = {}, retries = 2, timeoutMs = 10000)
       clearTimeout(timeoutId);
       if (res.ok) return res;
       const errorText = await res.text();
-      console.warn(`[FETCH] Non-OK response from ${url}: ${res.status} ${errorText.substring(0, 100)}`);
+      lastError = new Error(`HTTP ${res.status}: ${errorText.substring(0, 100)}`);
+      console.warn(`[FETCH] Non-OK response from ${url}: ${lastError.message}`);
     } catch (e) {
       clearTimeout(timeoutId);
+      lastError = e;
       const isTimeout = e.name === 'AbortError';
       console.error(`[FETCH] Error (attempt ${i+1}/${retries+1}) from ${url}: ${isTimeout ? 'TIMEOUT' : e.message}`);
-      if (i === retries) throw e;
     }
-    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+    if (i < retries) {
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+    }
   }
+  throw lastError || new Error(`Fetch failed for ${url}`);
 }
 
 function fallbackIntentParser(text) {
