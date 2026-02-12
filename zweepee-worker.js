@@ -641,7 +641,7 @@ async function handleShopping(user, text, media, data, memory, db, env, ctx) {
   if (query.length > 0 && !text.includes('ADD_')) {
     await sendSecureMessage(user.phone_number, `🔍 *ZWEEPEE MAGIC*\n\nSearching top SA retailers for "${query}"...`, env, {
       path: 'shopping',
-      options: { vanishDelay: 25000 }
+      options: {}
     }, ctx);
     await sendWhatsAppTyping(user.phone_number, env);
   }
@@ -674,7 +674,7 @@ async function handleFood(user, text, media, data, memory, db, env, ctx) {
   if (query.length > 0 && !text.includes('ADD_')) {
     await sendSecureMessage(user.phone_number, `🍗 *ZWEEPEE FOOD*\n\nFinding the nearest ${query === 'food' ? 'restaurants' : query} for you...`, env, {
       path: 'food',
-      options: { vanishDelay: 25000 }
+      options: {}
     }, ctx);
     await sendWhatsAppTyping(user.phone_number, env);
   }
@@ -1150,7 +1150,7 @@ async function handleMrLiftForm(user, text, media, data, memory, db, env, ctx) {
 async function handleMrLiftMatching(user, text, media, data, memory, db, env, ctx) {
   await sendSecureMessage(user.phone_number, `🔄 *MATCHING RIDERS...*\n\nI'm scanning for other riders near you for a ${data.time || '17:00'} trip to CBD. I'll notify you once your club is 80% full! 🇿🇦💨`, env, {
     path: 'mr_lift',
-    options: { vanishDelay: 30000 }
+    options: {}
   }, ctx);
   return null;
 }
@@ -1335,6 +1335,7 @@ async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
   if (res) {
     const data = await res.json();
     const msgId = data.id || data.message?.id;
+    /* DISABLING GHOST DELETION PER USER REQUEST
     if (msgId && options.vanishDelay && ctx) {
       console.log(`[VANISH] Scheduling deletion of ${msgId} in ${options.vanishDelay}ms`);
       ctx.waitUntil(new Promise(resolve => {
@@ -1352,28 +1353,19 @@ async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
         }, options.vanishDelay);
       }));
     }
+    */
     return msgId;
   }
   return null;
 }
 
 async function deleteWhatsAppMessage(msgId, env) {
-  if (!msgId) return;
+  // GHOST DELETION DISABLED PER USER REQUEST
   try {
-    await logForensicEvent('DELETE_ATTEMPT', 'none', 'none', { msgId }, env);
-    const res = await fetch(`https://gate.whapi.cloud/messages/${msgId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
-    });
-    if (res.ok) {
-        await logForensicEvent('DELETE_SUCCESS', 'none', 'none', { msgId }, env);
-    } else {
-        const err = await res.text();
-        await logForensicEvent('DELETE_FAILURE', 'none', 'none', { msgId, error: err }, env);
-    }
-  } catch (e) {
-    console.error(`Failed to delete message ${msgId}:`, e);
-  }
+    await logForensicEvent('DELETE_SKIPPED', 'none', 'none', { msgId }, env);
+    console.log(`[VANISH] SKIPPING deletion of ${msgId} (Feature Disabled)`);
+  } catch (e) {}
+  return true;
 }
 
 async function sendWhatsAppTyping(to, env) {
@@ -1416,6 +1408,7 @@ async function sendWhatsAppInteractive(to, text, buttons, env, options = {}, ctx
     const data = await res.json();
     const msgId = data.id || data.message?.id;
 
+    /* DISABLING GHOST DELETION PER USER REQUEST
     if (msgId && options.vanishDelay && ctx) {
       console.log(`[VANISH] Scheduling deletion of interactive ${msgId} in ${options.vanishDelay}ms`);
       ctx.waitUntil(new Promise(resolve => {
@@ -1433,6 +1426,7 @@ async function sendWhatsAppInteractive(to, text, buttons, env, options = {}, ctx
         }, options.vanishDelay);
       }));
     }
+    */
     return msgId;
   }
   return null;
