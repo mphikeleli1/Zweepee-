@@ -198,11 +198,11 @@ async function processMessage(body, env, ctx, startTime) {
 
     // 4. Regular Intent Detection
     if (intents.length === 0) {
-      const isNewUser = user.created_at && (now.getTime() - new Date(user.created_at).getTime() < 60000);
+      const isNewUser = user.onboarding_step === 'new' || (user.created_at && (now.getTime() - new Date(user.created_at).getTime() < 60000));
       const isReturning = !isNewUser && (user.last_active && diffMs > 24 * 60 * 60 * 1000);
 
-      console.log(`[PIPELINE] USER_STATE: new=${!!isNewUser} returning=${!!isReturning} last_active=${user.last_active}`);
-      ctx.waitUntil(logForensicEvent('USER_STATE', userPhone, 'none', { isNewUser, isReturning, last_active: user.last_active }, env));
+      console.log(`[PIPELINE] USER_STATE: new=${!!isNewUser} step=${user.onboarding_step} returning=${!!isReturning}`);
+      ctx.waitUntil(logForensicEvent('USER_STATE', userPhone, 'none', { isNewUser, onboarding_step: user.onboarding_step, isReturning }, env));
 
       intents = await detectIntents(messageText, { ...memory, is_new: !!isNewUser, is_returning: !!isReturning }, env, ctx);
       ctx.waitUntil(logForensicEvent('INTENT_RESULT', userPhone, 'none', { intents }, env));
@@ -213,7 +213,7 @@ async function processMessage(body, env, ctx, startTime) {
 
       if (user.onboarding_step === 'awaiting_name' && !isGreeting) {
         intents = [{ intent: 'save_name', confidence: 1.0 }];
-      } else if ((isNewUser || !user.preferred_name) && !intents.some(i => i.intent === 'onboarding') && isGreeting) {
+      } else if (isNewUser && isGreeting) {
         intents.unshift({ intent: 'onboarding', confidence: 1.0 });
       } else if (isReturning && isGreeting) {
         intents = [{ intent: 'returning_user', confidence: 1.0 }];
@@ -297,7 +297,7 @@ async function sendSecureMessage(to, text, env, metadata = {}, ctx) {
   const path = metadata.path || 'unknown';
   const incomingFrom = (metadata.incomingFrom || 'unknown').replace('@c.us', '');
   const type = metadata.type || 'text'; // text, interactive, image
-  const options = metadata.options || {};
+  const options = metadata.options || {}; // This is subOptions
 
   await logForensicEvent('OUTBOUND_ATTEMPT', cleanTo, path, { type, options, incomingFrom }, env);
 
@@ -305,7 +305,7 @@ async function sendSecureMessage(to, text, env, metadata = {}, ctx) {
   const adminPhone = (env.ADMIN_ALERT_NUMBER || env.ADMIN_PHONE || env.WHAPI_PHONE || '').replace('@c.us', '');
 
   if (adminPhone && cleanTo === adminPhone && cleanTo !== incomingFrom) {
-    const isSpecialPath = ['admin_cmd', 'error_recovery', 'maintenance', 'admin_stats', 'admin_diag'].includes(path);
+    const isSpecialPath = ['admin_cmd', 'error_recovery', 'maintenance', 'admin_stats', 'admin_diag', 'fallback'].includes(path);
     if (!isSpecialPath && type !== 'admin_alert') {
       const errorMsg = `SECURITY_VIOLATION: USER MESSAGE ROUTED TO ADMIN (Target: ${cleanTo}, Path: ${path})`;
       console.error(errorMsg);
@@ -314,7 +314,7 @@ async function sendSecureMessage(to, text, env, metadata = {}, ctx) {
     }
   }
 
-  // PHYSICAL SEND
+  // PHYSICAL SEND (Standardized)
   let msgId = null;
   if (type === 'interactive') {
     msgId = await sendWhatsAppInteractive(cleanTo, text, options.buttons, env, options, ctx);
@@ -542,7 +542,13 @@ const MIRAGE_REGISTRY = {
   maintenance: { handle: async () => `🛠️ *ZWEEPEE MAINTENANCE*\n\nI'm taking a quick power nap while Jules performs some magic updates. I'll be back shortly! ✨` },
   admin_diag: { handle: async (user, text, media, data, memory, db, env) => {
     const diagnostic = await runDiagnostics(env);
-    return `🛠️ *SYSTEM DIAGNOSTICS*\n\nSupabase: ${diagnostic.services.supabase}\nWhapi: ${diagnostic.services.whapi}\nGemini: ${diagnostic.services.gemini}\nStatus: ${diagnostic.status === 'healthy' ? '✅' : '❌'}`;
+    let logSnippet = "";
+    try {
+      const { data: logs } = await db.from('forensic_logs').select('event_type, created_at').order('created_at', { ascending: false }).limit(5);
+      logSnippet = "\n\n📜 *RECENT EVENTS:*\n" + (logs || []).map(l => `• ${l.event_type} (${new Date(l.created_at).toLocaleTimeString()})`).join('\n');
+    } catch (e) {}
+
+    return `🛠️ *SYSTEM DIAGNOSTICS*\n\nSupabase: ${diagnostic.services.supabase}\nWhapi: ${diagnostic.services.whapi}\nGemini: ${diagnostic.services.gemini}\nStatus: ${diagnostic.status === 'healthy' ? '✅' : '❌'}${logSnippet}`;
   }},
   admin_stats: { handle: async (user, text, media, data, memory, db, env) => {
     const analytics = await runAnalytics(env);
@@ -588,8 +594,9 @@ const MIRAGE_REGISTRY = {
   mr_lift_gps: { handle: handleMrLiftGPS },
   mr_lift_ready: { handle: handleReadyAtGate },
   save_name: { handle: async (user, text, media, data, memory, db, env) => {
-    const name = text.trim();
-    await db.from('users').update({ preferred_name: name, onboarding_step: 'completed' }).eq('id', user.id);
+    const name = text.trim().substring(0, 50);
+    const { error } = await db.from('users').update({ preferred_name: name, onboarding_step: 'completed' }).eq('id', user.id);
+    if (error) console.error("[DB] Save name error:", error.message);
     return `✨ Nice to meet you, *${name}*! I've saved that to my memory.\n\nWhat would you like to do first? I can help with shopping, food, or Mr Lift! 🇿🇦`;
   }}
 };
@@ -634,7 +641,7 @@ async function handleShopping(user, text, media, data, memory, db, env, ctx) {
   if (query.length > 0 && !text.includes('ADD_')) {
     await sendSecureMessage(user.phone_number, `🔍 *ZWEEPEE MAGIC*\n\nSearching top SA retailers for "${query}"...`, env, {
       path: 'shopping',
-      options: { vanishDelay: 10000 }
+      options: { vanishDelay: 25000 }
     }, ctx);
     await sendWhatsAppTyping(user.phone_number, env);
   }
@@ -667,7 +674,7 @@ async function handleFood(user, text, media, data, memory, db, env, ctx) {
   if (query.length > 0 && !text.includes('ADD_')) {
     await sendSecureMessage(user.phone_number, `🍗 *ZWEEPEE FOOD*\n\nFinding the nearest ${query === 'food' ? 'restaurants' : query} for you...`, env, {
       path: 'food',
-      options: { vanishDelay: 10000 }
+      options: { vanishDelay: 25000 }
     }, ctx);
     await sendWhatsAppTyping(user.phone_number, env);
   }
@@ -996,8 +1003,9 @@ async function handleViewGroup(user, text, media, data, memory, db, env, ctx) {
 async function handleOnboarding(user, text, media, data, memory, db, env, ctx) {
   await sendWhatsAppTyping(user.phone_number, env);
 
-  if (!user.preferred_name) {
-    await db.from('users').update({ onboarding_step: 'awaiting_name' }).eq('id', user.id);
+  if (!user.preferred_name || user.onboarding_step !== 'completed') {
+    const { error } = await db.from('users').update({ onboarding_step: 'awaiting_name' }).eq('id', user.id);
+    if (error) console.error("[DB] Onboarding update error:", error.message);
     return `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I'm here to make your life easier.\n\n*What is your name?* (I'd love to know what to call you!)`;
   }
 
@@ -1142,7 +1150,7 @@ async function handleMrLiftForm(user, text, media, data, memory, db, env, ctx) {
 async function handleMrLiftMatching(user, text, media, data, memory, db, env, ctx) {
   await sendSecureMessage(user.phone_number, `🔄 *MATCHING RIDERS...*\n\nI'm scanning for other riders near you for a ${data.time || '17:00'} trip to CBD. I'll notify you once your club is 80% full! 🇿🇦💨`, env, {
     path: 'mr_lift',
-    options: { vanishDelay: 15000 }
+    options: { vanishDelay: 30000 }
   }, ctx);
   return null;
 }
@@ -1256,17 +1264,25 @@ function generateHelp(user, memory) {
 
 async function getOrCreateUser(phone, supabase) {
   try {
-    const { data, error } = await supabase.from('users').select('*').eq('phone_number', phone).single();
+    // 1. Precise Lookup
+    const { data, error } = await supabase.from('users').select('*').eq('phone_number', phone).maybeSingle();
     if (data) return data;
-    if (error && error.code !== 'PGRST116') {
+
+    if (error) {
       console.error(`[DB] Select user error: ${error.message}`);
+      if (error.message.includes('column')) {
+        // Schema mismatch - critical alert
+        await logSystemAlert({ severity: 'critical', source: 'db', message: 'Schema mismatch in users table', context: { error: error.message } }, null);
+      }
     }
 
+    // 2. Creation with Fallback Handling
     const { data: newUser, error: insertError } = await supabase.from('users').insert([{
       phone_number: phone,
       referral_code: Math.random().toString(36).substring(7).toUpperCase(),
+      onboarding_step: 'new',
       created_at: new Date().toISOString()
-    }]).select().single();
+    }]).select().maybeSingle();
 
     if (insertError) {
       console.error(`[DB] Insert user error: ${insertError.message}`);
@@ -1324,10 +1340,12 @@ async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
       ctx.waitUntil(new Promise(resolve => {
         setTimeout(async () => {
             try {
-                await logForensicEvent('DELETE_ATTEMPT', to, 'none', { msgId }, env);
-                await deleteWhatsAppMessage(msgId, env);
+                await logForensicEvent('DELETE_EXECUTE', to, 'none', { msgId, delay: options.vanishDelay }, env);
+                const success = await deleteWhatsAppMessage(msgId, env);
+                if (!success) await logForensicEvent('DELETE_FAILURE', to, 'none', { msgId }, env);
             } catch (e) {
                 console.error("Vanish fail:", e);
+                await logForensicEvent('DELETE_ERROR', to, 'none', { msgId, error: e.message }, env);
             } finally {
                 resolve();
             }
@@ -1403,10 +1421,12 @@ async function sendWhatsAppInteractive(to, text, buttons, env, options = {}, ctx
       ctx.waitUntil(new Promise(resolve => {
         setTimeout(async () => {
             try {
-                await logForensicEvent('DELETE_ATTEMPT', to, 'none', { msgId }, env);
-                await deleteWhatsAppMessage(msgId, env);
+                await logForensicEvent('DELETE_EXECUTE', to, 'none', { msgId, delay: options.vanishDelay }, env);
+                const success = await deleteWhatsAppMessage(msgId, env);
+                if (!success) await logForensicEvent('DELETE_FAILURE', to, 'none', { msgId }, env);
             } catch (e) {
                 console.error("Vanish fail:", e);
+                await logForensicEvent('DELETE_ERROR', to, 'none', { msgId, error: e.message }, env);
             } finally {
                 resolve();
             }

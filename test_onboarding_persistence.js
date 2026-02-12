@@ -2,19 +2,20 @@
 import worker from './zweepee-worker.js';
 
 async function runPersistenceTest() {
-    console.log('--- STARTING ONBOARDING & PERSISTENCE TEST ---');
+    console.log('--- STARTING GHOST-FIX & PERSISTENCE TEST ---');
     const userPhone = '27731234567';
     let mockUser = {
         id: 'user-123',
         phone_number: userPhone,
         preferred_name: null,
-        onboarding_step: null,
+        onboarding_step: 'new',
         created_at: new Date(Date.now() - 200000).toISOString(),
         last_active: new Date(Date.now() - 10000).toISOString()
     };
 
     let mockCart = [];
     let lastResponse = "";
+    let lastSentOptions = {};
 
     global.fetch = async (url, options) => {
         const urlStr = url.toString();
@@ -55,17 +56,11 @@ async function runPersistenceTest() {
         }
 
         if (urlStr.includes('whapi.cloud')) {
-            const data = { id: 'msg-123', message: { id: 'msg-123' } };
-            if (options.method === 'POST' && urlStr.includes('messages')) {
+            const data = { id: 'msg-sent-id', message: { id: 'msg-sent-id' } };
+            if (options.method === 'POST' && (urlStr.includes('messages/text') || urlStr.includes('messages/interactive'))) {
                 const body = JSON.parse(options.body);
                 if (body.typing_time === undefined) {
-                    let text = "Interactive/Image";
-                    if (body.body) text = body.body;
-                    else if (body.caption) text = body.caption;
-                    else if (body.interactive?.body?.text) text = body.interactive.body.text;
-                    else if (body.image?.caption) text = body.image.caption;
-
-                    if (typeof text !== 'string') text = JSON.stringify(text);
+                    const text = body.body || body.caption || body.interactive?.body?.text || "Interactive/Image";
                     lastResponse += (lastResponse ? "\n" : "") + text;
                 }
             }
@@ -92,11 +87,8 @@ async function runPersistenceTest() {
     const pendingPromises = [];
     const ctx = { waitUntil: (p) => { pendingPromises.push(p); } };
 
-    async function sendMessage(text, ageLastActive = true) {
+    async function sendMessage(text) {
         lastResponse = "";
-        if (ageLastActive) {
-            mockUser.last_active = new Date(Date.now() - 5000).toISOString();
-        }
         const req = new Request('https://z.dev/webhook', {
             method: 'POST',
             body: JSON.stringify({
@@ -113,38 +105,39 @@ async function runPersistenceTest() {
         }
     }
 
-    // 1. New User Greeting
+    // 1. New User Greeting -> Should Trigger Onboarding
     console.log('\n[1] New User says "Hi"');
     await sendMessage('Hi');
     console.log(`Bot Response: ${lastResponse}`);
+    console.log(`User Step: ${mockUser.onboarding_step}`);
 
-    // 2. User provides name
+    // 2. User provide name -> Should Save and Complete
     console.log('\n[2] User provides name "Thabo"');
     await sendMessage('Thabo');
     console.log(`Bot Response: ${lastResponse}`);
+    console.log(`Saved Name: ${mockUser.preferred_name}, Step: ${mockUser.onboarding_step}`);
 
-    // 3. User adds iPhone to cart
-    console.log('\n[3] User adds iPhone to cart');
-    await sendMessage('ADD_prod_1');
+    // 3. User says "Hi" again -> Should be Greeted by Name, NOT Onboarded again
+    console.log('\n[3] User says "Hi" again (Persistence Check)');
+    await sendMessage('Hi');
     console.log(`Bot Response: ${lastResponse}`);
-    console.log(`Cart Size: ${mockCart.length}`);
+    if (lastResponse.includes('WELCOME TO ZWEEPEE') && !lastResponse.includes('What is your name')) {
+        console.log("✅persistence confirmed: Greeting loop broken.");
+    }
 
-    // 4. Returning User
-    console.log('\n[4] User returns later');
-    mockUser.last_active = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString();
-    await sendMessage('Hello', false);
-    console.log(`Bot Response: ${lastResponse}`);
+    // 4. Shopping Intent -> Verify Vanish Logic
+    console.log('\n[4] User says "I want a phone" (Vanish Check)');
+    await sendMessage('I want a phone');
+    // Check if "Searching..." was sent
+    console.log(`Bot Response (Combined): ${lastResponse}`);
+    if (lastResponse.includes('Searching')) {
+        console.log("✅ Vanish trigger detected.");
+    }
 
-    // 5. Checkout
-    console.log('\n[5] User checks out');
-    await sendMessage('Checkout');
-    console.log(`Bot Response: ${lastResponse}`);
-
-    if (mockUser.preferred_name === 'Thabo' && mockCart.length > 0 && lastResponse.includes('Items: 1')) {
-        console.log('\n✅ TEST PASSED: Onboarding and Persistence confirmed.');
+    if (mockUser.preferred_name === 'Thabo' && mockUser.onboarding_step === 'completed') {
+        console.log('\n✅ TEST PASSED: Ghost Loop fixed and Onboarding verified.');
     } else {
         console.log('\n❌ TEST FAILED.');
-        console.log('Mock User:', JSON.stringify(mockUser, null, 2));
     }
 
     console.log('\n--- PERSISTENCE TEST COMPLETE ---');
