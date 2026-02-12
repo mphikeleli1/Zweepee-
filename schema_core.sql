@@ -7,6 +7,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     phone_number TEXT UNIQUE NOT NULL,
+    preferred_name TEXT,
+    onboarding_step TEXT, -- 'awaiting_name', 'completed'
     referral_code TEXT UNIQUE,
     last_active TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

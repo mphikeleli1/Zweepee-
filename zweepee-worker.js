@@ -211,7 +211,9 @@ async function processMessage(body, env, ctx, startTime) {
       const lowerText = messageText.toLowerCase().trim();
       const isGreeting = lowerText === 'hi' || lowerText === 'hello' || lowerText === 'hey' || lowerText === 'start';
 
-      if (isNewUser && !intents.some(i => i.intent === 'onboarding') && isGreeting) {
+      if (user.onboarding_step === 'awaiting_name' && !isGreeting) {
+        intents = [{ intent: 'save_name', confidence: 1.0 }];
+      } else if ((isNewUser || !user.preferred_name) && !intents.some(i => i.intent === 'onboarding') && isGreeting) {
         intents.unshift({ intent: 'onboarding', confidence: 1.0 });
       } else if (isReturning && isGreeting) {
         intents = [{ intent: 'returning_user', confidence: 1.0 }];
@@ -584,7 +586,12 @@ const MIRAGE_REGISTRY = {
   mr_lift_rating: { handle: handleMrLiftRating },
   mr_lift_eta: { handle: handleMrLiftETA },
   mr_lift_gps: { handle: handleMrLiftGPS },
-  mr_lift_ready: { handle: handleReadyAtGate }
+  mr_lift_ready: { handle: handleReadyAtGate },
+  save_name: { handle: async (user, text, media, data, memory, db, env) => {
+    const name = text.trim();
+    await db.from('users').update({ preferred_name: name, onboarding_step: 'completed' }).eq('id', user.id);
+    return `✨ Nice to meet you, *${name}*! I've saved that to my memory.\n\nWhat would you like to do first? I can help with shopping, food, or Mr Lift! 🇿🇦`;
+  }}
 };
 
 async function routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx) {
@@ -729,22 +736,22 @@ async function handleCarRental(user, text, media, data, memory, db, env, ctx) {
   return `Looking for reliable wheels...`;
 }
 
-async function handleBuses(user, text, data, memory, db, env) {
+async function handleBuses(user, text, media, data, memory, db, env, ctx) {
   return `🚌 *ZWEEPEE BUSES*\n\nSearching Intercape and Greyhound schedules for you... One moment! 🎫`;
 }
 
-async function handleAirtime(user, text, data, memory, db, env) {
+async function handleAirtime(user, text, media, data, memory, db, env, ctx) {
   const amount = data.quantity || 50;
   const network = data.product || 'Vodacom';
   return `📱 *ZWEEPEE AIRTIME*\n\nBuying R${amount} ${network} airtime for you. Confirm by replying "YES AIRTIME". ✨`;
 }
 
-async function handleElectricity(user, text, data, memory, db, env) {
+async function handleElectricity(user, text, media, data, memory, db, env, ctx) {
   const amount = data.quantity || 100;
   return `⚡ *ZWEEPEE POWER*\n\nGenerating R${amount} electricity token for meter 142****890. Confirm by replying "YES POWER". 💡`;
 }
 
-async function handleCartAction(user, text, data, memory, db, env, ctx) {
+async function handleCartAction(user, text, media, data, memory, db, env, ctx) {
   const t = text.toLowerCase();
 
   // Check for Group Context
@@ -881,11 +888,11 @@ async function handleFAQ(user, text, media, data, memory, db, env, ctx) {
   return null;
 }
 
-async function handleRefunds(user, text, data, memory, db, env) {
+async function handleRefunds(user, text, media, data, memory, db, env, ctx) {
   return `💸 *REFUND REQUEST*\n\nRefunds are processed within 3-5 business days to your original payment method. Please provide your Order ID to proceed. ✨`;
 }
 
-async function handlePharmacy(user, text, data, memory, db, env) {
+async function handlePharmacy(user, text, media, data, memory, db, env, ctx) {
   const item = data.product || 'medication';
   return `💊 *ZWEEPEE PHARMACY*\n\nSearching Dis-Chem and Clicks for ${item}... Please note that schedule 1+ meds require a valid prescription upload. 📝✨`;
 }
@@ -907,7 +914,7 @@ async function handleGrocery(user, text, media, data, memory, db, env, ctx) {
   return null;
 }
 
-async function handleCreateGroup(user, text, data, memory, db, env) {
+async function handleCreateGroup(user, text, media, data, memory, db, env, ctx) {
   const inviteCode = Math.random().toString(36).substring(7).toUpperCase();
   const { data: group, error } = await db.from('group_carts').insert([{
     type: 'private',
@@ -948,12 +955,12 @@ async function handleJoinGroup(user, text, media, data, memory, db, env, ctx) {
   return `✅ *JOINED GROUP-BUY*\n\nYou've joined the group-buy created by ${group.creator_id.substring(0, 5)}! You can now add items to the shared list. ✨`;
 }
 
-async function handlePanic(user, text, data, memory, db, env) {
+async function handlePanic(user, text, media, data, memory, db, env, ctx) {
   await sendAdminAlert(`🚨 PANIC BUTTON PRESSED by ${user.phone_number} in Group ${data.group_id || 'Unknown'}`, env);
   return `🚨 *ZWEEPEE EMERGENCY*\n\nI've notified the admin and security services of your location. Stay calm and stay safe. 🇿🇦✨`;
 }
 
-async function handleCheckIn(user, text, data, memory, db, env) {
+async function handleCheckIn(user, text, media, data, memory, db, env, ctx) {
   return `⏰ *CHECK-IN TIMER*\n\nYou've set a check-in for your grocery collection in 15 minutes. If you don't confirm safety by then, I'll notify the group admin! 🔐✨`;
 }
 
@@ -986,8 +993,14 @@ async function handleViewGroup(user, text, media, data, memory, db, env, ctx) {
   return null;
 }
 
-async function handleOnboarding(user, text, data, memory, db, env, ctx) {
+async function handleOnboarding(user, text, media, data, memory, db, env, ctx) {
   await sendWhatsAppTyping(user.phone_number, env);
+
+  if (!user.preferred_name) {
+    await db.from('users').update({ onboarding_step: 'awaiting_name' }).eq('id', user.id);
+    return `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I'm here to make your life easier.\n\n*What is your name?* (I'd love to know what to call you!)`;
+  }
+
   await sendSecureMessage(user.phone_number,
     `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I make buying anything as easy as a text message.\n\n*What can I help you with first?*`, env, {
     path: 'onboarding',
@@ -1004,52 +1017,53 @@ async function handleOnboarding(user, text, data, memory, db, env, ctx) {
   return null;
 }
 
-async function handleReturningUser(user, text, data, memory, db, env) {
-  return `✨ *WELCOME BACK*\n\nGood to see you again! Ready for some more magic? How can I help you today? 🇿🇦`;
+async function handleReturningUser(user, text, media, data, memory, db, env, ctx) {
+  const name = user.preferred_name ? `, ${user.preferred_name}` : "";
+  return `✨ *WELCOME BACK${name.toUpperCase()}*\n\nGood to see you again! Ready for some more magic? How can I help you today? 🇿🇦`;
 }
 
-async function handleResume(user, text, data, memory, db, env) {
+async function handleResume(user, text, media, data, memory, db, env, ctx) {
   return `🔄 *RESUMING CONVERSATION*\n\nI remember we were talking about ${memory.last_intent || 'your request'}. Should we pick up where we left off? ✨`;
 }
 
-async function handleUnknown(user, text, data, memory, db, env) {
+async function handleUnknown(user, text, media, data, memory, db, env, ctx) {
   return `🤔 *ZWEEPEE IS PUZZLED*\n\nI didn't quite catch that. I'm still learning! Try asking for food, shopping, or travel. ✨`;
 }
 
-async function handlePartialMatch(user, text, data, memory, db, env) {
+async function handlePartialMatch(user, text, media, data, memory, db, env, ctx) {
   const suggestion = data.suggestion || 'shopping';
   return `🧐 *DID YOU MEAN?*\n\nI think you're asking about *${suggestion}*. Is that right? ✨`;
 }
 
-async function handleConflict(user, text, data, memory, db, env) {
+async function handleConflict(user, text, media, data, memory, db, env, ctx) {
   return `⚖️ *ZWEEPEE CONFUSION*\n\nYou've asked for a few different things at once! Should we start with ${data.primary || 'the first one'}? ✨`;
 }
 
-async function handleAiTimeout(user, text, data, memory, db, env) {
+async function handleAiTimeout(user, text, media, data, memory, db, env, ctx) {
   return `⏳ *BRAIN FREEZE*\n\nMy AI brain is thinking a bit slowly today. I'm switching to my fallback magic to help you faster! ✨`;
 }
 
-async function handleAiError(user, text, data, memory, db, env) {
+async function handleAiError(user, text, media, data, memory, db, env, ctx) {
   return `⚠️ *MAGIC HICCUP*\n\nSomething went wrong with my AI. Don't worry, Jules is notified and I'm using my backup systems! 🇿🇦✨`;
 }
 
-async function handleOutOfStock(user, text, data, memory, db, env) {
+async function handleOutOfStock(user, text, media, data, memory, db, env, ctx) {
   return `🚫 *OUT OF STOCK*\n\nI'm so sorry! The item "${data.product || 'you requested'}" just sold out at our local partner. Should I look for an alternative? 🧐✨`;
 }
 
-async function handleAfterHours(user, text, data, memory, db, env) {
+async function handleAfterHours(user, text, media, data, memory, db, env, ctx) {
   return `🌙 *AFTER HOURS*\n\nWe're currently taking a quick nap! You can still add items to your cart, and we'll process them first thing in the morning (8 AM). 🇿🇦✨`;
 }
 
-async function handleRegionalUnavail(user, text, data, memory, db, env) {
+async function handleRegionalUnavail(user, text, media, data, memory, db, env, ctx) {
   return `📍 *LOCATION LIMIT*\n\nIt looks like we haven't brought our magic to "${data.location || 'that area'}" just yet. We're expanding fast—stay tuned! 🇿🇦🚀`;
 }
 
-async function handleMaxCart(user, text, data, memory, db, env) {
+async function handleMaxCart(user, text, media, data, memory, db, env, ctx) {
   return `🛒 *CART IS FULL*\n\nWhoa there! You've reached the maximum number of items for a single concierge order. Please checkout now or remove something! ✨`;
 }
 
-async function handleRateLimit(user, text, data, memory, db, env) {
+async function handleRateLimit(user, text, media, data, memory, db, env, ctx) {
   return `🛑 *SLOW DOWN*\n\nYou're moving faster than a Springbok! 🇿🇦 Please wait a few seconds before your next request so I can keep up. ✨`;
 }
 
@@ -1067,7 +1081,7 @@ async function handleDegraded(user, text, media, data, memory, db, env, ctx) {
   return null;
 }
 
-async function handleLatency(user, text, data, memory, db, env) {
+async function handleLatency(user, text, media, data, memory, db, env, ctx) {
   return `🐢 *LATENCY ALERT*\n\nThe network is a bit sluggish today. I'm working hard to get your results—thanks for your patience! 🇿🇦✨`;
 }
 
@@ -1166,25 +1180,25 @@ async function handleMrLiftJoined(user, text, media, data, memory, db, env, ctx)
   return null;
 }
 
-async function handleReadyAtGate(user, text, data, memory, db, env) {
+async function handleReadyAtGate(user, text, media, data, memory, db, env, ctx) {
   // Simulate notifying the driver/group
   console.log(`[LIFT] User ${user.phone_number} is ready at the gate.`);
   return `👍 *NOTIFIED DRIVER*\n\nI've let the driver and your lift club members know you're at the gate. See you soon! 🚖✨`;
 }
 
-async function handleMrLiftNoShow(user, text, data, memory, db, env) {
+async function handleMrLiftNoShow(user, text, media, data, memory, db, env, ctx) {
   return `🛡️ *DRIVER NO-SHOW*\n\nI'm sorry! I've triggered an instant refund of R35 to your wallet. Would you like me to find another lift club for you immediately? 🇿🇦✨`;
 }
 
-async function handleMrLiftRating(user, text, data, memory, db, env) {
+async function handleMrLiftRating(user, text, media, data, memory, db, env, ctx) {
   return `⭐ *RATE YOUR RIDE*\n\nHow was your trip with Driver Sipho? Please reply with 1-5 stars. Your feedback keeps Mr Lift safe! 🇿🇦✨`;
 }
 
-async function handleMrLiftETA(user, text, data, memory, db, env) {
+async function handleMrLiftETA(user, text, media, data, memory, db, env, ctx) {
   return `🕒 *DRIVER ETA*\n\nYour driver is currently picking up Member #4 (2.1km away). ETA to your door: *8 minutes*. Please be ready at the gate! 🚖💨`;
 }
 
-async function handleMrLiftGPS(user, text, data, memory, db, env) {
+async function handleMrLiftGPS(user, text, media, data, memory, db, env, ctx) {
   const gpsLink = "https://maps.google.com/?q=-26.2041,28.0473"; // Mock JHB CBD
   return `📍 *LIVE TRACKING*\n\nView driver location live:\n🔗 ${gpsLink}\n\nNote: Link expires once trip starts. 🇿🇦`;
 }
@@ -1250,7 +1264,8 @@ async function getOrCreateUser(phone, supabase) {
 
     const { data: newUser, error: insertError } = await supabase.from('users').insert([{
       phone_number: phone,
-      referral_code: Math.random().toString(36).substring(7).toUpperCase()
+      referral_code: Math.random().toString(36).substring(7).toUpperCase(),
+      created_at: new Date().toISOString()
     }]).select().single();
 
     if (insertError) {
@@ -1265,13 +1280,19 @@ async function getOrCreateUser(phone, supabase) {
 }
 
 async function getUserMemory(userId, supabase) {
-  if (!userId) return { last_order: null };
+  if (!userId) return { last_order: null, cart: [] };
   try {
-    const { data, error } = await supabase.from('orders').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1);
-    if (error) console.error(`[DB] getUserMemory error: ${error.message}`);
-    return { last_order: data?.[0] || null };
+    const { data: orders } = await supabase.from('orders').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1);
+    const { data: cart } = await supabase.from('carts').select('*').eq('user_id', userId);
+    const { data: groupCart } = await supabase.from('group_cart_items').select('*').eq('user_id', userId);
+
+    return {
+      last_order: orders?.[0] || null,
+      cart: cart || [],
+      group_cart: groupCart || []
+    };
   } catch (e) {
-    return { last_order: null };
+    return { last_order: null, cart: [] };
   }
 }
 
@@ -1431,7 +1452,7 @@ function fallbackIntentParser(text) {
 
   // Direct Action/Button Overrides
   if (t === 'lift_form') return [{ intent: 'mr_lift_form', confidence: 1.0 }];
-  if (t === 'pay_lift') return [{ intent: 'cart_action', confidence: 1.0 }];
+  if (t === 'pay_lift' || t.includes('add') || t.includes('checkout') || t.includes('cart')) return [{ intent: 'cart_action', confidence: 1.0 }];
   if (t === 'join_public') return [{ intent: 'join_group', confidence: 1.0, extracted_data: { code: 'PUBLIC' } }];
   if (t === 'view_my_clubs') return [{ intent: 'mr_lift_joined', confidence: 1.0 }]; // For demo: show the active club
   if (t === 'lift_eta') return [{ intent: 'mr_lift_eta', confidence: 1.0 }];
