@@ -133,15 +133,24 @@ export default {
 
 async function processMessage(body, env, ctx, startTime) {
   try {
+    console.log(`[PIPELINE] START: ${Date.now()}`);
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
 
     // Extract message
     const message = body.messages?.[0];
-    if (!message) return;
+    if (!message) {
+      console.log(`[PIPELINE] No message found in body`);
+      return;
+    }
 
     const rawFrom = message.from || '';
     const userPhone = rawFrom.replace('@c.us', '');
-    if (!userPhone) return;
+    if (!userPhone) {
+      console.log(`[PIPELINE] No userPhone extracted from ${rawFrom}`);
+      return;
+    }
+
+    console.log(`[PIPELINE] From: ${userPhone}`);
 
     // Show typing indicator immediately
     ctx.waitUntil(sendWhatsAppTyping(userPhone, env));
@@ -161,12 +170,14 @@ async function processMessage(body, env, ctx, startTime) {
 
     messageText = (messageText || '').toString();
 
+    console.log(`[PIPELINE] Identifying User...`);
     const user = await getOrCreateUser(userPhone, supabase);
 
     // [PIPELINE] 1. RAW INCOMING TEXT
     console.log(`[PIPELINE] RAW_INBOUND: from=${userPhone} text="${messageText}"`);
     ctx.waitUntil(logForensicEvent('INBOUND_RAW', userPhone, 'none', { text: messageText, type: messageType }, env));
 
+    console.log(`[PIPELINE] Fetching Memory for user ${user.id}...`);
     const memory = await getUserMemory(user.id, supabase);
     await saveChatMessage(user.id, 'user', messageText, supabase);
 
@@ -178,6 +189,7 @@ async function processMessage(body, env, ctx, startTime) {
 
     // Collect Intents (System + AI)
     let intents = [];
+    console.log(`[PIPELINE] Running intent detection...`);
 
     // 1. Maintenance Mode Check
     const { data: maintenance } = await supabase.from('system_config').select('value').eq('key', 'maintenance_mode').single();
@@ -224,6 +236,7 @@ async function processMessage(body, env, ctx, startTime) {
     console.log(`[PIPELINE] INTENTS: ${JSON.stringify(intents)}`);
 
     // Route to handler
+    console.log(`[PIPELINE] Routing to Mirage: ${intents[0]?.intent}`);
     ctx.waitUntil(logForensicEvent('ROUTING_START', userPhone, intents[0]?.intent, { text: messageText }, env));
     const response = await routeMessage(user, intents, messageText, mediaData, memory, supabase, env, ctx);
 
@@ -424,7 +437,7 @@ async function detectIntents(messageText, memory, env, ctx) {
             response_format: { type: 'json_object' }
           })
         });
-        if (response.ok) {
+        if (response?.ok) {
           const data = await response.json();
           const res = JSON.parse(data.choices?.[0]?.message?.content);
           const intents = Array.isArray(res.intents) ? res.intents : (res.intent ? [res] : (Array.isArray(res) ? res : []));
@@ -447,7 +460,7 @@ async function detectIntents(messageText, memory, env, ctx) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt + "\nRespond ONLY with valid JSON array." }] }] })
         });
-        if (response.ok) {
+        if (response?.ok) {
           const data = await response.json();
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
           const intents = JSON.parse(text.match(/\[.*\]/s)?.[0] || '[]');
@@ -471,7 +484,11 @@ async function detectIntents(messageText, memory, env, ctx) {
       return result;
     }
   } catch (e) {
-    console.warn(`[BRAIN] All brains failed or timed out: ${e.message}`);
+    if (e.name === 'AggregateError') {
+      console.warn(`[BRAIN] All brains failed: ${e.errors.map(err => err.message).join(', ')}`);
+    } else {
+      console.warn(`[BRAIN] Brain race failure: ${e.message}`);
+    }
   }
 
   console.log(`[BRAIN] Using Fallback Parser`);
@@ -1327,14 +1344,17 @@ async function saveChatMessage(userId, role, content, supabase) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
+  const cleanTo = to.toString().replace('@c.us', '');
+  console.log(`[OUTBOUND] Sending Text to ${cleanTo}: "${text.substring(0, 50)}..."`);
   const res = await fetchWithRetry('https://gate.whapi.cloud/messages/text', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to: to.replace('@c.us', ''), body: text })
+    body: JSON.stringify({ to: cleanTo, body: text })
   });
   if (res) {
     const data = await res.json();
     const msgId = data.id || data.message?.id;
+    if (msgId) console.log(`[OUTBOUND] Success! MsgId: ${msgId}`);
     /* DISABLING GHOST DELETION PER USER REQUEST
     if (msgId && options.vanishDelay && ctx) {
       console.log(`[VANISH] Scheduling deletion of ${msgId} in ${options.vanishDelay}ms`);
@@ -1379,14 +1399,16 @@ async function sendWhatsAppTyping(to, env) {
 }
 
 async function sendWhatsAppInteractive(to, text, buttons, env, options = {}, ctx) {
+  const cleanTo = to.toString().replace('@c.us', '');
+  console.log(`[OUTBOUND] Sending Interactive to ${cleanTo}: "${text.substring(0, 50)}..."`);
   const payload = {
-    to: to.replace('@c.us', ''),
+    to: cleanTo,
     type: 'button',
     body: { text },
     action: {
       buttons: (buttons || []).map(b => ({
         type: 'reply',
-        reply: { id: b.id, title: b.title }
+        reply: { id: b.id, title: b.title.substring(0, 20) }
       }))
     }
   };
@@ -1449,13 +1471,23 @@ async function sendWhatsAppImage(to, url, caption, env) {
 // UTILS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function fetchWithRetry(url, options = {}, retries = 2) {
+async function fetchWithRetry(url, options = {}, retries = 2, timeoutMs = 10000) {
   for (let i = 0; i <= retries; i++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) return res;
-      await res.text();
-    } catch (e) { if (i === retries) throw e; }
+      const errorText = await res.text();
+      console.warn(`[FETCH] Non-OK response from ${url}: ${res.status} ${errorText.substring(0, 100)}`);
+    } catch (e) {
+      clearTimeout(timeoutId);
+      const isTimeout = e.name === 'AbortError';
+      console.error(`[FETCH] Error (attempt ${i+1}/${retries+1}) from ${url}: ${isTimeout ? 'TIMEOUT' : e.message}`);
+      if (i === retries) throw e;
+    }
     await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
   }
 }
