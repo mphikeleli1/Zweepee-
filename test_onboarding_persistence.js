@@ -1,5 +1,5 @@
 
-import worker from './zweepee-worker.js';
+import worker from './mr-everything-worker.js';
 
 async function runPersistenceTest() {
     console.log('--- STARTING PERSISTENCE-FIRST TEST (GHOST DISABLED) ---');

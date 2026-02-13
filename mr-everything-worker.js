@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// ZWEEPEE - The Magic WhatsApp Concierge for South Africa
+// MR EVERYTHING - The Magic WhatsApp Concierge for South Africa
 // RELENTLESS AUTONOMOUS SELF-HEALING RULE:
 // This system is designed to autonomously monitor, log, and recover from
 // all failures without human intervention. Reliability is non-negotiable.
@@ -124,7 +124,7 @@ export default {
       return new Response('OK', { status: 200 });
     }
 
-    return new Response('Zweepee Magic ✨', { status: 200 });
+    return new Response('Mr Everything Magic ✨', { status: 200 });
   }
 };
 
@@ -272,13 +272,13 @@ async function processMessage(body, env, ctx, startTime) {
 
     try {
       const userPhone = body.messages?.[0]?.from?.replace('@c.us', '');
-      if (userPhone) await sendSecureMessage(userPhone, `⚠️ Zweepee is having a moment. Jules is notified! ✨`, env, { path: 'error_recovery', incomingFrom: body.messages?.[0]?.from });
+      if (userPhone) await sendSecureMessage(userPhone, `⚠️ Mr Everything is having a moment. Jules is notified! ✨`, env, { path: 'error_recovery', incomingFrom: body.messages?.[0]?.from });
     } catch (e) {}
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ZWEEPEE SENTRY & COMMUNICATION
+// MR EVERYTHING SENTRY & COMMUNICATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function logForensicEvent(type, userPhone, intent, context, env) {
@@ -366,7 +366,7 @@ async function sendAdminAlert(text, env) {
 
   console.log(`[OUTBOUND] [ADMIN] To: ${adminPhone} | Alert: ${text.substring(0, 50)}...`);
   // Use sendWhatsAppMessage directly for alerts to avoid recursion, but keep it minimal
-  return await sendWhatsAppMessage(adminPhone, `🚨 *ZWEEPEE ALERT*\n\n${text}`, env);
+  return await sendWhatsAppMessage(adminPhone, `🚨 *MR EVERYTHING ALERT*\n\n${text}`, env);
 }
 
 async function runDiagnostics(env) {
@@ -543,7 +543,7 @@ const MIRAGE_REGISTRY = {
   cart_action: { handle: handleCartAction },
 
   // --- META INTENTS ---
-  greeting: { handle: async () => `👋 Hi! I'm Zweepee, your South African concierge. How can I help you today? ✨` },
+  greeting: { handle: async () => `👋Hi! I'm Mr Everything, your personal assistant. How may i help you today?✨` },
   conversational: { handle: handleConversational },
   help: { handle: async (user, text, media, data, memory) => generateHelp(user, memory) },
 
@@ -583,7 +583,7 @@ const MIRAGE_REGISTRY = {
   degraded_mode: { handle: handleDegraded },
   api_latency: { handle: handleLatency },
   payment_issue: { handle: async () => `💳 *PAYMENT TROUBLE*\n\nIt looks like there was a glitch with the payment. Please check your card or try a different method. Jules is here if you need help! ✨` },
-  maintenance: { handle: async () => `🛠️ *ZWEEPEE MAINTENANCE*\n\nI'm taking a quick power nap while Jules performs some magic updates. I'll be back shortly! ✨` },
+  maintenance: { handle: async () => `🛠️ *MR EVERYTHING MAINTENANCE*\n\nI'm taking a quick power nap while Jules performs some magic updates. I'll be back shortly! ✨` },
   admin_diag: { handle: async (user, text, media, data, memory, db, env) => {
     const diagnostic = await runDiagnostics(env);
     let logSnippet = "";
@@ -598,25 +598,25 @@ const MIRAGE_REGISTRY = {
     const analytics = await runAnalytics(env);
     return `📊 *BUSINESS INTELLIGENCE*\n\nReliability: ${analytics.metrics.reliability}%\nOrders: ${analytics.business.total_orders}\nRevenue: R${analytics.business.revenue}\nTop Intent: ${analytics.business.top_intent}`;
   }},
-  subscription_needed: { handle: async () => `👑 *PREMIUM FEATURE*\n\nThis feature is part of Zweepee Plus! Subscribe now for early access and zero concierge fees. 🇿🇦✨` },
+  subscription_needed: { handle: async () => `👑 *PREMIUM FEATURE*\n\nThis feature is part of Mr Everything Plus! Subscribe now for early access and zero concierge fees. 🇿🇦✨` },
 
   // --- ADDITIONAL SERVICE CATEGORIES (GROCERY, TRAVEL, ETC) ---
-  grocery_meat: { handle: async () => `🥩 *ZWEEPEE MEAT*\n\nBrowsing local butchers and major retailers for the best cuts. Braai tonight? 🇿🇦🔥` },
-  grocery_veg: { handle: async () => `🥦 *ZWEEPEE FRESH*\n\nFinding the crispest fruits and veggies from local markets and supermarkets. 🍏🥬✨` },
+  grocery_meat: { handle: async () => `🥩 *MR EVERYTHING MEAT*\n\nBrowsing local butchers and major retailers for the best cuts. Braai tonight? 🇿🇦🔥` },
+  grocery_veg: { handle: async () => `🥦 *MR EVERYTHING FRESH*\n\nFinding the crispest fruits and veggies from local markets and supermarkets. 🍏🥬✨` },
   bus_intercape: { handle: async () => `🚌 *INTERCAPE SEARCH*\n\nChecking Intercape Mainliner and Sleepliner availability for your route... 🎫` },
   bus_greyhound: { handle: async () => `🚌 *GREYHOUND SEARCH*\n\nBrowsing Greyhound Dreamliner schedules... One moment! 🎫` },
   flight_intl: { handle: async () => `✈️ *INTERNATIONAL FLIGHTS*\n\nSearching for global routes and connections. Cape Town to London? Jo'burg to Dubai? I've got you! 🌍✨` },
 
   // --- META & INFO MIRAGES ---
-  referral: { handle: async () => `🎁 *ZWEEPEE REFERRALS*\n\nShare your code with friends! When they place their first order, you both get R50 concierge credit. 🇿🇦✨` },
-  loyalty: { handle: async () => `⭐ *ZWEEPEE REWARDS*\n\nYou've earned 150 magic points! Keep using Zweepee to unlock free deliveries and exclusive deals. ✨` },
-  careers: { handle: async () => `💼 *JOIN THE MAGIC*\n\nWant to help build the future of commerce in SA? Send your CV to careers@zweepee.com! 🚀` },
-  about_us: { handle: async () => `✨ *ABOUT ZWEEPEE*\n\nWe're an autonomous AI concierge designed specifically for South Africans. We make buying anything as easy as a text message. 🇿🇦` },
+  referral: { handle: async () => `🎁 *MR EVERYTHING REFERRALS*\n\nShare your code with friends! When they place their first order, you both get R50 concierge credit. 🇿🇦✨` },
+  loyalty: { handle: async () => `⭐ *MR EVERYTHING REWARDS*\n\nYou've earned 150 magic points! Keep using Mr Everything to unlock free deliveries and exclusive deals. ✨` },
+  careers: { handle: async () => `💼 *JOIN THE MAGIC*\n\nWant to help build the future of commerce in SA? Send your CV to careers@mreverything.com! 🚀` },
+  about_us: { handle: async () => `✨ *ABOUT MR EVERYTHING*\n\nWe're an autonomous AI concierge designed specifically for South Africans. We make buying anything as easy as a text message. 🇿🇦` },
   gift_vouchers: { handle: async () => `🎁 *GIFT VOUCHERS*\n\nNeed a last-minute gift? I can generate digital vouchers for Takealot, Netflix, and more! ✨` },
 
   // --- EDGE CASES & ERRORS ---
   invalid_address: { handle: async () => `📍 *ADDRESS ERROR*\n\nI couldn't quite pin that address on the map. Could you send it as a Location pin or type it again? 🇿🇦` },
-  low_balance: { handle: async () => `💸 *WALLET LOW*\n\nYour Zweepee balance is too low for this order. Top up now to continue the magic! ✨` },
+  low_balance: { handle: async () => `💸 *WALLET LOW*\n\nYour Mr Everything balance is too low for this order. Top up now to continue the magic! ✨` },
   phone_mismatch: { handle: async () => `📱 *VERIFICATION NEEDED*\n\nThe phone number provided doesn't match your WhatsApp. Please verify to continue. 🔐` },
 
   // --- SOUTH AFRICA UTILITIES & NEWS ---
@@ -683,7 +683,7 @@ async function handleShopping(user, text, media, data, memory, db, env, ctx) {
 
   // Magical Unified Card with vanish delay for "Searching"
   if (query.length > 0 && !text.includes('ADD_')) {
-    await sendSecureMessage(user.phone_number, `🔍 *ZWEEPEE MAGIC*\n\nSearching top SA retailers for "${query}"...`, env, {
+    await sendSecureMessage(user.phone_number, `🔍 *MR EVERYTHING MAGIC*\n\nSearching top SA retailers for "${query}"...`, env, {
       path: 'shopping',
       options: {}
     }, ctx);
@@ -691,7 +691,7 @@ async function handleShopping(user, text, media, data, memory, db, env, ctx) {
   }
 
   await sendSecureMessage(user.phone_number,
-    `🛍️ *ZWEEPEE SHOPPING*\n\n*${product.name}*\nPrice: R${product.price.toLocaleString()}\nConcierge Fee: R49\n\nI found the best price at iStore/Takealot! Ready to order? ✨`, env, {
+    `🛍️ *MR EVERYTHING SHOPPING*\n\n*${product.name}*\nPrice: R${product.price.toLocaleString()}\nConcierge Fee: R49\n\nI found the best price at iStore/Takealot! Ready to order? ✨`, env, {
     path: 'shopping',
     type: 'interactive',
     options: {
@@ -716,7 +716,7 @@ async function handleFood(user, text, media, data, memory, db, env, ctx) {
   const meal = options.find(o => query.includes(o.name.toLowerCase().split(' ')[0])) || options[0];
 
   if (query.length > 0 && !text.includes('ADD_')) {
-    await sendSecureMessage(user.phone_number, `🍗 *ZWEEPEE FOOD*\n\nFinding the nearest ${query === 'food' ? 'restaurants' : query} for you...`, env, {
+    await sendSecureMessage(user.phone_number, `🍗 *MR EVERYTHING FOOD*\n\nFinding the nearest ${query === 'food' ? 'restaurants' : query} for you...`, env, {
       path: 'food',
       options: {}
     }, ctx);
@@ -724,7 +724,7 @@ async function handleFood(user, text, media, data, memory, db, env, ctx) {
   }
 
   await sendSecureMessage(user.phone_number,
-    `🍗 *ZWEEPEE FOOD*\n\n*${meal.name}*\nPrice: R${meal.price.toFixed(2)}\nDelivery: R35\n\nEstimated Arrival: 25-35 mins 🏃‍♂️💨`, env, {
+    `🍗 *MR EVERYTHING FOOD*\n\n*${meal.name}*\nPrice: R${meal.price.toFixed(2)}\nDelivery: R35\n\nEstimated Arrival: 25-35 mins 🏃‍♂️💨`, env, {
     path: 'food',
     type: 'interactive',
     options: {
@@ -744,7 +744,7 @@ async function handleAccommodation(user, text, media, data, memory, db, env, ctx
   const stay = { id: 'stay_1', name: 'Radisson Blu Waterfront', price: 4500, img: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800' };
 
   await sendSecureMessage(user.phone_number,
-    `🏨 *ZWEEPEE STAYS*\n\n*${stay.name}* (${location})\nPrice: R${stay.price.toLocaleString()} per night\n\nI found this gem with a 4.8⭐ rating! Ready to book?`, env, {
+    `🏨 *MR EVERYTHING STAYS*\n\n*${stay.name}* (${location})\nPrice: R${stay.price.toLocaleString()} per night\n\nI found this gem with a 4.8⭐ rating! Ready to book?`, env, {
     path: 'accommodation',
     type: 'interactive',
     options: {
@@ -763,7 +763,7 @@ async function handleFlights(user, text, media, data, memory, db, env, ctx) {
   const flight = { id: 'fly_1', name: 'Safair (JNB ➔ CPT)', price: 1250, img: 'https://images.unsplash.com/photo-1436491865332-7a61a109c055?w=800' };
 
   await sendSecureMessage(user.phone_number,
-    `✈️ *ZWEEPEE FLIGHTS*\n\n*${flight.name}*\nPrice: R${flight.price.toLocaleString()}\n\nLowest fare found on FlySafair for your dates! ✨`, env, {
+    `✈️ *MR EVERYTHING FLIGHTS*\n\n*${flight.name}*\nPrice: R${flight.price.toLocaleString()}\n\nLowest fare found on FlySafair for your dates! ✨`, env, {
     path: 'flights',
     type: 'interactive',
     options: {
@@ -779,7 +779,7 @@ async function handleFlights(user, text, media, data, memory, db, env, ctx) {
 
 async function handleCarRental(user, text, media, data, memory, db, env, ctx) {
   const car = { id: 'car_1', name: 'VW Polo Vivo', price: 450, img: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=800' };
-  await sendSecureMessage(user.phone_number, `🚗 *ZWEEPEE RENTAL*\n\n*${car.name}*\nPrice: R${car.price} / day\n\nReply "ADD ${car.id}" to reserve! 🗝️`, env, {
+  await sendSecureMessage(user.phone_number, `🚗 *MR EVERYTHING RENTAL*\n\n*${car.name}*\nPrice: R${car.price} / day\n\nReply "ADD ${car.id}" to reserve! 🗝️`, env, {
     path: 'car_rental',
     type: 'image',
     options: { image: car.img }
@@ -788,18 +788,18 @@ async function handleCarRental(user, text, media, data, memory, db, env, ctx) {
 }
 
 async function handleBuses(user, text, media, data, memory, db, env, ctx) {
-  return `🚌 *ZWEEPEE BUSES*\n\nSearching Intercape and Greyhound schedules for you... One moment! 🎫`;
+  return `🚌 *MR EVERYTHING BUSES*\n\nSearching Intercape and Greyhound schedules for you... One moment! 🎫`;
 }
 
 async function handleAirtime(user, text, media, data, memory, db, env, ctx) {
   const amount = data.quantity || 50;
   const network = data.product || 'Vodacom';
-  return `📱 *ZWEEPEE AIRTIME*\n\nBuying R${amount} ${network} airtime for you. Confirm by replying "YES AIRTIME". ✨`;
+  return `📱 *MR EVERYTHING AIRTIME*\n\nBuying R${amount} ${network} airtime for you. Confirm by replying "YES AIRTIME". ✨`;
 }
 
 async function handleElectricity(user, text, media, data, memory, db, env, ctx) {
   const amount = data.quantity || 100;
-  return `⚡ *ZWEEPEE POWER*\n\nGenerating R${amount} electricity token for meter 142****890. Confirm by replying "YES POWER". 💡`;
+  return `⚡ *MR EVERYTHING POWER*\n\nGenerating R${amount} electricity token for meter 142****890. Confirm by replying "YES POWER". 💡`;
 }
 
 async function handleCartAction(user, text, media, data, memory, db, env, ctx) {
@@ -876,18 +876,18 @@ async function handleCartAction(user, text, media, data, memory, db, env, ctx) {
     if (isGroup) {
       const { data: group } = await db.from('group_carts').select('type').eq('id', groupId).single();
       if (group?.type === 'public') {
-        // Public Split: Supplier gets 95%, Zweepee gets 5%
+        // Public Split: Supplier gets 95%, Mr Everything gets 5%
         const platformFee = total * 0.05;
-        payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_GroupBuy_Share&amount=${total.toFixed(2)}&setup=split&fee=${platformFee.toFixed(2)}`;
+        payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=MrEverything_GroupBuy_Share&amount=${total.toFixed(2)}&setup=split&fee=${platformFee.toFixed(2)}`;
       } else {
         // Private: Individual share direct to supplier
         payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.SUPPLIER_ID || '10000100'}&item_name=Private_GroupBuy_Order&amount=${total.toFixed(2)}`;
       }
     } else {
-      payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=Zweepee_Personal_Order&amount=${total.toFixed(2)}`;
+      payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=MrEverything_Personal_Order&amount=${total.toFixed(2)}`;
     }
 
-    const summary = `✨ *ZWEEPEE CHECKOUT*\n\nMode: ${isGroup ? 'Group-Buy Share' : 'Personal'}\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast Escrow:\n🔗 ${payfastUrl}\n\nI'll notify the group once your share is paid! 🚀`;
+    const summary = `✨ *MR EVERYTHING CHECKOUT*\n\nMode: ${isGroup ? 'Group-Buy Share' : 'Personal'}\nItems: ${items.length}\nTotal: R${total.toLocaleString()}\n\nSecure payment via PayFast Escrow:\n🔗 ${payfastUrl}\n\nI'll notify the group once your share is paid! 🚀`;
 
     await sendSecureMessage(user.phone_number, summary, env, {
       path: 'cart_action',
@@ -908,12 +908,12 @@ async function handleCartAction(user, text, media, data, memory, db, env, ctx) {
 }
 
 async function handleConversational(user, text, media, data, memory, db, env, ctx) {
-  return `I'm Zweepee, your South African concierge! 🇿🇦\n\nI can help you buy anything, order food, book flights, or even get airtime and electricity. Just tell me what you need! ✨`;
+  return `I'm Mr Everything, your personal assistant! 🇿🇦\n\nI can help you buy anything, order food, book flights, or even get airtime and electricity. Just tell me what you need! ✨`;
 }
 
 async function handlePricing(user, text, media, data, memory, db, env, ctx) {
   const item = data.product || 'items';
-  return `💰 *ZWEEPEE PRICING*\n\nOur concierge fee is typically R49 per order. Product prices for ${item} are fetched live from top SA retailers like Takealot, Woolworths, and Checkers Sixty60. ✨`;
+  return `💰 *MR EVERYTHING PRICING*\n\nOur concierge fee is typically R49 per order. Product prices for ${item} are fetched live from top SA retailers like Takealot, Woolworths, and Checkers Sixty60. ✨`;
 }
 
 async function handleTrackOrder(user, text, media, data, memory, db, env, ctx) {
@@ -921,11 +921,11 @@ async function handleTrackOrder(user, text, media, data, memory, db, env, ctx) {
 }
 
 async function handleComplaints(user, text, media, data, memory, db, env, ctx) {
-  return `🛠️ *ZWEEPEE SUPPORT*\n\nI'm sorry to hear you're having trouble! I've flagged this for Jules. One of our humans will reach out to you shortly. 🇿🇦✨`;
+  return `🛠️ *MR EVERYTHING SUPPORT*\n\nI'm sorry to hear you're having trouble! I've flagged this for Jules. One of our humans will reach out to you shortly. 🇿🇦✨`;
 }
 
 async function handleFAQ(user, text, media, data, memory, db, env, ctx) {
-  await sendSecureMessage(user.phone_number, `❓ *ZWEEPEE FAQ*\n\nHow can I help you understand our magic?`, env, {
+  await sendSecureMessage(user.phone_number, `❓ *MR EVERYTHING FAQ*\n\nHow can I help you understand our magic?`, env, {
     path: 'faq',
     type: 'interactive',
     options: {
@@ -945,12 +945,12 @@ async function handleRefunds(user, text, media, data, memory, db, env, ctx) {
 
 async function handlePharmacy(user, text, media, data, memory, db, env, ctx) {
   const item = data.product || 'medication';
-  return `💊 *ZWEEPEE PHARMACY*\n\nSearching Dis-Chem and Clicks for ${item}... Please note that schedule 1+ meds require a valid prescription upload. 📝✨`;
+  return `💊 *MR EVERYTHING PHARMACY*\n\nSearching Dis-Chem and Clicks for ${item}... Please note that schedule 1+ meds require a valid prescription upload. 📝✨`;
 }
 
 async function handleGrocery(user, text, media, data, memory, db, env, ctx) {
   await sendSecureMessage(user.phone_number,
-    `🛒 *ZWEEPEE GROCERY*\n\nWant to save up to 20%? Join a Group-Buy and get bulk discounts from Shoprite, Makro, or Woolworths! 🇿🇦✨`, env, {
+    `🛒 *MR EVERYTHING GROCERY*\n\nWant to save up to 20%? Join a Group-Buy and get bulk discounts from Shoprite, Makro, or Woolworths! 🇿🇦✨`, env, {
     path: 'grocery',
     type: 'interactive',
     options: {
@@ -995,7 +995,7 @@ async function handleJoinGroup(user, text, media, data, memory, db, env, ctx) {
         await db.from('group_members').upsert([{ group_id: publicGroup.id, user_id: user.id }], { onConflict: 'group_id,user_id' });
       }
 
-      return `🇿🇦 *JOINED PUBLIC GROUP-BUY*\n\nYou're now part of the Zweepee Public Group-Buy! All items you add will contribute to a massive bulk order for maximum discounts. 🚀✨`;
+      return `🇿🇦 *JOINED PUBLIC GROUP-BUY*\n\nYou're now part of the Mr Everything Public Group-Buy! All items you add will contribute to a massive bulk order for maximum discounts. 🚀✨`;
   }
 
   const { data: group } = await db.from('group_carts').select('*').eq('invite_code', code).single();
@@ -1008,7 +1008,7 @@ async function handleJoinGroup(user, text, media, data, memory, db, env, ctx) {
 
 async function handlePanic(user, text, media, data, memory, db, env, ctx) {
   await sendAdminAlert(`🚨 PANIC BUTTON PRESSED by ${user.phone_number} in Group ${data.group_id || 'Unknown'}`, env);
-  return `🚨 *ZWEEPEE EMERGENCY*\n\nI've notified the admin and security services of your location. Stay calm and stay safe. 🇿🇦✨`;
+  return `🚨 *MR EVERYTHING EMERGENCY*\n\nI've notified the admin and security services of your location. Stay calm and stay safe. 🇿🇦✨`;
 }
 
 async function handleCheckIn(user, text, media, data, memory, db, env, ctx) {
@@ -1050,11 +1050,11 @@ async function handleOnboarding(user, text, media, data, memory, db, env, ctx) {
   if (!user.preferred_name || user.onboarding_step !== 'completed') {
     const { error } = await db.from('users').update({ onboarding_step: 'awaiting_name' }).eq('id', user.id);
     if (error) console.error("[DB] Onboarding update error:", error.message);
-    return `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I'm here to make your life easier.\n\n*What is your name?* (I'd love to know what to call you!)`;
+    return `👋Hi! I'm Mr Everything, your personal assistant. How may i help you today?✨\n\n*What is your name?* (I'd love to know what to call you!)`;
   }
 
   await sendSecureMessage(user.phone_number,
-    `✨ *WELCOME TO ZWEEPEE*\n\nI'm your magic concierge! 🇿🇦 I make buying anything as easy as a text message.\n\n*What can I help you with first?*`, env, {
+    `✨ *WELCOME TO MR EVERYTHING*\n\nI'm your personal assistant! 🇿🇦 I make buying anything as easy as a text message.\n\n*What can I help you with first?*`, env, {
     path: 'onboarding',
     type: 'interactive',
     options: {
@@ -1070,8 +1070,8 @@ async function handleOnboarding(user, text, media, data, memory, db, env, ctx) {
 }
 
 async function handleReturningUser(user, text, media, data, memory, db, env, ctx) {
-  const name = user.preferred_name ? `, ${user.preferred_name}` : "";
-  return `✨ *WELCOME BACK${name.toUpperCase()}*\n\nGood to see you again! Ready for some more magic? How can I help you today? 🇿🇦`;
+  const name = user.preferred_name || "";
+  return `👋Welcome back ${name}. Great to see you again, how may i assist?✨`;
 }
 
 async function handleResume(user, text, media, data, memory, db, env, ctx) {
@@ -1079,7 +1079,7 @@ async function handleResume(user, text, media, data, memory, db, env, ctx) {
 }
 
 async function handleUnknown(user, text, media, data, memory, db, env, ctx) {
-  return `🤔 *ZWEEPEE IS PUZZLED*\n\nI didn't quite catch that. I'm still learning! Try asking for food, shopping, or travel. ✨`;
+  return `🤔 *MR EVERYTHING IS PUZZLED*\n\nI didn't quite catch that. I'm still learning! Try asking for food, shopping, or travel. ✨`;
 }
 
 async function handlePartialMatch(user, text, media, data, memory, db, env, ctx) {
@@ -1088,7 +1088,7 @@ async function handlePartialMatch(user, text, media, data, memory, db, env, ctx)
 }
 
 async function handleConflict(user, text, media, data, memory, db, env, ctx) {
-  return `⚖️ *ZWEEPEE CONFUSION*\n\nYou've asked for a few different things at once! Should we start with ${data.primary || 'the first one'}? ✨`;
+  return `⚖️ *MR EVERYTHING CONFUSION*\n\nYou've asked for a few different things at once! Should we start with ${data.primary || 'the first one'}? ✨`;
 }
 
 async function handleAiTimeout(user, text, media, data, memory, db, env, ctx) {
@@ -1299,7 +1299,7 @@ async function matchLiftRequests(db, env) {
 }
 
 function generateHelp(user, memory) {
-  return `✨ *ZWEEPEE MAGIC*\n\nI can help you with:\n🛍️ Shopping\n🍗 Food\n🏨 Hotels\n✈️ Flights\n📱 Airtime & ⚡ Electricity\n\nJust tell me what you need! ✨`;
+  return `✨ *MR EVERYTHING MAGIC*\n\nI can help you with:\n🛍️ Shopping\n🍗 Food\n🏨 Hotels\n✈️ Flights\n📱 Airtime & ⚡ Electricity\n\nJust tell me what you need! ✨`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,9 +1,9 @@
 {
-  "name": "zweepee",
+  "name": "mr-everything",
   "version": "1.0.0",
-  "description": "Zweepee Magic WhatsApp Concierge",
+  "description": "Mr Everything Magic WhatsApp Concierge",
   "type": "module",
-  "main": "zweepee-worker.js",
+  "main": "mr-everything-worker.js",
   "scripts": {
     "deploy": "wrangler deploy"
   },

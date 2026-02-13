@@ -1,5 +1,5 @@
 
-import worker from './zweepee-worker.js';
+import worker from './mr-everything-worker.js';
 
 async function runSupabaseDownTest() {
     console.log('--- Testing Supabase Total Blackout ---');

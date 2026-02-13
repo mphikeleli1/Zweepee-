@@ -1,6 +1,6 @@
 
 async function runStress() {
-  const WORKER_URL = 'https://zweepee.busanigama.workers.dev/webhook';
+  const WORKER_URL = 'https://mr-everything.busanigama.workers.dev/webhook';
   console.log('--- STARTING STRESS & SECURITY TEST ---');
 
   // 1. Concurrent Users (20 sessions)

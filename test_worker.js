@@ -1,5 +1,5 @@
 // Test script for Zweepee Worker logic
-import worker from './zweepee-worker.js';
+import worker from './mr-everything-worker.js';
 
 async function runTests() {
   console.log('--- Starting Local Tests ---');
