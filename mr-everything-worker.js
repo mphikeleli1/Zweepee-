@@ -89,7 +89,6 @@ export default {
       });
     }
 
-
     // Whapi webhook (POST only - no verification needed)
     if (request.method === 'POST' && url.pathname === '/webhook') {
       const startTime = Date.now();
@@ -141,6 +140,11 @@ async function processMessage(body, env, ctx, startTime) {
     const message = body.messages?.[0];
     if (!message) {
       console.log(`[PIPELINE] No message found in body`);
+      return;
+    }
+
+    if (message.from_me) {
+      console.log(`[PIPELINE] Ignoring message from myself`);
       return;
     }
 
@@ -432,6 +436,13 @@ async function runAnalytics(env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function detectIntents(messageText, memory, env, ctx) {
+  // [NEW] 1. Pre-emptive Fallback Check for high-confidence keywords (Buttons/Actions)
+  const fastMatch = fallbackIntentParser(messageText);
+  if (fastMatch[0].confidence >= 0.9) {
+    console.log(`[BRAIN] High-confidence Fast Match: ${fastMatch[0].intent}`);
+    return fastMatch;
+  }
+
   const prompt = `Analyze this WhatsApp message from a user in South Africa: "${messageText}".
   User Context: ${JSON.stringify(memory)}
   Available intents (select all that apply):
@@ -638,7 +649,8 @@ const MIRAGE_REGISTRY = {
   mr_lift_gps: { handle: handleMrLiftGPS },
   mr_lift_ready: { handle: handleReadyAtGate },
   save_name: { handle: async (user, text, media, data, memory, db, env) => {
-    const name = text.trim().substring(0, 50);
+    const nameMatch = text.match(/my name is (.*)/i) || text.match(/i am (.*)/i) || [null, text.trim()];
+    const name = (data.name || nameMatch[1] || text.trim()).substring(0, 50);
     const { error } = await db.from('users').update({ preferred_name: name, onboarding_step: 'completed' }).eq('id', user.id);
     if (error) console.error("[DB] Save name error:", error.message);
     return `✨ Nice to meet you, *${name}*! I've saved that to my memory.\n\nWhat would you like to do first? I can help with shopping, food, or Mr Lift! 🇿🇦`;
