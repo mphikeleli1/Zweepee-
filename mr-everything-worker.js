@@ -27,6 +27,7 @@ export default {
       const grokHealth = {
         status: diagnostic.status,
         services: diagnostic.services,
+        tables: diagnostic.tables,
         performance: {
           avg_response_time: `${analytics.metrics.avg_response_time}ms`,
           uptime: `${analytics.metrics.reliability}%`,
@@ -148,7 +149,7 @@ async function processMessage(body, env, ctx, startTime) {
       return;
     }
 
-    const rawFrom = message.from || '';
+    const rawFrom = message.from || message.chat_id || '';
     // Standardize userPhone to plain number for Whapi Sandbox compatibility
     const userPhone = rawFrom.replace('@s.whatsapp.net', '').replace('@c.us', '');
 
@@ -374,8 +375,16 @@ async function sendAdminAlert(text, env) {
 }
 
 async function runDiagnostics(env) {
-  const results = { timestamp: new Date().toISOString(), status: 'checking', services: {} };
+  const results = { timestamp: new Date().toISOString(), status: 'checking', services: {}, tables: {} };
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+
+  const tablesToCheck = ['users', 'chat_history', 'orders', 'carts', 'system_alerts', 'system_config', 'forensic_logs'];
+  for (const table of tablesToCheck) {
+    try {
+      const { error } = await supabase.from(table).select('count', { count: 'exact', head: true });
+      results.tables[table] = error ? `Error: ${error.message}` : 'Exists';
+    } catch (e) { results.tables[table] = `Fatal: ${e.message}`; }
+  }
 
   try {
     const { error } = await supabase.from('users').select('id').limit(1);
@@ -554,7 +563,12 @@ const MIRAGE_REGISTRY = {
   cart_action: { handle: handleCartAction },
 
   // --- META INTENTS ---
-  greeting: { handle: async () => `👋Hi! I'm Mr Everything, your personal assistant. How may i help you today?✨` },
+  greeting: { handle: async (user) => {
+    if (user.preferred_name && user.onboarding_step === 'completed') {
+      return `👋Welcome back ${user.preferred_name}. Great to see you again, how may i assist?✨`;
+    }
+    return `👋Hi! I'm Mr Everything, your personal assistant. How may i help you today?✨`;
+  }},
   conversational: { handle: handleConversational },
   help: { handle: async (user, text, media, data, memory) => generateHelp(user, memory) },
 
