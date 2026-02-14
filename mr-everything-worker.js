@@ -27,6 +27,7 @@ export default {
       const grokHealth = {
         status: diagnostic.status,
         services: diagnostic.services,
+        whapi_info: diagnostic.whapi_info,
         tables: diagnostic.tables,
         performance: {
           avg_response_time: `${analytics.metrics.avg_response_time}ms`,
@@ -153,6 +154,12 @@ async function processMessage(body, env, ctx, startTime) {
     // Standardize userPhone to plain number for Whapi Sandbox compatibility
     const userPhone = rawFrom.replace('@s.whatsapp.net', '').replace('@c.us', '');
 
+    // [QUOTA SAFETY] Ignore test numbers in production to save Sandbox quota
+    if (userPhone.startsWith('2782000000')) {
+      console.log(`[QUOTA] Ignoring test number ${userPhone}`);
+      return new Response('Ignored', { status: 200 });
+    }
+
     if (!userPhone) {
       console.log(`[PIPELINE] No sender found in ${JSON.stringify(body).substring(0, 100)}`);
       return;
@@ -160,8 +167,8 @@ async function processMessage(body, env, ctx, startTime) {
 
     console.log(`[PIPELINE] From: ${userPhone}`);
 
-    // Show typing indicator immediately
-    ctx.waitUntil(sendWhatsAppTyping(userPhone, env));
+    // [QUOTA OPTIMIZATION] Typing indicators disabled to save API requests
+    // ctx.waitUntil(sendWhatsAppTyping(userPhone, env));
 
     const messageType = message.type || 'text';
     let messageText = '';
@@ -393,8 +400,9 @@ async function runDiagnostics(env) {
 
   try {
     const whapiRes = await fetch('https://gate.whapi.cloud/health', { headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` } });
-    await whapiRes.text(); // Consume body
+    const whapiData = await whapiRes.json();
     results.services.whapi = whapiRes.ok ? 'Healthy' : 'Unreachable';
+    results.whapi_info = whapiData;
   } catch (e) { results.services.whapi = `Fatal: ${e.message}`; }
 
   try {
