@@ -464,7 +464,6 @@ async function detectIntents(messageText, memory, env, ctx) {
   User Context: ${JSON.stringify(memory)}
   Available intents (select all that apply):
   - Services: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, pharmacy, grocery, grocery_meat, grocery_veg, bus_intercape, bus_greyhound, flight_intl, cart_action.
-  - Transport: mr_lift_home, mr_lift_form, mr_lift_matching, mr_lift_joined, mr_lift_noshow, mr_lift_rating.
   - Groups: create_group, join_group, view_group, leave_group, panic_button, check_in.
   - Meta/Info: pricing, track_order, complaints, faq, refunds, referral, loyalty, gift_vouchers, about_us, careers.
   - SA Utils: weather, load_shedding, fuel_price, events, exchange_rate.
@@ -659,23 +658,12 @@ const MIRAGE_REGISTRY = {
   events: { handle: async () => `🎟️ *UPCOMING EVENTS*\n\nFrom rugby at Loftus to concerts in CPT Stadium, I'll find the best tickets for you! 🇿🇦✨` },
   exchange_rate: { handle: async () => `💱 *RAND RATE*\n\nChecking USD/ZAR, GBP/ZAR, and EUR/ZAR live for you. The Rand is looking... interesting today! 🇿🇦📈` },
 
-  // --- MR LIFT CLUB (INTENTS 60-75) ---
-  mr_lift_home: { handle: handleMrLiftHome },
-  mr_lift_form: { handle: handleMrLiftForm },
-  mr_lift_matching: { handle: handleMrLiftMatching },
-  mr_lift_found: { handle: handleMrLiftFound },
-  mr_lift_joined: { handle: handleMrLiftJoined },
-  mr_lift_noshow: { handle: handleMrLiftNoShow },
-  mr_lift_rating: { handle: handleMrLiftRating },
-  mr_lift_eta: { handle: handleMrLiftETA },
-  mr_lift_gps: { handle: handleMrLiftGPS },
-  mr_lift_ready: { handle: handleReadyAtGate },
   save_name: { handle: async (user, text, media, data, memory, db, env) => {
     const nameMatch = text.match(/my name is (.*)/i) || text.match(/i am (.*)/i) || [null, text.trim()];
     const name = (data.name || nameMatch[1] || text.trim()).substring(0, 50);
     const { error } = await db.from('users').update({ preferred_name: name, onboarding_step: 'completed' }).eq('id', user.id);
     if (error) console.error("[DB] Save name error:", error.message);
-    return `✨ Nice to meet you, *${name}*! I've saved that to my memory.\n\nWhat would you like to do first? I can help with shopping, food, or Mr Lift! 🇿🇦`;
+    return `✨ Nice to meet you, *${name}*! I've saved that to my memory.\n\nWhat would you like to do first? I can help with shopping, food, or travel! 🇿🇦`;
   }}
 };
 
@@ -878,17 +866,9 @@ async function handleCartAction(user, text, media, data, memory, db, env, ctx) {
     return null;
   }
 
-  if (t.includes('checkout') || t.includes('pay') || t.includes('PAY_LIFT')) {
+  if (t.includes('checkout') || t.includes('pay')) {
     let items = [];
     let isGroup = false;
-    let isLift = t.includes('PAY_LIFT');
-
-    if (isLift) {
-      // Mr Lift Escrow: R35 fixed for JHB-Soweto
-      const total = 35.00;
-      const payfastUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${env.PAYFAST_MERCHANT_ID || '10000100'}&item_name=MrLift_Escrow_Ride&amount=${total.toFixed(2)}&m_payment_id=LIFT_${Date.now()}`;
-      return `✨ *MR LIFT BOOKING*\n\nRoute: Soweto ↔ JHB CBD\nFare: R35.00 (Held in Escrow) 🛡️\n\nSecure payment via PayFast:\n🔗 ${payfastUrl}\n\nFunds are only released to the driver when your trip starts! 🚖✨`;
-    }
 
     if (groupId) {
       const { data: groupItems } = await db.from('group_cart_items').select('*').eq('group_id', groupId).eq('user_id', user.id);
@@ -1171,167 +1151,6 @@ async function handleLatency(user, text, media, data, memory, db, env, ctx) {
   return `🐢 *LATENCY ALERT*\n\nThe network is a bit sluggish today. I'm working hard to get your results—thanks for your patience! 🇿🇦✨`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MR LIFT HANDLERS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-async function handleMrLiftHome(user, text, media, data, memory, db, env, ctx) {
-  await sendSecureMessage(user.phone_number,
-    `🚖 *MR LIFT CLUB*\n\n24/7 Auto-created minibus taxi groups. Safe, reliable, and SANTACO-registered.\n\n*Current Route:* Soweto ↔ JHB CBD\n*Fare:* R35 (Escrow Protected) 🛡️`, env, {
-    path: 'mr_lift',
-    type: 'interactive',
-    options: {
-      image: 'https://images.unsplash.com/photo-1510613142234-803a6493649e?w=800',
-      buttons: [
-        { id: 'LIFT_FORM', title: 'Request a Ride 🚖' },
-        { id: 'view_my_clubs', title: 'My Lift Clubs 👥' },
-        { id: 'LIFT_HELP', title: 'How it works? ❓' }
-      ]
-    }
-  }, ctx);
-  return null;
-}
-
-async function handleMrLiftForm(user, text, media, data, memory, db, env, ctx) {
-  const pickup = text.match(/PICKUP:\s*(.*)/i)?.[1];
-  const dropoff = text.match(/DROPOFF:\s*(.*)/i)?.[1];
-  const time = text.match(/TIME:\s*(.*)/i)?.[1];
-
-  if (pickup && dropoff && time) {
-    // Logic to save request
-    await db.from('lift_requests').insert([{
-      user_id: user.id,
-      pickup_address: pickup,
-      dropoff_address: dropoff,
-      scheduled_time: time === 'Now' ? new Date().toISOString() : time,
-      status: 'pending'
-    }]);
-
-    return await MIRAGE_REGISTRY.mr_lift_matching.handle(user, text, null, { time }, memory, db, env, ctx);
-  }
-
-  await sendSecureMessage(user.phone_number,
-    `📍 *LIFT REQUEST FORM*\n\nPlease provide your details in this format:\n\n*PICKUP:* [Address]\n*DROPOFF:* [CBD / Address]\n*TIME:* [HH:MM or Now]`, env, {
-    path: 'mr_lift',
-    type: 'interactive',
-    options: {
-      image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800',
-      buttons: [
-        { id: 'LIFT_HELP', title: 'How it works? ❓' }
-      ]
-    }
-  }, ctx);
-
-  return null;
-}
-
-async function handleMrLiftMatching(user, text, media, data, memory, db, env, ctx) {
-  await sendSecureMessage(user.phone_number, `🔄 *MATCHING RIDERS...*\n\nI'm scanning for other riders near you for a ${data.time || '17:00'} trip to CBD. I'll notify you once your club is 80% full! 🇿🇦💨`, env, {
-    path: 'mr_lift',
-    options: {}
-  }, ctx);
-  return null;
-}
-
-async function handleMrLiftFound(user, text, media, data, memory, db, env, ctx) {
-  await sendSecureMessage(user.phone_number,
-    `🇿🇦 *NEW LIFT CLUB FOUND*\n\nRoute: Soweto ➔ JHB CBD\nTime: ~17:15\nFare: R35.00\n\nThere are 12 other riders ready to go! Want to join them?`, env, {
-    path: 'mr_lift',
-    type: 'interactive',
-    options: {
-      image: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800',
-      buttons: [
-        { id: 'PAY_LIFT', title: 'Join & Pay R35 💳' },
-        { id: 'DECLINE_LIFT', title: 'Maybe Later ⏳' }
-      ]
-    }
-  }, ctx);
-  return null;
-}
-
-async function handleMrLiftJoined(user, text, media, data, memory, db, env, ctx) {
-  await sendSecureMessage(user.phone_number,
-    `✅ *LIFT CLUB READY!*\n\n*Route:* Soweto ➔ Gandhi Square\n*Departure:* 17:15\n*Fare:* R35 (Paid)\n\nCoordination tools below:`, env, {
-    path: 'mr_lift',
-    type: 'interactive',
-    options: {
-      image: 'https://images.unsplash.com/photo-1510613142234-803a6493649e?w=800',
-      buttons: [
-        { id: 'LIFT_ETA', title: 'Driver ETA 🕒' },
-        { id: 'LIFT_GPS', title: 'Live GPS Link 📍' },
-        { id: 'READY_AT_GATE', title: "I'm at the gate! 🙋‍♂️" }
-      ]
-    }
-  }, ctx);
-  return null;
-}
-
-async function handleReadyAtGate(user, text, media, data, memory, db, env, ctx) {
-  // Simulate notifying the driver/group
-  console.log(`[LIFT] User ${user.phone_number} is ready at the gate.`);
-  return `👍 *NOTIFIED DRIVER*\n\nI've let the driver and your lift club members know you're at the gate. See you soon! 🚖✨`;
-}
-
-async function handleMrLiftNoShow(user, text, media, data, memory, db, env, ctx) {
-  return `🛡️ *DRIVER NO-SHOW*\n\nI'm sorry! I've triggered an instant refund of R35 to your wallet. Would you like me to find another lift club for you immediately? 🇿🇦✨`;
-}
-
-async function handleMrLiftRating(user, text, media, data, memory, db, env, ctx) {
-  return `⭐ *RATE YOUR RIDE*\n\nHow was your trip with Driver Sipho? Please reply with 1-5 stars. Your feedback keeps Mr Lift safe! 🇿🇦✨`;
-}
-
-async function handleMrLiftETA(user, text, media, data, memory, db, env, ctx) {
-  return `🕒 *DRIVER ETA*\n\nYour driver is currently picking up Member #4 (2.1km away). ETA to your door: *8 minutes*. Please be ready at the gate! 🚖💨`;
-}
-
-async function handleMrLiftGPS(user, text, media, data, memory, db, env, ctx) {
-  const gpsLink = "https://maps.google.com/?q=-26.2041,28.0473"; // Mock JHB CBD
-  return `📍 *LIVE TRACKING*\n\nView driver location live:\n🔗 ${gpsLink}\n\nNote: Link expires once trip starts. 🇿🇦`;
-}
-
-async function startLiftTrip(clubId, db, env) {
-  console.log(`[LIFT] Starting trip for club ${clubId}...`);
-  await db.from('lift_clubs').update({ status: 'started' }).eq('id', clubId);
-
-  // Release Escrow Funds (Simulated)
-  const { data: members } = await db.from('lift_memberships').select('*').eq('club_id', clubId);
-  for (const member of members) {
-    await db.from('lift_memberships').update({ payment_status: 'released' }).eq('id', member.id);
-    console.log(`[LIFT] Funds released for user ${member.user_id}`);
-  }
-}
-
-async function matchLiftRequests(db, env) {
-  console.log(`[LIFT] Running clustering engine...`);
-  const { data: pending } = await db.from('lift_requests').select('*').eq('status', 'pending');
-  if (!pending || pending.length < 10) return;
-
-  // Simple cluster by route (Mock Soweto -> CBD)
-  const sowetoRiders = pending.filter(r => r.pickup_address.toLowerCase().includes('soweto'));
-  if (sowetoRiders.length >= 10) {
-    console.log(`[LIFT] Found cluster of ${sowetoRiders.length} riders!`);
-
-    const { data: club } = await db.from('lift_clubs').insert([{
-      route_name: 'SOWETO_TO_CBD',
-      departure_time: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      status: 'forming'
-    }]).select().single();
-
-    for (const rider of sowetoRiders) {
-      await db.from('lift_memberships').insert([{
-        club_id: club.id,
-        user_id: rider.user_id,
-        fare_amount: 35.00,
-        payment_status: 'pending'
-      }]);
-      await db.from('lift_requests').update({ status: 'matched' }).eq('id', rider.id);
-
-      // Notify rider (Simulated via logs)
-      console.log(`[LIFT] Notifying user ${rider.user_id} of ready club!`);
-    }
-  }
-}
-
 function generateHelp(user, memory) {
   return `✨ *MR EVERYTHING MAGIC*\n\nI can help you with:\n🛍️ Shopping\n🍗 Food\n🏨 Hotels\n✈️ Flights\n📱 Airtime & ⚡ Electricity\n\nJust tell me what you need! ✨`;
 }
@@ -1564,23 +1383,14 @@ function fallbackIntentParser(text) {
   if (t === 'hi' || t === 'hello' || t === 'hey' || t === 'start') return [{ intent: 'greeting', confidence: 0.9 }];
 
   // Direct Action/Button Overrides
-  if (t === 'lift_form') return [{ intent: 'mr_lift_form', confidence: 1.0 }];
-  if (t === 'pay_lift' || t.includes('add') || t.includes('checkout') || t.includes('cart')) return [{ intent: 'cart_action', confidence: 1.0 }];
+  if (t.includes('add') || t.includes('checkout') || t.includes('cart')) return [{ intent: 'cart_action', confidence: 1.0 }];
   if (t === 'join_public') return [{ intent: 'join_group', confidence: 1.0, extracted_data: { code: 'PUBLIC' } }];
-  if (t === 'view_my_clubs') return [{ intent: 'mr_lift_joined', confidence: 1.0 }]; // For demo: show the active club
-  if (t === 'lift_eta') return [{ intent: 'mr_lift_eta', confidence: 1.0 }];
-  if (t === 'lift_gps') return [{ intent: 'mr_lift_gps', confidence: 1.0 }];
-  if (t === 'ready_at_gate') return [{ intent: 'mr_lift_ready', confidence: 1.0 }];
-  if (t.includes('pickup:') && t.includes('dropoff:')) return [{ intent: 'mr_lift_form', confidence: 1.0 }];
 
   // Group Keywords
   if (t.includes('create group') || t.includes('start stokvel')) return [{ intent: 'create_group', confidence: 0.9 }];
   if (t.includes('join group') || t.includes('join cart')) return [{ intent: 'join_group', confidence: 0.9 }];
   if (t.includes('group summary') || t.includes('who else')) return [{ intent: 'view_group', confidence: 0.8 }];
   if (t.includes('panic') || t.includes('emergency') || t.includes('help me now')) return [{ intent: 'panic_button', confidence: 1.0 }];
-
-  // Transport Keywords
-  if (t.includes('taxi') || t.includes('minibus') || t.includes('lift') || t.includes('ride') || t.includes('soweto')) return [{ intent: 'mr_lift_home', confidence: 0.9 }];
 
   // Service Keywords
   if (t.includes('buy') || t.includes('order') || t.includes('get') || t.includes('iphone') || t.includes('samsung') || t.includes('phone') || t.includes('smartphone') || t.includes('cellphone') || t.includes('shop')) return [{ intent: 'shopping', confidence: 0.8 }];
