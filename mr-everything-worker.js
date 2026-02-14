@@ -126,6 +126,12 @@ export default {
     }
 
     return new Response('Mr Everything Magic ✨', { status: 200 });
+  },
+
+  async scheduled(event, env, ctx) {
+    // Run taxi dispatcher every minute
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+    ctx.waitUntil(checkAndDispatchTaxis(supabase, env));
   }
 };
 
@@ -463,7 +469,7 @@ async function detectIntents(messageText, memory, env, ctx) {
   const prompt = `Analyze this WhatsApp message from a user in South Africa: "${messageText}".
   User Context: ${JSON.stringify(memory)}
   Available intents (select all that apply):
-  - Services: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, pharmacy, grocery, grocery_meat, grocery_veg, bus_intercape, bus_greyhound, flight_intl, cart_action.
+  - Services: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, taxi, pharmacy, grocery, grocery_meat, grocery_veg, bus_intercape, bus_greyhound, flight_intl, cart_action.
   - Groups: create_group, join_group, view_group, leave_group, panic_button, check_in.
   - Meta/Info: pricing, track_order, complaints, faq, refunds, referral, loyalty, gift_vouchers, about_us, careers.
   - SA Utils: weather, load_shedding, fuel_price, events, exchange_rate.
@@ -567,6 +573,7 @@ const MIRAGE_REGISTRY = {
   buses: { handle: handleBuses },
   airtime: { handle: handleAirtime },
   electricity: { handle: handleElectricity },
+  taxi: { handle: handleTaxi },
   cart_action: { handle: handleCartAction },
 
   // --- META INTENTS ---
@@ -1151,6 +1158,312 @@ async function handleLatency(user, text, media, data, memory, db, env, ctx) {
   return `🐢 *LATENCY ALERT*\n\nThe network is a bit sluggish today. I'm working hard to get your results—thanks for your patience! 🇿🇦✨`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MR TAXI HANDLERS & ALGORITHMS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function handleTaxi(user, messageText, mediaData, extractedData, memory, supabase, env, ctx) {
+  try {
+    // Check if user shared location
+    let pickupLat, pickupLng, dropoffLat, dropoffLng;
+    let pickupAddress = 'Your location';
+    let dropoffAddress;
+
+    // Parse location from mediaData (if user shared location)
+    if (mediaData && mediaData.type === 'location') {
+      pickupLat = mediaData.latitude;
+      pickupLng = mediaData.longitude;
+    } else {
+      // Ask for location
+      return `📍 *Share Your Location First*\n\nThen tell me: "Taxi to [destination]"\n\nExample: "Taxi to Sandton"`;
+    }
+
+    // Extract destination
+    const destination = extractedData.location || extractDestination(messageText);
+    if (!destination) {
+      return `Where do you want to go?\n\nExample: "Taxi to Sandton"`;
+    }
+
+    // Geocode destination using Google Maps
+    const destCoords = await geocodeAddress(destination, env);
+    if (!destCoords) {
+      return `❌ Couldn't find "${destination}"\n\nPlease be more specific.`;
+    }
+
+    dropoffLat = destCoords.lat;
+    dropoffLng = destCoords.lng;
+    dropoffAddress = destination;
+
+    // Assign to corridor
+    const corridorId = await assignTaxiCorridor(pickupLat, pickupLng, dropoffLat, dropoffLng, supabase);
+
+    if (!corridorId) {
+      return `❌ *Route Not Available*\n\nWe currently serve:\n• Soweto - Sandton\n• Joburg - Midrand\n• Sandton - Pretoria\n\nMore routes coming soon!`;
+    }
+
+    // Get corridor details
+    const { data: corridor } = await supabase
+      .from('corridors')
+      .select('*')
+      .eq('id', corridorId)
+      .single();
+
+    // Calculate fare based on distance
+    const distance = haversineDistance(pickupLat, pickupLng, dropoffLat, dropoffLng);
+    let fare = 35;
+    if (distance > 15 && distance <= 25) fare = 50;
+    else if (distance > 25) fare = 75;
+
+    // Create booking
+    const { data: booking, error: bookingError } = await supabase
+      .from('taxi_bookings')
+      .insert({
+        user_id: user.id,
+        pickup_lat: pickupLat,
+        pickup_lng: pickupLng,
+        pickup_address: pickupAddress,
+        dropoff_lat: dropoffLat,
+        dropoff_lng: dropoffLng,
+        dropoff_address: dropoffAddress,
+        corridor_id: corridorId,
+        fare: fare,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (bookingError) throw bookingError;
+
+    // Check pending count
+    const { count: pendingCount } = await supabase
+      .from('taxi_bookings')
+      .select('*', { count: 'exact', head: true })
+      .eq('corridor_id', corridorId)
+      .eq('status', 'pending');
+
+    // Trigger dispatcher check (non-blocking)
+    if (ctx) ctx.waitUntil(checkAndDispatchTaxis(supabase, env));
+
+    // Return confirmation
+    return `✅ *Taxi Booked*\n\n📍 From: ${pickupAddress}\n📍 To: ${dropoffAddress}\n💰 Fare: R${fare}\n\n🚐 Shared ride on ${corridor.name}\n\n⏳ Waiting for passengers: ${pendingCount}/${corridor.min_group_size}\n\nYou'll be notified when taxi is dispatched.\n\nBooking ID: ${booking.id.substring(0, 8)}`.trim();
+
+  } catch (error) {
+    console.error('Taxi mirage error:', error);
+    return `❌ Something went wrong. Please try again.`;
+  }
+}
+
+async function assignTaxiCorridor(pickupLat, pickupLng, dropoffLat, dropoffLng, supabase) {
+  const { data: corridors } = await supabase
+    .from('corridors')
+    .select('*')
+    .eq('active', true);
+
+  for (const corridor of corridors) {
+    const pickupDist = perpendicularDistanceToLine(
+      pickupLat, pickupLng,
+      corridor.start_lat, corridor.start_lng,
+      corridor.end_lat, corridor.end_lng
+    );
+
+    const dropoffDist = perpendicularDistanceToLine(
+      dropoffLat, dropoffLng,
+      corridor.start_lat, corridor.start_lng,
+      corridor.end_lat, corridor.end_lng
+    );
+
+    if (pickupDist <= corridor.radius_km && dropoffDist <= corridor.radius_km) {
+      const pickupProgress = progressAlongLine(
+        pickupLat, pickupLng,
+        corridor.start_lat, corridor.start_lng,
+        corridor.end_lat, corridor.end_lng
+      );
+
+      const dropoffProgress = progressAlongLine(
+        dropoffLat, dropoffLng,
+        corridor.start_lat, corridor.start_lng,
+        corridor.end_lat, corridor.end_lng
+      );
+
+      // Must go forward (dropoff ahead of pickup)
+      if (dropoffProgress > pickupProgress) {
+        return corridor.id;
+      }
+    }
+  }
+
+  return null;
+}
+
+function perpendicularDistanceToLine(px, py, x1, y1, x2, y2) {
+  const toRad = (deg) => deg * Math.PI / 180;
+  px = toRad(px); py = toRad(py);
+  x1 = toRad(x1); y1 = toRad(y1);
+  x2 = toRad(x2); y2 = toRad(y2);
+
+  const R = 6371; // Earth radius in km
+  const d13 = Math.acos(Math.sin(x1) * Math.sin(px) + Math.cos(x1) * Math.cos(px) * Math.cos(y1 - py));
+  const θ13 = Math.atan2(Math.sin(y1 - py) * Math.cos(px), Math.cos(x1) * Math.sin(px) - Math.sin(x1) * Math.cos(px) * Math.cos(y1 - py));
+  const θ12 = Math.atan2(Math.sin(y2 - y1) * Math.cos(x2), Math.cos(x1) * Math.sin(x2) - Math.sin(x1) * Math.cos(x2) * Math.cos(y2 - y1));
+  const dxt = Math.asin(Math.sin(d13) * Math.sin(θ13 - θ12)) * R;
+
+  return Math.abs(dxt);
+}
+
+function progressAlongLine(px, py, x1, y1, x2, y2) {
+  const total = haversineDistance(x1, y1, x2, y2);
+  const fromStart = haversineDistance(x1, y1, px, py);
+  return fromStart / total;
+}
+
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function generateOptimalTaxiRoute(bookings, corridor) {
+  const withProgress = bookings.map(b => ({
+    ...b,
+    pickup_progress: progressAlongLine(
+      b.pickup_lat, b.pickup_lng,
+      corridor.start_lat, corridor.start_lng,
+      corridor.end_lat, corridor.end_lng
+    ),
+    dropoff_progress: progressAlongLine(
+      b.dropoff_lat, b.dropoff_lng,
+      corridor.start_lat, corridor.start_lng,
+      corridor.end_lat, corridor.end_lng
+    )
+  }));
+
+  // Sort pickups forward
+  const pickups = [...withProgress].sort((a, b) => a.pickup_progress - b.pickup_progress);
+
+  // Sort dropoffs forward
+  const dropoffs = [...withProgress].sort((a, b) => a.dropoff_progress - b.dropoff_progress);
+
+  const stops = [];
+  let seq = 1;
+
+  // All pickups first
+  pickups.forEach(b => stops.push({
+    booking_id: b.id,
+    stop_type: 'pickup',
+    sequence_order: seq++,
+    lat: b.pickup_lat,
+    lng: b.pickup_lng,
+    address: b.pickup_address
+  }));
+
+  // Then all dropoffs
+  dropoffs.forEach(b => stops.push({
+    booking_id: b.id,
+    stop_type: 'dropoff',
+    sequence_order: seq++,
+    lat: b.dropoff_lat,
+    lng: b.dropoff_lng,
+    address: b.dropoff_address
+  }));
+
+  return stops;
+}
+
+async function checkAndDispatchTaxis(supabase, env) {
+  const { data: corridors } = await supabase
+    .from('corridors')
+    .select('*')
+    .eq('active', true);
+
+  for (const corridor of corridors) {
+    const { data: pending } = await supabase
+      .from('taxi_bookings')
+      .select('*')
+      .eq('corridor_id', corridor.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+
+    if (pending && pending.length >= corridor.min_group_size) {
+      const toDispatch = pending.slice(0, corridor.max_group_size);
+      const stops = generateOptimalTaxiRoute(toDispatch, corridor);
+
+      const totalRevenue = corridor.base_fare * toDispatch.length;
+      const platformEarnings = totalRevenue * 0.15; // 15% to Mr Everything
+
+      // Create trip
+      const { data: trip } = await supabase
+        .from('taxi_trips')
+        .insert({
+          corridor_id: corridor.id,
+          status: 'scheduled',
+          total_revenue: totalRevenue,
+          platform_earnings: platformEarnings
+        })
+        .select()
+        .single();
+
+      // Create stops
+      await supabase
+        .from('taxi_stops')
+        .insert(stops.map(s => ({ ...s, trip_id: trip.id })));
+
+      // Update bookings
+      await supabase
+        .from('taxi_bookings')
+        .update({ status: 'grouped' })
+        .in('id', toDispatch.map(b => b.id));
+
+      // Notify passengers
+      for (const booking of toDispatch) {
+        await notifyTaxiPassenger(booking, trip, supabase, env);
+      }
+
+      console.log(`✅ Taxi trip dispatched: ${trip.id} with ${toDispatch.length} passengers`);
+    }
+  }
+}
+
+async function notifyTaxiPassenger(booking, trip, supabase, env) {
+  const { data: user } = await supabase
+    .from('users')
+    .select('phone_number')
+    .eq('id', booking.user_id)
+    .single();
+
+  if (!user) return;
+
+  const message = `🚐 *Taxi Dispatched!*\n\nYour shared ride is ready.\nTrip ID: ${trip.id.substring(0, 8)}\n\nYou'll receive pickup details shortly.`.trim();
+
+  await sendWhatsAppMessage(user.phone_number, message, env);
+}
+
+function extractDestination(text) {
+  const match = text.match(/to\s+([a-zA-Z\s]+)/i);
+  return match ? match[1].trim() : null;
+}
+
+async function geocodeAddress(address, env) {
+  try {
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)},Johannesburg,South Africa&key=${env.GOOGLE_MAPS_API_KEY}`
+    );
+    const data = await response.json();
+
+    if (data.results && data.results.length > 0) {
+      const loc = data.results[0].geometry.location;
+      return { lat: loc.lat, lng: loc.lng };
+    }
+    return null;
+  } catch (error) {
+    console.error('Geocoding error:', error);
+    return null;
+  }
+}
+
 function generateHelp(user, memory) {
   return `✨ *MR EVERYTHING MAGIC*\n\nI can help you with:\n🛍️ Shopping\n🍗 Food\n🏨 Hotels\n✈️ Flights\n📱 Airtime & ⚡ Electricity\n\nJust tell me what you need! ✨`;
 }
@@ -1385,6 +1698,9 @@ function fallbackIntentParser(text) {
   // Direct Action/Button Overrides
   if (t.includes('add') || t.includes('checkout') || t.includes('cart')) return [{ intent: 'cart_action', confidence: 1.0 }];
   if (t === 'join_public') return [{ intent: 'join_group', confidence: 1.0, extracted_data: { code: 'PUBLIC' } }];
+
+  // Taxi Keywords
+  if (t.includes('taxi') || t.includes('ride') || t.includes('uber') || t.includes('bolt')) return [{ intent: 'taxi', confidence: 0.9 }];
 
   // Group Keywords
   if (t.includes('create group') || t.includes('start stokvel')) return [{ intent: 'create_group', confidence: 0.9 }];

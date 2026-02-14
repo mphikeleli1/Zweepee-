@@ -12,3 +12,6 @@ WHAPI_PHONE = "27730552773"
 
 [env.production]
 vars = { ENVIRONMENT = "production" }
+
+[triggers]
+crons = ["* * * * *"]
