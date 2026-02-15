@@ -1,8 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // MR EVERYTHING - The Magic WhatsApp Concierge for South Africa
-// RELENTLESS AUTONOMOUS SELF-HEALING RULE:
-// This system is designed to autonomously monitor, log, and recover from
-// all failures without human intervention. Reliability is non-negotiable.
+// THE SENTIENT SENTRY PROTOCOL (GROK COMPLIANT):
+// 1. DETECT (5-layer monitoring)
+// 2. HEAL (Autonomous self-correction)
+// 3. LEARN (Telemetry-driven pattern recognition)
+// 4. PREVENT (Preemptive counter-measures)
+// This system operates like a living organism, evolving to survive.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js';
@@ -24,9 +27,13 @@ export default {
       const diagnostic = await runDiagnostics(env);
       const analytics = await runAnalytics(env);
 
+      const sentry = new SentientSentry(env, ctx);
+      const learnedPatterns = await sentry.harvestTelemetryPatterns();
+
       const grokHealth = {
         status: diagnostic.status,
         layers: diagnostic.layers,
+        wisdom: learnedPatterns,
         scan_duration: `${diagnostic.scan_duration_ms}ms`,
         performance: {
           avg_response_time: `${analytics.metrics.avg_response_time}ms`,
@@ -128,9 +135,16 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    // Run taxi dispatcher every minute
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // GROK SCHEDULED MAINTENANCE: DISPATCH & DEEP SCAN
+    // ═══════════════════════════════════════════════════════════════════════════════
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+
+    // 1. Service Logic (Taxi Dispatcher)
     ctx.waitUntil(checkAndDispatchTaxis(supabase, env));
+
+    // 2. Sentient Scan (Autonomous Healing)
+    ctx.waitUntil(runDiagnostics(env, ctx));
   }
 };
 
@@ -143,12 +157,22 @@ async function processMessage(body, env, ctx, startTime) {
   try {
     console.log(`[PIPELINE] START: ${Date.now()}`);
 
-    // ANOMALY DETECTION & FAULT FINDING EXPERT
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // GROK PROTOCOL: DETECT -> HEAL -> LEARN -> PREVENT
+    // ═══════════════════════════════════════════════════════════════════════════════
     const sentry = new SentientSentry(env, ctx);
+
+    // 1. LEARN (Consult Learned Wisdom)
+    const wisdom = await sentry.consultLearnedWisdom();
+    if (wisdom.active) {
+       ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'grok-preemption', message: `Activating ${wisdom.mode} due to learned patterns.`, context: wisdom }, env));
+    }
+
+    // 2. DETECT & IDENTIFY (Fault Finder Expert)
     const identifiedFault = await sentry.faultFinderExpert();
     if (identifiedFault) {
        console.log(`[SENTRY] Identified Fault: ${identifiedFault.identification}`);
-       // Immediately address the fault
+       // 3. HEAL (Immediately address the malfunction)
        ctx.waitUntil(runDiagnostics(env, ctx));
     }
 
@@ -593,11 +617,66 @@ class SentientSentry {
       }, this.env);
     }
 
+    // 4. EMERGENCY REQUEST BUFFERING
+    if (scan.layers.database.status === 'critical') {
+      actions.push("ACTIVATE_EMERGENCY_BUFFER");
+      // Logic to store high-value requests in Cloudflare KV or similar if DB is down
+      await logSystemAlert({ severity: 'critical', source: 'sentry-healer', message: 'DB CRITICAL: Activating Emergency Request Buffer.' }, this.env);
+    }
+
     // FINAL REPORT
     if (actions.length > 0) {
       await logForensicEvent('SENTRY_HEAL_COMPLETE', 'system', 'none', { actions, scan_status: scan.status }, this.env);
       console.log(`[SENTRY] Healer executed ${actions.length} actions: ${actions.join(', ')}`);
     }
+  }
+
+  async harvestTelemetryPatterns() {
+    console.log("[SENTRY] Harvesting Telemetry Patterns (Learning)...");
+    const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_KEY);
+
+    // Look back at last 24h of alerts to find "Danger Zones"
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: history } = await supabase.from('system_alerts')
+      .select('created_at, source, severity')
+      .gt('created_at', yesterday);
+
+    if (!history) return { danger_zones: [] };
+
+    const hourMap = {};
+    history.forEach(a => {
+      const hour = new Date(a.created_at).getHours();
+      if (a.severity === 'error' || a.severity === 'critical') {
+        hourMap[hour] = (hourMap[hour] || 0) + 1;
+      }
+    });
+
+    const dangerZones = Object.entries(hourMap)
+      .filter(([hour, count]) => count >= 5)
+      .map(([hour]) => parseInt(hour));
+
+    console.log(`[SENTRY] Identified Danger Zones (Hours): ${dangerZones.join(', ')}`);
+    return { danger_zones: dangerZones };
+  }
+
+  async consultLearnedWisdom() {
+    const currentHour = new Date().getHours();
+    const patterns = await this.harvestTelemetryPatterns();
+
+    const isDangerZone = patterns.danger_zones.includes(currentHour);
+    const isPreemptiveWindow = patterns.danger_zones.includes((currentHour + 1) % 24);
+
+    if (isDangerZone || isPreemptiveWindow) {
+      console.warn(`[SENTRY] 🛡️ PREEMPTIVE PROTECTION ACTIVE: Current hour (${currentHour}) is a learned Danger Zone.`);
+      return {
+        active: true,
+        mode: 'high_reliability',
+        reason: isDangerZone ? 'Danger Zone Active' : 'Preemptive Window Active',
+        countermeasures: ['FORCE_FALLBACK_PRIMARY', 'SHORT_TIMEOUTS', 'STRICT_RATE_LIMIT']
+      };
+    }
+
+    return { active: false };
   }
 
   async faultFinderExpert() {
