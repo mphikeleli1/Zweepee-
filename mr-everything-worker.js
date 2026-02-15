@@ -55,44 +55,14 @@ export default {
       });
     }
 
-    // Webhook Auto-Setup
+    // Webhook Auto-Setup (Legacy - kept for compatibility)
     if (url.pathname === '/setup' && request.method === 'POST') {
       const adminKey = request.headers.get('x-admin-key');
       if (adminKey !== env.ADMIN_KEY) {
         return new Response('Unauthorized', { status: 401 });
       }
-
-      const webhookUrl = `https://${url.hostname}/webhook`;
-      const setupPayload = {
-        webhooks: [
-          {
-            url: webhookUrl,
-            events: [
-              { type: "messages", method: "post" },
-              { type: "statuses", method: "post" },
-              { type: "channel", method: "post" }
-            ],
-            active: true,
-            mode: "body"
-          }
-        ]
-      };
-
-      const setupRes = await fetch('https://gate.whapi.cloud/settings', {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${env.WHAPI_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(setupPayload)
-      });
-
-      const result = await setupRes.json();
-      return new Response(JSON.stringify({
-        success: setupRes.ok,
-        webhook_target: webhookUrl,
-        whapi_response: result
-      }), {
+      const result = await ensureWebhookSetup(env, url.hostname);
+      return new Response(JSON.stringify(result), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -145,8 +115,90 @@ export default {
 
     // 2. Sentient Scan (Autonomous Healing)
     ctx.waitUntil(runDiagnostics(env, ctx));
+
+    // 3. Auto-Verify Webhook (Zero Maintenance)
+    if (env.WORKER_DOMAIN) {
+      ctx.waitUntil(ensureWebhookSetup(env, env.WORKER_DOMAIN));
+    }
+
+    // 4. Daily Magic Digest (Zero Touch Reporting)
+    // Runs at 8 AM SA Time (UTC+2) -> 6 AM UTC
+    const now = new Date();
+    const isMorning = now.getUTCHours() === 6;
+    if (isMorning) {
+      ctx.waitUntil(sendDailyDigest(env));
+    }
   }
 };
+
+async function sendDailyDigest(env) {
+  try {
+    const analytics = await runAnalytics(env);
+    const diagnostic = await runDiagnostics(env);
+
+    const report = `🌅 *MR EVERYTHING DAILY DIGEST*\n\n` +
+      `📈 *BUSINESS PERFORMANCE*\n` +
+      `• Revenue: R${analytics.business.revenue.toLocaleString()}\n` +
+      `• Total Orders: ${analytics.business.total_orders}\n` +
+      `• Top Service: ${analytics.business.top_intent}\n\n` +
+      `🛠️ *SYSTEM HEALTH*\n` +
+      `• Reliability: ${analytics.metrics.reliability}%\n` +
+      `• Sentry Status: ${diagnostic.status === 'healthy' ? '✅ Online' : '⚠️ Degraded'}\n\n` +
+      `✨ Have a magical day of growth!`;
+
+    await sendAdminAlert(report, env);
+  } catch (e) {
+    console.error("Digest failed:", e);
+  }
+}
+
+async function ensureWebhookSetup(env, hostname) {
+  try {
+    const webhookUrl = `https://${hostname}/webhook`;
+
+    // Check current settings first to avoid unnecessary updates
+    const getRes = await fetch('https://gate.whapi.cloud/settings', {
+      headers: { 'Authorization': `Bearer ${env.WHAPI_TOKEN}` }
+    });
+    const current = await getRes.json();
+    const activeUrl = current.webhooks?.[0]?.url;
+
+    if (activeUrl === webhookUrl && current.webhooks?.[0]?.active) {
+      return { success: true, status: 'already_correct', url: webhookUrl };
+    }
+
+    const setupPayload = {
+      webhooks: [{
+        url: webhookUrl,
+        events: [
+          { type: "messages", method: "post" },
+          { type: "statuses", method: "post" },
+          { type: "channel", method: "post" }
+        ],
+        active: true,
+        mode: "body"
+      }]
+    };
+
+    const setupRes = await fetch('https://gate.whapi.cloud/settings', {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${env.WHAPI_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(setupPayload)
+    });
+
+    return {
+      success: setupRes.ok,
+      status: setupRes.ok ? 'updated' : 'failed',
+      url: webhookUrl,
+      whapi_response: await setupRes.json()
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 2. MESSAGE PROCESSING ORCHESTRATOR
@@ -162,10 +214,17 @@ async function processMessage(body, env, ctx, startTime) {
     // ═══════════════════════════════════════════════════════════════════════════════
     const sentry = new SentientSentry(env, ctx);
 
-    // 1. LEARN (Consult Learned Wisdom)
-    const wisdom = await sentry.consultLearnedWisdom();
+    // 1. LEARN & PREVENT (Consult Learned Wisdom)
+    // Extract context for risk analysis
+    const cartSummary = await getUserMemory(null, null); // Simplified for now, just to have a context object
+    const wisdom = await sentry.consultLearnedWisdom({ cart_total: cartSummary.cart?.reduce((s, i) => s + (i.price || 0), 0) || 0 });
+
     if (wisdom.active) {
-       ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'grok-preemption', message: `Activating ${wisdom.mode} due to learned patterns.`, context: wisdom }, env));
+       ctx.waitUntil(logSystemAlert({ severity: 'info', source: 'grok-preemption', message: `Preemptive Protection: ${wisdom.preemptive_actions.join(', ')}`, context: wisdom }, env));
+       // Apply High Reliability mode if indicated
+       if (wisdom.mode === 'high_reliability') {
+         console.warn("[SENTRY] Wisdom indicates Danger Zone. Engaging Safety Buffers.");
+       }
     }
 
     // 2. DETECT & IDENTIFY (Fault Finder Expert)
@@ -231,7 +290,7 @@ async function processMessage(body, env, ctx, startTime) {
     messageText = (messageText || '').toString();
 
     console.log(`[PIPELINE] Identifying User...`);
-    const user = await getOrCreateUser(userPhone, supabase);
+    const user = await getOrCreateUser(userPhone, supabase, env);
 
     // [PIPELINE] 1. RAW INCOMING TEXT
     console.log(`[PIPELINE] RAW_INBOUND: from=${userPhone} text="${messageText}"`);
@@ -262,10 +321,14 @@ async function processMessage(body, env, ctx, startTime) {
       intents.push({ intent: 'rate_limited', confidence: 1.0 });
     }
 
-    // 3. Admin Commands
-    if (intents.length === 0 && (messageText.trim() === '!diag' || messageText.trim() === '!stats')) {
-      const isStats = messageText.trim() === '!stats';
-      intents.push({ intent: isStats ? 'admin_stats' : 'admin_diag', confidence: 1.0 });
+    // 3. Admin Commands & Panel
+    const isAdmin = userPhone === (env.ADMIN_PHONE || '').replace('@c.us', '') || userPhone === (env.ADMIN_ALERT_NUMBER || '').replace('@c.us', '');
+    if (isAdmin) {
+      if (messageText.trim() === '!diag' || messageText.trim() === '!stats' || messageText.trim().toLowerCase() === 'admin') {
+        const intent = messageText.trim() === '!stats' ? 'admin_stats' :
+                      (messageText.trim() === '!diag' ? 'admin_diag' : 'admin_panel');
+        intents = [{ intent, confidence: 1.0 }];
+      }
     }
 
     // 4. Regular Intent Detection
@@ -635,48 +698,95 @@ class SentientSentry {
     console.log("[SENTRY] Harvesting Telemetry Patterns (Learning)...");
     const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_KEY);
 
-    // Look back at last 24h of alerts to find "Danger Zones"
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Look back at last 7 days of alerts and chat history for deep learning
+    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: history } = await supabase.from('system_alerts')
-      .select('created_at, source, severity')
-      .gt('created_at', yesterday);
+      .select('created_at, source, severity, context')
+      .gt('created_at', lastWeek);
 
-    if (!history) return { danger_zones: [] };
+    if (!history) return { danger_zones: [], traffic_waves: [], risk_patterns: [] };
 
     const hourMap = {};
+    const trafficMap = {};
     history.forEach(a => {
-      const hour = new Date(a.created_at).getHours();
+      const date = new Date(a.created_at);
+      const hour = date.getHours();
+      const day = date.getDay();
+      const key = `${day}-${hour}`;
+
       if (a.severity === 'error' || a.severity === 'critical') {
-        hourMap[hour] = (hourMap[hour] || 0) + 1;
+        hourMap[key] = (hourMap[key] || 0) + 1;
+      }
+      if (a.source === 'whapi-webhook') {
+        trafficMap[key] = (trafficMap[key] || 0) + 1;
       }
     });
 
     const dangerZones = Object.entries(hourMap)
-      .filter(([hour, count]) => count >= 5)
-      .map(([hour]) => parseInt(hour));
+      .filter(([key, count]) => count >= 5)
+      .map(([key]) => key);
 
-    console.log(`[SENTRY] Identified Danger Zones (Hours): ${dangerZones.join(', ')}`);
-    return { danger_zones: dangerZones };
+    const trafficWaves = Object.entries(trafficMap)
+      .filter(([key, count]) => count >= 10)
+      .map(([key]) => key);
+
+    console.log(`[SENTRY] Learning: ${dangerZones.length} Danger Zones, ${trafficWaves.length} Traffic Waves identified.`);
+    return { danger_zones: dangerZones, traffic_waves: trafficWaves };
   }
 
-  async consultLearnedWisdom() {
-    const currentHour = new Date().getHours();
+  async consultLearnedWisdom(context = {}) {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentDay = now.getDay();
+    const currentKey = `${currentDay}-${currentHour}`;
+    const nextKey = `${currentDay}-${(currentHour + 1) % 24}`;
+
     const patterns = await this.harvestTelemetryPatterns();
+    const wisdom = { active: false, countermeasures: [], preemptive_actions: [] };
 
-    const isDangerZone = patterns.danger_zones.includes(currentHour);
-    const isPreemptiveWindow = patterns.danger_zones.includes((currentHour + 1) % 24);
+    // 1. TEMPORAL DANGER DETECTION
+    if (patterns.danger_zones.includes(currentKey) || patterns.danger_zones.includes(nextKey)) {
+      wisdom.active = true;
+      wisdom.mode = 'high_reliability';
+      wisdom.countermeasures.push('FORCE_FALLBACK_PRIMARY', 'SHORT_TIMEOUTS');
 
-    if (isDangerZone || isPreemptiveWindow) {
-      console.warn(`[SENTRY] 🛡️ PREEMPTIVE PROTECTION ACTIVE: Current hour (${currentHour}) is a learned Danger Zone.`);
-      return {
-        active: true,
-        mode: 'high_reliability',
-        reason: isDangerZone ? 'Danger Zone Active' : 'Preemptive Window Active',
-        countermeasures: ['FORCE_FALLBACK_PRIMARY', 'SHORT_TIMEOUTS', 'STRICT_RATE_LIMIT']
-      };
+      // Pattern Match: Supabase Backup (e.g., daily at 3 AM)
+      if (currentHour === 3) {
+        wisdom.preemptive_actions.push('ENABLE_CACHE_BUFFER');
+      }
     }
 
-    return { active: false };
+    // 2. TRAFFIC WAVE PREDICTION (Grok's Weekend Patterns)
+    if (patterns.traffic_waves.includes(nextKey)) {
+      wisdom.active = true;
+      wisdom.preemptive_actions.push('SCALE_RESOURCES');
+
+      // Specific Grok rules
+      if (currentDay === 5 && currentHour >= 19) wisdom.preemptive_actions.push('PREWARM_TAXI_DISPATCHER');
+      if (currentDay === 6 && currentHour >= 1) wisdom.preemptive_actions.push('PRECACHE_RESTAURANT_MENUS');
+      if (currentDay === 0 && currentHour >= 9) wisdom.preemptive_actions.push('PRELOAD_POPULAR_GROCERIES');
+    }
+
+    // 3. VALUE-BASED RISK ANALYSIS (Grok's Payment Pattern)
+    if (context.cart_total > 500) {
+      wisdom.active = true;
+      wisdom.preemptive_actions.push('EXTEND_SESSION_TIMEOUT', 'ENABLE_RECOVERY_NUDGE');
+    }
+
+    return wisdom;
+  }
+
+  async evolve() {
+     console.log("[SENTRY] 🧬 EVOLUTION CYCLE: System adapting based on wisdom...");
+     const wisdom = await this.consultLearnedWisdom();
+     if (wisdom.active) {
+       const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_KEY);
+       // Self-modify thresholds in database
+       await supabase.from('system_config').upsert([
+         { key: 'active_reliability_mode', value: wisdom.mode || 'standard' },
+         { key: 'last_evolution_at', value: new Date().toISOString() }
+       ]);
+     }
   }
 
   async faultFinderExpert() {
@@ -737,7 +847,14 @@ async function runAnalytics(env) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function detectIntents(messageText, memory, env, ctx) {
-  // [NEW] 1. Pre-emptive Fallback Check for high-confidence keywords (Buttons/Actions)
+  return await granularMonitor('detectIntents', async () => {
+  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+
+  // 1. Circuit Breaker Check (Persistent State)
+  const { data: config } = await supabase.from('system_config').select('value, updated_at').eq('key', 'openai_circuit_breaker').maybeSingle();
+  const isCircuitOpen = config?.value === 'open' && (new Date() - new Date(config.updated_at)) < 30 * 60 * 1000;
+
+  // 2. Pre-emptive Fallback Check for high-confidence keywords (Buttons/Actions)
   const fastMatch = fallbackIntentParser(messageText);
   if (fastMatch[0].confidence >= 0.9) {
     console.log(`[BRAIN] High-confidence Fast Match: ${fastMatch[0].intent}`);
@@ -759,8 +876,8 @@ async function detectIntents(messageText, memory, env, ctx) {
 
   const brains = [];
 
-  // 1. OpenAI (PRIMARY)
-  if (env.OPENAI_API_KEY) {
+  // 1. OpenAI (PRIMARY - with Circuit Breaker)
+  if (env.OPENAI_API_KEY && !isCircuitOpen) {
     brains.push((async () => {
       try {
         const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
@@ -781,6 +898,12 @@ async function detectIntents(messageText, memory, env, ctx) {
             return intents;
           }
         }
+
+        if (response?.status === 429) {
+          console.warn("[BRAIN] OpenAI Rate Limit! Tripping Circuit Breaker.");
+          await supabase.from('system_config').upsert({ key: 'openai_circuit_breaker', value: 'open', updated_at: new Date().toISOString() });
+        }
+
         throw new Error(`OpenAI Error: ${response?.status}`);
       } catch (e) { throw e; }
     })());
@@ -831,6 +954,7 @@ async function detectIntents(messageText, memory, env, ctx) {
 
   console.log(`[BRAIN] Using Fallback Parser`);
   return fallbackIntentParser(messageText);
+  }, env);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -915,6 +1039,25 @@ const MIRAGE_REGISTRY = {
   admin_stats: { handle: async (user, text, media, data, memory, db, env) => {
     const analytics = await runAnalytics(env);
     return `📊 *BUSINESS INTELLIGENCE*\n\nReliability: ${analytics.metrics.reliability}%\nOrders: ${analytics.business.total_orders}\nRevenue: R${analytics.business.revenue}\nTop Intent: ${analytics.business.top_intent}`;
+  }},
+  admin_panel: { handle: async (user, text, media, data, memory, db, env, ctx) => {
+    await sendSecureMessage(user.phone_number,
+      `🛠️ *MR EVERYTHING ADMIN*\n\nWelcome back, Boss. What would you like to manage?`, env, {
+      path: 'admin_cmd',
+      type: 'interactive',
+      options: {
+        buttons: [
+          { id: '!diag', title: 'System Diag 🛠️' },
+          { id: '!stats', title: 'Business Stats 📊' },
+          { id: 'ADMIN_REPAIR_WEBHOOK', title: 'Repair Webhook 🔧' }
+        ]
+      }
+    }, ctx);
+    return null;
+  }},
+  ADMIN_REPAIR_WEBHOOK: { handle: async (user, text, media, data, memory, db, env) => {
+    const result = await ensureWebhookSetup(env, env.WORKER_DOMAIN || 'unknown');
+    return `🔧 *WEBHOOK REPAIR*\n\nStatus: ${result.status.toUpperCase()}\nTarget: ${result.url}\n\n${result.success ? '✅ Everything is looking magical!' : '❌ Repair failed. Check logs.'}`;
   }},
   subscription_needed: { handle: async () => `👑 *PREMIUM FEATURE*\n\nThis feature is part of Mr Everything Plus! Subscribe now for early access and zero concierge fees. 🇿🇦✨` },
 
@@ -1444,6 +1587,7 @@ async function handleLatency(user, text, media, data, memory, db, env, ctx) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function handleTaxi(user, messageText, mediaData, extractedData, memory, supabase, env, ctx) {
+  return await granularMonitor('handleTaxi', async () => {
   try {
     // Check if user shared location
     let pickupLat, pickupLng, dropoffLat, dropoffLng;
@@ -1532,6 +1676,7 @@ async function handleTaxi(user, messageText, mediaData, extractedData, memory, s
     console.error('Taxi mirage error:', error);
     return `❌ Something went wrong. Please try again.`;
   }
+  }, env);
 }
 
 async function assignTaxiCorridor(pickupLat, pickupLng, dropoffLat, dropoffLng, supabase) {
@@ -1655,6 +1800,7 @@ function generateOptimalTaxiRoute(bookings, corridor) {
 }
 
 async function checkAndDispatchTaxis(supabase, env) {
+  return await granularMonitor('checkAndDispatchTaxis', async () => {
   const { data: corridors } = await supabase
     .from('corridors')
     .select('*')
@@ -1706,6 +1852,7 @@ async function checkAndDispatchTaxis(supabase, env) {
       console.log(`✅ Taxi trip dispatched: ${trip.id} with ${toDispatch.length} passengers`);
     }
   }
+  }, env);
 }
 
 async function notifyTaxiPassenger(booking, trip, supabase, env) {
@@ -1785,7 +1932,8 @@ function generateHelp(user, memory) {
 // USER MGMT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function getOrCreateUser(phone, supabase) {
+async function getOrCreateUser(phone, supabase, env) {
+  return await granularMonitor('getOrCreateUser', async () => {
   try {
     // 1. Precise Lookup
     const { data, error } = await supabase.from('users').select('*').eq('phone_number', phone).maybeSingle();
@@ -1816,6 +1964,7 @@ async function getOrCreateUser(phone, supabase) {
     console.error(`[DB] getOrCreateUser fatal: ${e.message}`);
     return { id: null, phone_number: phone, is_fallback: true };
   }
+  }, env);
 }
 
 async function getUserMemory(userId, supabase) {
@@ -1850,6 +1999,7 @@ async function saveChatMessage(userId, role, content, supabase) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
+  return await granularMonitor('sendWhatsAppMessage', async () => {
   const cleanTo = to.toString().replace('@s.whatsapp.net', '').replace('@c.us', '');
   console.log(`[OUTBOUND] Sending Text to ${cleanTo}: "${text.substring(0, 50)}..."`);
   const res = await fetchWithRetry('https://gate.whapi.cloud/messages/text', {
@@ -1883,6 +2033,7 @@ async function sendWhatsAppMessage(to, text, env, options = {}, ctx) {
     return msgId;
   }
   return null;
+  }, env);
 }
 
 async function deleteWhatsAppMessage(msgId, env) {
@@ -2005,6 +2156,7 @@ async function granularMonitor(blockName, fn, env) {
 }
 
 async function fetchWithRetry(url, options = {}, retries = 2, timeoutMs = 10000) {
+  return await granularMonitor(`fetch:${new URL(url).hostname}`, async () => {
   let lastError = null;
   for (let i = 0; i <= retries; i++) {
     const controller = new AbortController();
@@ -2028,6 +2180,7 @@ async function fetchWithRetry(url, options = {}, retries = 2, timeoutMs = 10000)
     }
   }
   throw lastError || new Error(`Fetch failed for ${url}`);
+  });
 }
 
 function fallbackIntentParser(text) {
