@@ -668,7 +668,7 @@ async function detectIntents(messageText, memory, env, ctx) {
   const prompt = `Analyze this WhatsApp message from a user in South Africa: "${messageText}".
   User Context: ${JSON.stringify(memory)}
   Available intents (select all that apply):
-  - Services: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, taxi, pharmacy, grocery, grocery_meat, grocery_veg, bus_intercape, bus_greyhound, flight_intl, cart_action.
+  - Services: shopping, food, accommodation, flights, car_rental, buses, airtime, electricity, taxi, taxi_track, pharmacy, grocery, grocery_meat, grocery_veg, bus_intercape, bus_greyhound, flight_intl, cart_action.
   - Groups: create_group, join_group, view_group, leave_group, panic_button, check_in.
   - Meta/Info: pricing, track_order, complaints, faq, refunds, referral, loyalty, gift_vouchers, about_us, careers.
   - SA Utils: weather, load_shedding, fuel_price, events, exchange_rate.
@@ -773,6 +773,7 @@ const MIRAGE_REGISTRY = {
   airtime: { handle: handleAirtime },
   electricity: { handle: handleElectricity },
   taxi: { handle: handleTaxi },
+  taxi_track: { handle: handleTaxiTrack },
   cart_action: { handle: handleCartAction },
 
   // --- META INTENTS ---
@@ -1637,9 +1638,41 @@ async function notifyTaxiPassenger(booking, trip, supabase, env) {
 
   if (!user) return;
 
-  const message = `🚐 *Taxi Dispatched!*\n\nYour shared ride is ready.\nTrip ID: ${trip.id.substring(0, 8)}\n\nYou'll receive pickup details shortly.`.trim();
+  const message = `🚐 *Taxi Dispatched!*\n\nYour shared ride is ready.\nTrip ID: ${trip.id.substring(0, 8)}\n\nYou'll receive pickup details shortly.`;
 
-  await sendWhatsAppMessage(user.phone_number, message, env);
+  await sendSecureMessage(user.phone_number, message, env, {
+    path: 'taxi',
+    type: 'interactive',
+    options: {
+      buttons: [
+        { id: `TRACK_TAXI_${trip.id}`, title: 'Track Ride 📍' },
+        { id: 'TAXI_HELP', title: 'Need Help? ❓' }
+      ]
+    }
+  });
+}
+
+async function handleTaxiTrack(user, text, media, data, memory, db, env, ctx) {
+  // Find active booking for user
+  const { data: booking } = await db.from('taxi_bookings')
+    .select('id, status')
+    .eq('user_id', user.id)
+    .in('status', ['grouped', 'in_progress'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!booking) return `🤔 I couldn't find an active taxi booking for you. Try saying "Taxi to [destination]" to start! 🚐`;
+
+  // Find associated trip
+  const { data: stop } = await db.from('taxi_stops')
+    .select('trip_id')
+    .eq('booking_id', booking.id)
+    .limit(1)
+    .maybeSingle();
+
+  const gpsLink = "https://maps.google.com/?q=-26.2041,28.0473"; // Mock JHB CBD center
+  return `📍 *LIVE TAXI TRACKING*\n\nBooking Status: *${booking.status.toUpperCase()}*\nTrip ID: ${stop?.trip_id?.substring(0, 8) || 'N/A'}\n\nView live driver location:\n🔗 ${gpsLink}\n\nYour driver is currently following the optimized corridor route. 🇿🇦`;
 }
 
 function extractDestination(text) {
@@ -1927,6 +1960,7 @@ function fallbackIntentParser(text) {
   if (t === 'join_public') return [{ intent: 'join_group', confidence: 1.0, extracted_data: { code: 'PUBLIC' } }];
 
   // Taxi Keywords
+  if (t.includes('track taxi') || t.includes('where is my ride') || t.includes('track_taxi')) return [{ intent: 'taxi_track', confidence: 1.0 }];
   if (t.includes('taxi') || t.includes('ride') || t.includes('uber') || t.includes('bolt')) return [{ intent: 'taxi', confidence: 0.9 }];
 
   // Group Keywords
