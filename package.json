@@ -9,6 +9,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
+    "@hapi/boom": "^10.0.1",
     "@supabase/supabase-js": "2.48.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "dotenv": "^17.3.1",
