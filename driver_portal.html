@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=yes">
+  <title>Mr Everything — Driver</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+    .container { max-width: 500px; margin: 0 auto; background: white; min-height: 100vh; }
+    .header { background: #00a859; color: white; padding: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .earnings-card { background: white; margin: 16px; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .earnings-today { font-size: 32px; font-weight: bold; color: #00a859; }
+    .status-toggle { background: #f0f0f0; margin: 16px; padding: 12px; border-radius: 30px; display: flex; justify-content: space-between; }
+    .online { background: #00a859; color: white; padding: 8px 24px; border-radius: 25px; font-weight: bold; }
+    .offline { background: #ccc; color: #666; padding: 8px 24px; border-radius: 25px; }
+    .section-title { padding: 16px 16px 8px; font-weight: 600; color: #333; }
+    .trip-card { background: white; margin: 0 16px 12px; padding: 16px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-left: 4px solid; }
+    .shared { border-left-color: #00a859; }
+    .solo { border-left-color: #2196F3; }
+    .moto { border-left-color: #FF9800; }
+    .food { border-left-color: #E91E63; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 8px; }
+    .badge.shared { background: #00a859; color: white; }
+    .badge.solo { background: #2196F3; color: white; }
+    .badge.moto { background: #FF9800; color: white; }
+    .badge.food { background: #E91E63; color: white; }
+    .trip-route { font-weight: 600; margin: 8px 0; }
+    .trip-meta { color: #666; font-size: 14px; margin: 4px 0; }
+    .button { background: #00a859; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; width: 100%; margin-top: 8px; }
+    .button.secondary { background: white; color: #00a859; border: 1px solid #00a859; }
+    .active-trip { background: #e8f5e9; margin: 16px; padding: 20px; border-radius: 12px; }
+    .stop-item { display: flex; padding: 12px 0; border-bottom: 1px solid #ddd; }
+    .stop-icon { width: 30px; height: 30px; border-radius: 15px; background: #00a859; color: white; display: flex; align-items: center; justify-content: center; margin-right: 12px; }
+    .stop-icon.pickup { background: #ff4444; }
+    .stop-icon.dropoff { background: #00a859; }
+    .nav-button { background: #2196F3; color: white; border: none; padding: 8px 16px; border-radius: 6px; margin-left: auto; }
+    .earnings-history { margin: 16px; }
+    .history-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <!-- Login Screen -->
+    <div id="login-screen" style="display: none; padding: 40px 20px;">
+      <h2 style="margin-bottom: 20px;">Driver Login</h2>
+      <input type="tel" id="phone-input" placeholder="Phone number" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px;">
+      <button class="button" onclick="sendOTP()">Send Code</button>
+      <div id="otp-section" style="display: none; margin-top: 20px;">
+        <input type="text" id="otp-input" placeholder="Enter OTP" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px;">
+        <button class="button" onclick="verifyOTP()">Login</button>
+      </div>
+    </div>
+
+
+    <!-- Main Dashboard -->
+    <div id="dashboard" style="display: none;">
+      <div class="header">
+        <div>
+          <div style="font-size: 20px; font-weight: bold;">Mr Everything</div>
+          <div style="font-size: 12px; opacity: 0.9;">Driver Portal</div>
+        </div>
+        <button onclick="logout()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 16px; border-radius: 6px;">Logout</button>
+      </div>
+
+
+      <div class="earnings-card">
+        <div style="color: #666; font-size: 14px;">Today's Earnings</div>
+        <div class="earnings-today" id="today-earnings">R0</div>
+        <div style="color: #666; font-size: 14px; margin-top: 8px;" id="trip-count">0 trips completed</div>
+      </div>
+
+
+      <div class="status-toggle">
+        <button class="offline" id="offline-btn" onclick="goOffline()">Offline</button>
+        <button class="online" id="online-btn" onclick="goOnline()">Online</button>
+      </div>
+
+
+      <div class="section-title">Available Trips</div>
+      <div id="available-trips"></div>
+
+
+      <div id="active-trip-section" style="display: none;">
+        <div class="section-title">Your Active Trip</div>
+        <div class="active-trip" id="active-trip"></div>
+      </div>
+
+
+      <div class="section-title" style="margin-top: 20px;">Earnings History</div>
+      <div class="earnings-history" id="earnings-history"></div>
+    </div>
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_KEY = 'YOUR_SUPABASE_KEY';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let currentDriver = null;
+    let activeTrip = null;
+
+
+    // Initialize
+    async function init() {
+      const session = await supabase.auth.getSession();
+      if (session.data.session) {
+        currentDriver = session.data.session.user;
+        showDashboard();
+        loadTrips();
+        subscribeToUpdates();
+      } else {
+        showLogin();
+      }
+    }
+
+
+    function showLogin() {
+      document.getElementById('login-screen').style.display = 'block';
+      document.getElementById('dashboard').style.display = 'none';
+    }
+
+
+    function showDashboard() {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+    }
+
+
+    async function sendOTP() {
+      const phone = document.getElementById('phone-input').value;
+      const { error } = await supabase.auth.signInWithOtp({ phone });
+      if (error) {
+        alert('Error: ' + error.message);
+      } else {
+        document.getElementById('otp-section').style.display = 'block';
+      }
+    }
+
+
+    async function verifyOTP() {
+      const phone = document.getElementById('phone-input').value;
+      const token = document.getElementById('otp-input').value;
+      const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' });
+      if (error) {
+        alert('Error: ' + error.message);
+      } else {
+        currentDriver = data.user;
+        showDashboard();
+        loadTrips();
+        subscribeToUpdates();
+      }
+    }
+
+
+    async function logout() {
+      await supabase.auth.signOut();
+      currentDriver = null;
+      showLogin();
+    }
+
+
+    async function goOnline() {
+      await fetch('/api/driver/toggle-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driver_id: currentDriver.id, status: 'online' })
+      });
+      document.getElementById('online-btn').classList.add('online');
+      document.getElementById('offline-btn').classList.remove('offline');
+      loadTrips();
+    }
+
+
+    async function goOffline() {
+      await fetch('/api/driver/toggle-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driver_id: currentDriver.id, status: 'offline' })
+      });
+      document.getElementById('offline-btn').classList.add('offline');
+      document.getElementById('online-btn').classList.remove('online');
+    }
+
+
+    async function loadTrips() {
+      const response = await fetch(`/api/driver/trips?driver_id=${currentDriver.id}`);
+      const data = await response.json();
+
+      // Update earnings
+      document.getElementById('today-earnings').textContent = `R${data.todayEarnings}`;
+      document.getElementById('trip-count').textContent = `${data.tripCount} trips completed`;
+
+      // Display available trips
+      const tripsHTML = data.availableTrips.map(trip => `
+        <div class="trip-card ${trip.type}">
+          <span class="badge ${trip.type}">${trip.type.toUpperCase()}</span>
+          <div class="trip-route">${trip.passengers || 1} ${trip.type === 'food' ? 'orders' : 'passengers'} | Earn R${trip.driverEarnings}</div>
+          <div class="trip-meta">Route: ${trip.route}</div>
+          <div class="trip-meta">Distance: ${trip.distance}km | ~${trip.duration} min</div>
+          <button class="button" onclick="acceptTrip('${trip.id}')">Accept Trip</button>
+        </div>
+      `).join('');
+      document.getElementById('available-trips').innerHTML = tripsHTML || '<p style="padding: 16px; color: #666;">No trips available</p>';
+
+      // Display active trip
+      if (data.activeTrip) {
+        activeTrip = data.activeTrip;
+        displayActiveTrip();
+      }
+
+      // Display earnings history
+      const historyHTML = data.recentTrips.map(trip => `
+        <div class="history-item">
+          <div>
+            <span class="badge ${trip.type}">${trip.type.toUpperCase()}</span>
+            Trip #${trip.id.substring(0, 6)} | ${trip.passengers || 1} ${trip.type === 'food' ? 'orders' : 'pax'}
+          </div>
+          <div style="font-weight: bold;">R${trip.earnings}</div>
+        </div>
+      `).join('');
+      document.getElementById('earnings-history').innerHTML = historyHTML;
+    }
+
+
+    async function acceptTrip(tripId) {
+      const response = await fetch('/api/driver/accept-trip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driver_id: currentDriver.id, trip_id: tripId })
+      });
+      if (response.ok) {
+        loadTrips();
+      }
+    }
+
+
+    function displayActiveTrip() {
+      document.getElementById('active-trip-section').style.display = 'block';
+
+      const nextStop = activeTrip.stops.find(s => s.status === 'pending');
+      const remainingStops = activeTrip.stops.filter(s => s.status === 'pending' && s.id !== nextStop.id);
+
+      const html = `
+        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+          <span class="badge ${activeTrip.type}">${activeTrip.type.toUpperCase()}</span>
+          Trip #${activeTrip.id.substring(0, 6)} | Earning R${activeTrip.driverEarnings}
+        </div>
+
+        <div style="background: white; padding: 16px; border-radius: 8px; margin-bottom: 12px;">
+          <div style="font-weight: bold; margin-bottom: 8px;">NEXT STOP</div>
+          <div class="stop-icon ${nextStop.type}">${nextStop.sequence_order}</div>
+          <div style="margin-left: 42px;">
+            <div style="font-weight: 600;">${nextStop.type === 'pickup' ? '🔴 PICKUP' : '🟢 DROPOFF'}</div>
+            <div>${nextStop.name || 'Customer'}</div>
+            <div style="color: #666; font-size: 14px;">${nextStop.address}</div>
+            <button class="nav-button" onclick="navigate(${nextStop.lat}, ${nextStop.lng})">Navigate</button>
+            <button class="button" onclick="completeStop('${nextStop.id}')" style="margin-top: 8px;">Complete Stop</button>
+          </div>
+        </div>
+
+        ${remainingStops.length > 0 ? `
+          <div style="background: white; padding: 16px; border-radius: 8px;">
+            <div style="font-weight: bold; margin-bottom: 8px;">REMAINING STOPS</div>
+            ${remainingStops.map(stop => `
+              <div class="stop-item">
+                <div class="stop-icon ${stop.type}">${stop.sequence_order}</div>
+                <div>
+                  <div>${stop.type === 'pickup' ? '🔴 Pickup' : '🟢 Dropoff'}: ${stop.name || 'Customer'}</div>
+                  <div style="color: #666; font-size: 12px;">${stop.address}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      `;
+
+      document.getElementById('active-trip').innerHTML = html;
+    }
+
+
+    function navigate(lat, lng) {
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+    }
+
+
+    async function completeStop(stopId) {
+      const response = await fetch('/api/driver/complete-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driver_id: currentDriver.id, stop_id: stopId })
+      });
+      if (response.ok) {
+        loadTrips();
+      }
+    }
+
+
+    function subscribeToUpdates() {
+      supabase
+        .channel('driver-updates')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'trips',
+          filter: `driver_id=eq.${currentDriver.id}`
+        }, () => {
+          loadTrips();
+        })
+        .subscribe();
+    }
+
+
+    // Initialize on load
+    init();
+    setInterval(loadTrips, 10000); // Refresh every 10 seconds
+  </script>
+</body>
+</html>

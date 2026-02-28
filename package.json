@@ -1,15 +1,24 @@
 {
-  "name": "zweepee-server",
+  "name": "mr-everything",
   "version": "1.0.0",
-  "description": "Express server for Chakra Chat + Gemini integration",
-  "main": "server.js",
+  "description": "Mr Everything Magic WhatsApp Concierge",
+  "type": "module",
+  "main": "mr-everything-worker.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "body-parser": "^1.20.2",
-    "node-fetch": "^2.6.7"
+    "@hapi/boom": "^10.0.1",
+    "@supabase/supabase-js": "2.48.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "dotenv": "^17.3.1",
+    "node-fetch": "^2.7.0",
+    "pino": "^8.21.0",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "wrangler": "3.109.0"
   },
   "engines": {
     "node": ">=18"
