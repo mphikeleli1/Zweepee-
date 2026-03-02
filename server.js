@@ -20,6 +20,9 @@ import fs from 'fs';
 
 dotenv.config();
 
+const TRADESAFE_API_KEY = process.env.TRADESAFE_API_KEY;
+const TRADESAFE_SANDBOX_URL = 'https://api.tradesafe.co.za/v1'; // Sandbox for now
+
 const logger = pino({ level: 'info' });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -29,22 +32,35 @@ const logger = pino({ level: 'info' });
 class SentientSentry {
     constructor() {
         this.startTime = Date.now();
+        this.wisdom = {
+            "429": "OpenAI Rate Limit - Enable Circuit Breaker",
+            "ECONNREFUSED": "Database Offline - Check Supabase Status",
+            "auth_info_baileys": "WhatsApp Session Expired - Needs Re-auth"
+        };
     }
 
     async performScan(sock) {
+        console.log("[SENTRY] Initiating Layered Deep Scan...");
         const results = {
             infrastructure: this.checkInfra(),
             database: await this.checkDB(),
-            ai: await this.checkAI(),
-            whatsapp: sock?.user ? 'healthy' : 'disconnected'
+            communication: sock?.user ? 'healthy' : 'disconnected',
+            ai_brain: await this.checkAI(),
+            application: this.checkApplication()
         };
 
-        const healthy = Object.values(results).every(v => v === 'healthy' || (v && v.status === 'healthy'));
-        return { status: healthy ? 'healthy' : 'degraded', layers: results, timestamp: new Date().toISOString() };
+        const healthy = Object.values(results).every(v => v === 'healthy');
+        const status = healthy ? 'healthy' : 'degraded';
+
+        if (status === 'degraded') {
+            await this.autonomousHealer(results);
+        }
+
+        return { status, layers: results, timestamp: new Date().toISOString() };
     }
 
     checkInfra() {
-        const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'OPENAI_API_KEY'];
+        const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'OPENAI_API_KEY', 'TRADESAFE_API_KEY'];
         const missing = required.filter(k => !process.env[k]);
         return missing.length === 0 ? 'healthy' : `missing: ${missing.join(',')}`;
     }
@@ -52,16 +68,62 @@ class SentientSentry {
     async checkDB() {
         try {
             const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-            const { error } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
-            return error ? 'degraded' : 'healthy';
+            const tables = ['profiles', 'bookings', 'trips', 'payments', 'system_alerts', 'system_config', 'forensic_logs'];
+            for (const table of tables) {
+                const { error } = await supabase.from(table).select('count', { count: 'exact', head: true });
+                if (error) return `fault:${table}`;
+            }
+            return 'healthy';
         } catch (e) { return 'offline'; }
     }
 
     async checkAI() {
         try {
-            const res = await fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` } });
+            const res = await fetch('https://api.openai.com/v1/models', {
+                headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` }
+            });
             return res.ok ? 'healthy' : 'degraded';
         } catch (e) { return 'unreachable'; }
+    }
+
+    checkApplication() {
+        const required = ['shopping', 'food', 'taxi', 'cart_action', 'greeting', 'help'];
+        const missing = required.filter(m => !MIRAGE_REGISTRY[m]);
+        return missing.length === 0 ? 'healthy' : `missing: ${missing.join(',')}`;
+    }
+
+    async harvestTelemetryPatterns() {
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+        const { data } = await supabase.from('system_alerts').select('message, source').limit(50).order('created_at', { ascending: false });
+        const patterns = {};
+        data?.forEach(alert => {
+            const key = `${alert.source}:${alert.message.substring(0, 20)}`;
+            patterns[key] = (patterns[key] || 0) + 1;
+        });
+        return patterns;
+    }
+
+    async faultFinderExpert() {
+        const patterns = await this.harvestTelemetryPatterns();
+        for (const [key, count] of Object.entries(patterns)) {
+            if (count >= 3) return { identification: `Repeating Fault: ${key}`, count };
+        }
+        return null;
+    }
+
+    async autonomousHealer(scanResults) {
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+        // Healing Rule 1: Circuit Breaker for AI
+        if (scanResults.ai_brain === 'degraded') {
+            await supabase.from('system_config').upsert({ key: 'openai_circuit_breaker', value: 'open', updated_at: new Date().toISOString() });
+            console.log("[HEALER] Circuit Breaker Opened due to AI degradation.");
+        }
+
+        // Healing Rule 2: Alert Admin on Critical
+        if (scanResults.database === 'offline' || scanResults.infrastructure.includes('missing')) {
+            await logSystemAlert({ severity: 'critical', source: 'healer', message: `CRITICAL FAILURE: DB=${scanResults.database} INFRA=${scanResults.infrastructure}` });
+        }
     }
 }
 
@@ -71,11 +133,14 @@ class SentientSentry {
 
 function startHealthServer(sentry, sock) {
     http.createServer(async (req, res) => {
-        if (req.url === '/health') {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+        if (url.pathname === '/health') {
             const scan = await sentry.performScan(sock);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(scan));
-        } else if (req.url === '/driver' || req.url === '/') {
+        } else if (url.pathname === '/driver' || url.pathname === '/') {
             try {
                 let html = fs.readFileSync('./driver_portal.html', 'utf8');
                 // 🛡️ SECURITY FIX: Only inject ANON_KEY, never SERVICE_KEY to client
@@ -87,6 +152,106 @@ function startHealthServer(sentry, sock) {
                 res.writeHead(500);
                 res.end("Error loading driver portal");
             }
+        } else if (url.pathname === '/api/driver/toggle-status' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const data = JSON.parse(body);
+                await supabase.from('profiles').update({ driver_status: data.status }).eq('id', data.driver_id);
+                res.writeHead(200); res.end(JSON.stringify({ success: true }));
+            });
+        } else if (url.pathname === '/api/driver/trips' && req.method === 'GET') {
+            const driverId = url.searchParams.get('driver_id');
+            const { data: available } = await supabase.from('trips').select('*').eq('status', 'pending');
+            const { data: active } = await supabase.from('trips').select('*, stops(*)').eq('driver_id', driverId).in('status', ['accepted', 'active']).maybeSingle();
+
+            // Add booking_id to active trip for TradeSafe actions
+            if (active && active.stops?.length > 0) {
+                active.booking_id = active.stops[0].booking_id;
+            }
+
+            const { data: profile } = await supabase.from('profiles').select('total_trips').eq('id', driverId).single();
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                todayEarnings: 0,
+                tripCount: profile?.total_trips || 0,
+                availableTrips: available || [],
+                activeTrip: active || null,
+                recentTrips: []
+            }));
+        } else if (url.pathname === '/api/driver/accept-trip' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const data = JSON.parse(body);
+                // 9.1 Hourly Limit Check
+                const { allowed, reason } = await canAssignTrip(data.driver_id, supabase);
+                if (!allowed) {
+                    res.writeHead(403);
+                    return res.end(JSON.stringify({ success: false, reason }));
+                }
+                await supabase.from('trips').update({ driver_id: data.driver_id, status: 'accepted', accepted_at: new Date().toISOString() }).eq('id', data.trip_id);
+                res.writeHead(200); res.end(JSON.stringify({ success: true }));
+            });
+        } else if (url.pathname === '/api/driver/complete-stop' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const data = JSON.parse(body);
+                await supabase.from('stops').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', data.stop_id);
+                res.writeHead(200); res.end(JSON.stringify({ success: true }));
+            });
+        } else if (url.pathname === '/api/driver/cancel-trip' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const data = JSON.parse(body);
+                const result = await cancelTrip(data.driver_id, data.trip_id, data.reason, supabase);
+                res.writeHead(200); res.end(JSON.stringify({ success: true, ...result }));
+            });
+        } else if (url.pathname === '/api/driver/update-location' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const data = JSON.parse(body); // { driver_id, lat, lng }
+                const timestamp = new Date().toISOString();
+                const { valid, reason } = await validateGPS(data.driver_id, { lat: data.lat, lng: data.lng }, timestamp, supabase);
+                if (valid) {
+                    await supabase.from('driver_locations').insert([{ driver_id: data.driver_id, lat: data.lat, lng: data.lng, updated_at: timestamp }]);
+                }
+                res.writeHead(200); res.end(JSON.stringify({ success: valid, reason }));
+            });
+        } else if (url.pathname === '/webhooks/tradesafe' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const event = JSON.parse(body);
+                await supabase.from('tradesafe_webhook_log').insert([{ payload: event }]);
+                if (event.type === 'payment.held') {
+                    await supabase.from('payments').update({ tradesafe_transaction_id: event.transaction_id, escrow_status: 'held', held_at: new Date().toISOString() }).eq('booking_id', event.reference);
+                } else if (event.type === 'payment.released') {
+                    await supabase.from('payments').update({ escrow_status: 'released', released_at: new Date().toISOString() }).eq('booking_id', event.reference);
+                    await supabase.from('trips').update({ status: 'completed' }).eq('booking_id', event.reference);
+                }
+                res.writeHead(200); res.end(JSON.stringify({ received: true }));
+            });
+        } else if (url.pathname === '/api/driver/confirm-pickup' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const data = JSON.parse(body);
+                await confirmPickup(data.booking_id);
+                res.writeHead(200); res.end(JSON.stringify({ success: true }));
+            });
+        } else if (url.pathname === '/api/driver/report-no-show' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const data = JSON.parse(body);
+                const result = await reportNoShow(data.booking_id, data.driver_id);
+                res.writeHead(200); res.end(JSON.stringify({ success: true, ...result }));
+            });
         } else {
             res.writeHead(404);
             res.end();
@@ -561,6 +726,122 @@ async function sendSecureMessage(sock, to, text, options = {}) {
     }
 }
 
+// 3.1 Create Transaction (When Passenger Books)
+async function createTradeSafeTransaction(bookingId, passenger, driver, bookingDetails) {
+    return await granularMonitor('createTradeSafeTransaction', async () => {
+        const platformFee = calculateFare(bookingDetails.type, bookingDetails.distance)?.platform_fee || 5;
+        const totalFare = calculateFare(bookingDetails.type, bookingDetails.distance)?.fare || 50;
+
+        const res = await fetchWithRetry(`${TRADESAFE_SANDBOX_URL}/transactions`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${TRADESAFE_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                buyer: {
+                    name: passenger.full_name || 'Passenger',
+                    email: passenger.email || `${passenger.phone_number}@mreverything.co.za`,
+                    phone: passenger.phone_number
+                },
+                seller: {
+                    id: driver?.id || 'SYSTEM',
+                    name: driver?.full_name || 'Mr Everything Driver',
+                    bank_details: driver?.driver_bank_account || {}
+                },
+                marketplace: {
+                    commission_amount: platformFee
+                },
+                transaction: {
+                    title: `Trip #${bookingId.substring(0, 8)}`,
+                    amount: totalFare,
+                    description: `${bookingDetails.distance}km Ride`,
+                    reference: bookingId
+                },
+                payment_methods: ['ozow', 'eft', 'card'],
+                redirect_urls: {
+                    success: 'https://mreverything.co.za/payment/success',
+                    cancel: 'https://mreverything.co.za/payment/cancel',
+                    notify: 'https://mreverything.co.za/webhooks/tradesafe'
+                }
+            })
+        });
+
+        const data = await res.json();
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+        await supabase.from('payments').insert([{
+            booking_id: bookingId,
+            tradesafe_transaction_id: data.transaction_id,
+            amount: totalFare,
+            platform_fee: platformFee,
+            status: 'pending'
+        }]);
+
+        return { payment_url: data.payment_url, transaction_id: data.transaction_id };
+    });
+}
+
+// 3.3 Release on Passenger Confirmation
+async function confirmPickup(bookingId) {
+    return await granularMonitor('confirmPickup', async () => {
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+        const { data: payment } = await supabase.from('payments').select('tradesafe_transaction_id').eq('booking_id', bookingId).single();
+
+        await fetchWithRetry(`${TRADESAFE_SANDBOX_URL}/transactions/${payment.tradesafe_transaction_id}/release`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${TRADESAFE_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                reason: 'Passenger confirmed pickup',
+                release_immediately: true
+            })
+        });
+
+        await supabase.from('payments').update({ release_method: 'passenger_confirmed', released_at: new Date().toISOString() }).eq('booking_id', bookingId);
+        return { released: true };
+    });
+}
+
+// 3.4 No-Show Release
+async function reportNoShow(bookingId, driverId) {
+    return await granularMonitor('reportNoShow', async () => {
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+        const { data: trip } = await supabase.from('trips').select('*').eq('driver_id', driverId).in('status', ['accepted', 'active']).maybeSingle();
+
+        if (!trip) throw new Error('No active trip found for driver');
+
+        // Check if wait time is > 3 mins from acceptance
+        if (Date.now() - new Date(trip.accepted_at).getTime() < 180000) {
+            throw new Error('Must wait 3 minutes before reporting no-show');
+        }
+
+        const { data: payment } = await supabase.from('payments').select('tradesafe_transaction_id').eq('booking_id', bookingId).single();
+
+        await fetchWithRetry(`${TRADESAFE_SANDBOX_URL}/transactions/${payment.tradesafe_transaction_id}/release`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${TRADESAFE_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                reason: 'Passenger no-show',
+                splits: [
+                    { receiver: driverId, amount: 3000 }, // R30 compensation (cents)
+                    { receiver: 'platform', amount: 500 }   // R5 platform fee
+                ]
+            })
+        });
+
+        await supabase.from('bookings').update({ status: 'cancelled', cancellation_reason: 'no_show' }).eq('id', bookingId);
+        await supabase.from('payments').update({ release_method: 'no_show', released_at: new Date().toISOString() }).eq('booking_id', bookingId);
+
+        return { released: true, driver_compensation: 3000 };
+    });
+}
+
 async function routeMessage(user, intents, messageText, sock, from) {
     const intent = intents[0]?.intent || 'help';
     const data = intents[0]?.extracted_data || {};
@@ -622,21 +903,21 @@ const MIRAGE_REGISTRY = {
     }},
     cart_action: { handle: async (user, text, data, memory, db, sock, from) => {
         if (text.toLowerCase().includes('checkout')) {
-            return `💳 *MR EVERYTHING CHECKOUT*\n\nYour total is R49.00\n\nPay securely via PayFast:\n🔗 https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=10000100&amount=49.00`;
+            return `💳 *MR EVERYTHING CHECKOUT*\n\nYour total is R49.00\n\nSecure payment via TradeSafe Escrow. No money touches us until you're happy! ✨`;
         }
         return `🛒 *YOUR CART*\n\nType "CHECKOUT" to proceed to payment. ✨`;
     }},
     greeting: { handle: async (user) => {
-        if (user.preferred_name) return `👋Welcome back ${user.preferred_name}. Great to see you again! How may i assist?✨`;
+        if (user.full_name) return `👋Welcome back ${user.full_name}. Great to see you again! How may i assist?✨`;
         return `👋Hi! I'm Mr Everything, your personal assistant. How may i help you today?✨`;
     }},
     help: { handle: async () => `✨ *MR EVERYTHING MAGIC*\n\nI can help with:\n🛍️ Shopping\n🍗 Food\n🏨 Hotels\n✈️ Flights\n📱 Airtime & ⚡ Electricity\n\nJust tell me what you need! ✨` },
     unknown_input: { handle: async (user, text) => {
-        if (!user.full_name) {
-            const name = text.trim().substring(0, 50);
-            const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-            await db.from('profiles').update({ full_name: name }).eq('id', user.id);
-            return `✨ Nice to meet you, *${name}*! I've saved that to my memory.\n\nWhat would you like to do first? 🇿🇦`;
+        if (!user.full_name && text.length > 2 && text.length < 50) {
+            const name = text.trim();
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+            await supabase.from('profiles').update({ full_name: name }).eq('id', user.id);
+            return `✨ Nice to meet you, *${name}*! I've saved that to my memory.\n\nWhat would you like to do first? I can help with shopping, food, or travel! 🇿🇦`;
         }
         return `🤔 *MR EVERYTHING IS PUZZLED*\n\nI didn't quite catch that. Try asking for food, shopping, or travel. ✨`;
     }},
@@ -652,9 +933,57 @@ const MIRAGE_REGISTRY = {
         });
         return null;
     }},
-    RIDE_SHARED: { handle: async () => `🚐 *SHARED SEDAN*\n\nGreat choice! Groups of 3-4 passengers. Pricing:\n• SHORT: R35\n• MEDIUM: R50\n• LONG: R70\n\nWhere are we picking you up? (Send location pin 📍)` },
-    RIDE_SOLO: { handle: async () => `🚗 *SOLO SEDAN*\n\nPrivate ride just for you. Pricing:\n• SHORT: R89\n• MEDIUM: R139\n• LONG: R189\n\nPlease send your destination address:` },
-    RIDE_MOTO: { handle: async () => `🏍️ *MOTO RIDE*\n\nSkip the traffic! Pricing:\n• SHORT: R25\n• MEDIUM: R35\n• LONG: R45\n\nSend your location to begin. 📍` },
+    RIDE_SHARED: { handle: async (user, text, data, memory, db, sock, from) => {
+        const { data: booking } = await db.from('bookings').insert([{
+            user_id: user.id,
+            booking_type: 'shared_sedan',
+            distance_km: 10,
+            fare: 35,
+            platform_fee: 5
+        }]).select().single();
+
+        const { payment_url } = await createTradeSafeTransaction(booking.id, user, null, { type: 'shared_sedan', distance: 10 });
+
+        await sendSecureMessage(sock, from, `🚐 *SHARED SEDAN*\n\nGreat choice! Groups of 3-4 passengers. Pricing:\n• SHORT: R35\n• MEDIUM: R50\n• LONG: R70\n\nPlease pay to secure your seat:`, {
+            type: 'interactive',
+            buttons: [{ id: 'PAY_NOW', title: 'Pay R35 (Ozow) 💳' }]
+        });
+        return `🔗 Secure Payment Link:\n${payment_url}`;
+    }},
+    RIDE_SOLO: { handle: async (user, text, data, memory, db, sock, from) => {
+        const { data: booking } = await db.from('bookings').insert([{
+            user_id: user.id,
+            booking_type: 'solo_sedan',
+            distance_km: 10,
+            fare: 89,
+            platform_fee: 10
+        }]).select().single();
+
+        const { payment_url } = await createTradeSafeTransaction(booking.id, user, null, { type: 'solo_sedan', distance: 10 });
+
+        return `🚗 *SOLO SEDAN*\n\nPrivate ride just for you. Please pay R89 via TradeSafe to dispatch your driver:\n\n🔗 ${payment_url}`;
+    }},
+    RIDE_MOTO: { handle: async (user, text, data, memory, db, sock, from) => {
+        const { data: booking } = await db.from('bookings').insert([{
+            user_id: user.id,
+            booking_type: 'moto_ride',
+            distance_km: 10,
+            fare: 25,
+            platform_fee: 3
+        }]).select().single();
+
+        const { payment_url } = await createTradeSafeTransaction(booking.id, user, null, { type: 'moto_ride', distance: 10 });
+
+        return `🏍️ *MOTO RIDE*\n\nSkip the traffic! Pricing from R25. Secure your ride here:\n\n🔗 ${payment_url}`;
+    }},
+    CONFIRM_IN_TAXI: { handle: async (user, text, data, memory, db, sock, from) => {
+        const { data: booking } = await db.from('bookings').select('id').eq('user_id', user.id).eq('status', 'accepted').maybeSingle();
+        if (booking) {
+            await confirmPickup(booking.id);
+            return `✅ *PICKUP CONFIRMED*\n\nFunds released to your driver via TradeSafe. Enjoy your ride! 🇿🇦`;
+        }
+        return `🤔 I couldn't find an active ride to confirm.`;
+    }},
     pricing: { handle: async () => `💰 *MR EVERYTHING PRICING*\n\nOur concierge fee is typically R49 per order. Prices are fetched live from top SA retailers. ✨` },
     track_order: { handle: async () => `📦 *ORDER TRACKING*\n\nI'm checking your recent orders... One moment! 🏃‍♂️💨` },
     complaints: { handle: async () => `🛠️ *SUPPORT*\n\nI'm sorry! I've flagged this for my human team. One of them will reach out to you shortly. 🇿🇦` },

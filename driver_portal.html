@@ -97,7 +97,7 @@
   <script>
     const SUPABASE_URL = 'YOUR_SUPABASE_URL';
     const SUPABASE_KEY = 'YOUR_SUPABASE_KEY';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let currentDriver = null;
     let activeTrip = null;
@@ -105,7 +105,7 @@
 
     // Initialize
     async function init() {
-      const session = await supabase.auth.getSession();
+      const session = await supabaseClient.auth.getSession();
       if (session.data.session) {
         currentDriver = session.data.session.user;
         showDashboard();
@@ -131,7 +131,7 @@
 
     async function sendOTP() {
       const phone = document.getElementById('phone-input').value;
-      const { error } = await supabase.auth.signInWithOtp({ phone });
+      const { error } = await supabaseClient.auth.signInWithOtp({ phone });
       if (error) {
         alert('Error: ' + error.message);
       } else {
@@ -143,7 +143,7 @@
     async function verifyOTP() {
       const phone = document.getElementById('phone-input').value;
       const token = document.getElementById('otp-input').value;
-      const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' });
+      const { data, error } = await supabaseClient.auth.verifyOtp({ phone, token, type: 'sms' });
       if (error) {
         alert('Error: ' + error.message);
       } else {
@@ -156,7 +156,7 @@
 
 
     async function logout() {
-      await supabase.auth.signOut();
+      await supabaseClient.auth.signOut();
       currentDriver = null;
       showLogin();
     }
@@ -258,6 +258,11 @@
             <div style="color: #666; font-size: 14px;">${nextStop.address}</div>
             <button class="nav-button" onclick="navigate(${nextStop.lat}, ${nextStop.lng})">Navigate</button>
             <button class="button" onclick="completeStop('${nextStop.id}')" style="margin-top: 8px;">Complete Stop</button>
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <button class="button" onclick="confirmPickup('${activeTrip.booking_id}')" style="flex: 1; background: #2196F3;">Confirm Pickup</button>
+                <button class="button" onclick="reportNoShow('${activeTrip.booking_id}')" style="flex: 1; background: #f44336;">No-Show</button>
+            </div>
+            <button class="button secondary" onclick="cancelActiveTrip()" style="margin-top: 8px; border-color: #ff4444; color: #ff4444;">Cancel Trip</button>
           </div>
         </div>
 
@@ -297,9 +302,50 @@
       }
     }
 
+    async function confirmPickup(bookingId) {
+        const response = await fetch('/api/driver/confirm-pickup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ booking_id: bookingId })
+        });
+        if (response.ok) alert("Pickup confirmed. Funds released!");
+    }
+
+    async function reportNoShow(bookingId) {
+        const response = await fetch('/api/driver/report-no-show', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ booking_id: bookingId, driver_id: currentDriver.id })
+        });
+        const data = await response.json();
+        if (response.ok) alert(`No-show reported. Compensation: R${data.driver_compensation/100}`);
+        else alert("Error: " + data.error);
+    }
+
+    async function cancelActiveTrip() {
+      if (!activeTrip) return;
+      const reason = prompt("Enter cancellation reason (vehicle_breakdown, medical, unsafe_destination):");
+      if (!reason) return;
+
+      const response = await fetch('/api/driver/cancel-trip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driver_id: currentDriver.id, trip_id: activeTrip.id, reason })
+      });
+
+      const data = await response.json();
+      if (data.penalty) {
+        alert(`Trip cancelled with penalty. Suspension: ${data.suspension} hours.`);
+      } else {
+        alert("Trip cancelled successfully.");
+      }
+      activeTrip = null;
+      loadTrips();
+    }
+
 
     function subscribeToUpdates() {
-      supabase
+      supabaseClient
         .channel('driver-updates')
         .on('postgres_changes', {
           event: '*',
@@ -313,9 +359,30 @@
     }
 
 
+    function startGPSTracking() {
+      if ("geolocation" in navigator) {
+        setInterval(() => {
+          navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            await fetch('/api/driver/update-location', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                driver_id: currentDriver.id,
+                lat: latitude,
+                lng: longitude
+              })
+            });
+          });
+        }, 30000); // Update every 30 seconds
+      }
+    }
+
+
     // Initialize on load
     init();
     setInterval(loadTrips, 10000); // Refresh every 10 seconds
+    startGPSTracking();
   </script>
 </body>
 </html>
