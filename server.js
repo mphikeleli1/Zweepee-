@@ -2,15 +2,6 @@
 // MR EVERYTHING - Baileys-Powered Autonomous WhatsApp Concierge
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import {
-    makeWASocket,
-    useMultiFileAuthState,
-    DisconnectReason,
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore
-} from '@whiskeysockets/baileys';
-import { Boom } from '@hapi/boom';
-import qrcode from 'qrcode-terminal';
 import pino from 'pino';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
@@ -22,6 +13,9 @@ dotenv.config();
 
 const TRADESAFE_API_KEY = process.env.TRADESAFE_API_KEY;
 const TRADESAFE_SANDBOX_URL = 'https://api.tradesafe.co.za/v1'; // Sandbox for now
+
+const WAHA_URL = process.env.WAHA_URL || 'http://localhost:3000';
+const WAHA_SESSION = 'default';
 
 const logger = pino({ level: 'info' });
 
@@ -39,12 +33,13 @@ class SentientSentry {
         };
     }
 
-    async performScan(sock) {
+    async performScan() {
         console.log("[SENTRY] Initiating Layered Deep Scan...");
+        const communicationStatus = await this.checkWAHA();
         const results = {
             infrastructure: this.checkInfra(),
             database: await this.checkDB(),
-            communication: sock?.user ? 'healthy' : 'disconnected',
+            communication: communicationStatus,
             ai_brain: await this.checkAI(),
             application: this.checkApplication()
         };
@@ -60,7 +55,7 @@ class SentientSentry {
     }
 
     checkInfra() {
-        const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'OPENAI_API_KEY', 'TRADESAFE_API_KEY'];
+        const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'OPENAI_API_KEY', 'TRADESAFE_API_KEY', 'WAHA_URL'];
         const missing = required.filter(k => !process.env[k]);
         return missing.length === 0 ? 'healthy' : `missing: ${missing.join(',')}`;
     }
@@ -84,6 +79,14 @@ class SentientSentry {
             });
             return res.ok ? 'healthy' : 'degraded';
         } catch (e) { return 'unreachable'; }
+    }
+
+    async checkWAHA() {
+        try {
+            const res = await fetch(`${WAHA_URL}/api/sessions/${WAHA_SESSION}`);
+            const data = await res.json();
+            return data.status === 'WORKING' ? 'healthy' : (data.status || 'degraded');
+        } catch (e) { return 'offline'; }
     }
 
     checkApplication() {
@@ -131,15 +134,47 @@ class SentientSentry {
 // HEALTH SERVER (MINIMAL)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function startHealthServer(sentry, sock) {
+function startHealthServer(sentry) {
     http.createServer(async (req, res) => {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
         if (url.pathname === '/health') {
-            const scan = await sentry.performScan(sock);
+            const scan = await sentry.performScan();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(scan));
+        } else if (url.pathname === '/qr') {
+            try {
+                const wahaRes = await fetch(`${WAHA_URL}/api/${WAHA_SESSION}/auth/qr`);
+                if (wahaRes.status === 200) {
+                    const data = await wahaRes.json();
+                    res.writeHead(200, { 'Content-Type': 'text/html' });
+                    res.end(`<html><body style="font-family:sans-serif; text-align:center; padding: 50px;">
+                        <h2>Scan to Link Mr Everything</h2>
+                        <div style="margin: 20px auto; padding: 20px; border: 1px solid #ddd; display: inline-block;">
+                            <img src="data:image/png;base64,${data.qr}" style="width: 300px;">
+                        </div>
+                        <p>Open WhatsApp > Linked Devices > Link a Device</p>
+                        <p style="color: #666; font-size: 12px;">Session: ${WAHA_SESSION}</p>
+                    </body></html>`);
+                } else {
+                    const error = await wahaRes.text();
+                    res.writeHead(200, { 'Content-Type': 'text/html' });
+                    res.end(`<html><body><h2>Session is already WORKING or error occurred.</h2><p>${error}</p></body></html>`);
+                }
+            } catch (e) {
+                res.writeHead(500); res.end("Error connecting to WAHA server");
+            }
+        } else if (url.pathname === '/webhooks/waha' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+                const event = JSON.parse(body);
+                if (event.event === 'message' && !event.payload.fromMe) {
+                    await processIncomingMessage(event.payload);
+                }
+                res.writeHead(200); res.end('OK');
+            });
         } else if (url.pathname === '/driver' || url.pathname === '/') {
             try {
                 let html = fs.readFileSync('./driver_portal.html', 'utf8');
@@ -595,46 +630,9 @@ function fallbackIntentParser(text) {
     return [{ intent: 'help', confidence: 0.1 }];
 }
 
-async function startSock() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
-    const { version, isLatest } = await fetchLatestBaileysVersion();
-    console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`);
-
-    const sock = makeWASocket({
-        version,
-        logger,
-        printQRInTerminal: true,
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, logger),
-        },
-        generateHighQualityLinkPreview: true,
-    });
-
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update;
-        if(qr) {
-            qrcode.generate(qr, { small: true });
-        }
-        if(connection === 'close') {
-            const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('connection closed due to ', lastDisconnect.error, ', reconnecting ', shouldReconnect);
-            if(shouldReconnect) {
-                startSock();
-            }
-        } else if(connection === 'open') {
-            console.log('opened connection');
-        }
-    });
-
-    sock.ev.on('creds.update', saveCreds);
-
-    // Initial Health Scan & Server
-    if (!global.healthServerStarted) {
-        const sentry = new SentientSentry();
-        startHealthServer(sentry, sock);
-        global.healthServerStarted = true;
-    }
+async function startServer() {
+    const sentry = new SentientSentry();
+    startHealthServer(sentry);
 
     // Daily Magic Digest (Node Version)
     setInterval(async () => {
@@ -643,35 +641,18 @@ async function startSock() {
             console.log("[CRON] Running Daily Digest...");
             const adminPhone = process.env.ADMIN_PHONE || '';
             if (adminPhone) {
-                const scan = await sentry.performScan(sock);
-                await sendSecureMessage(sock, adminPhone + '@s.whatsapp.net', `🌅 *DAILY DIGEST*\n\nStatus: ${scan.status.toUpperCase()}\nWhatsApp: ${scan.layers.whatsapp}\n\nHave a magical day! ✨`);
+                const scan = await sentry.performScan();
+                await sendSecureMessage(adminPhone, `🌅 *DAILY DIGEST*\n\nStatus: ${scan.status.toUpperCase()}\n\n*Infrastructure:* ${scan.layers.infrastructure}\n*Database:* ${scan.layers.database}\n*Communication:* ${scan.layers.communication}\n*AI:* ${scan.layers.ai_brain}\n\nHave a magical day! ✨`);
             }
         }
     }, 60000);
-
-    sock.ev.on('messages.upsert', async (m) => {
-        if(m.type === 'notify') {
-            for(const msg of m.messages) {
-                if(!msg.key.fromMe) {
-                    await processIncomingMessage(sock, msg);
-                }
-            }
-        }
-    });
-
-    return sock;
 }
 
-async function processIncomingMessage(sock, msg) {
-    const from = msg.key.remoteJid;
+async function processIncomingMessage(payload) {
+    const from = payload.from;
     const userPhone = from.replace('@s.whatsapp.net', '').replace('@c.us', '');
     const isAdmin = userPhone === (process.env.ADMIN_PHONE || '');
-    const messageText = msg.message?.conversation ||
-                        msg.message?.extendedTextMessage?.text ||
-                        msg.message?.imageMessage?.caption ||
-                        msg.message?.buttonsResponseMessage?.selectedButtonId ||
-                        msg.message?.templateButtonReplyMessage?.selectedId ||
-                        '';
+    const messageText = payload.body || '';
 
     if (!messageText) return;
 
@@ -691,9 +672,9 @@ async function processIncomingMessage(sock, msg) {
         const intents = await detectIntents(messageText, memory);
         console.log(`[PIPELINE] intents=${JSON.stringify(intents)}`);
 
-        const response = await routeMessage(user, intents, messageText, sock, from);
+        const response = await routeMessage(user, intents, messageText, null, from);
         if (response) {
-            await sendSecureMessage(sock, from, response);
+            await sendSecureMessage(from, response);
             await saveChatMessage(user.id, 'assistant', response);
         }
     } catch (error) {
@@ -701,28 +682,34 @@ async function processIncomingMessage(sock, msg) {
     }
 }
 
-async function sendSecureMessage(sock, to, text, options = {}) {
+async function sendSecureMessage(to, text, options = {}) {
     console.log(`[OUTBOUND] to=${to} type=${options.type || 'text'} text="${text?.substring(0, 50)}..."`);
 
-    if (options.type === 'interactive' && options.buttons) {
-        // Baileys interactive buttons (using Template Message or Buttons Message)
-        // Note: Button messages are deprecated in some WA versions, but still work in Baileys for many accounts
-        const buttons = options.buttons.map(b => ({
-            buttonId: b.id,
-            buttonText: { displayText: b.title },
-            type: 1
-        }));
-        const buttonMessage = {
-            text: text,
-            footer: options.footer || 'Mr Everything Concierge',
-            buttons: buttons,
-            headerType: 1
-        };
-        return await sock.sendMessage(to, buttonMessage);
-    } else if (options.type === 'image' && options.image) {
-        return await sock.sendMessage(to, { image: { url: options.image }, caption: text });
-    } else {
-        return await sock.sendMessage(to, { text: text || '' });
+    let payload = {
+        chatId: to.includes('@') ? to : `${to}@c.us`,
+        text: text
+    };
+
+    let endpoint = '/api/sendText';
+
+    if (options.type === 'image' && options.image) {
+        endpoint = '/api/sendImage';
+        payload.file = options.image;
+        payload.caption = text;
+    } else if (options.type === 'interactive' && options.buttons) {
+        // WAHA uses 'buttons' for interactive messages
+        endpoint = '/api/sendButtons';
+        payload.buttons = options.buttons.map(b => ({ id: b.id, text: b.title }));
+    }
+
+    try {
+        await fetch(`${WAHA_URL}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...payload, session: WAHA_SESSION })
+        });
+    } catch (e) {
+        console.error(`[OUTBOUND] Failed to send message to ${to}:`, e.message);
     }
 }
 
@@ -842,7 +829,7 @@ async function reportNoShow(bookingId, driverId) {
     });
 }
 
-async function routeMessage(user, intents, messageText, sock, from) {
+async function routeMessage(user, intents, messageText, unused_sock, from) {
     const intent = intents[0]?.intent || 'help';
     const data = intents[0]?.extracted_data || {};
     const mirage = MIRAGE_REGISTRY[intent] || MIRAGE_REGISTRY.unknown_input;
@@ -855,7 +842,7 @@ async function routeMessage(user, intents, messageText, sock, from) {
     }
 
     try {
-        return await mirage.handle(user, messageText, data, memory, supabase, sock, from);
+        return await mirage.handle(user, messageText, data, memory, supabase, from);
     } catch (e) {
         console.error(`Mirage Error [${intent}]:`, e);
         return "⚠️ My magic hiccuped. I'm looking into it! ✨";
@@ -863,18 +850,18 @@ async function routeMessage(user, intents, messageText, sock, from) {
 }
 
 const MIRAGE_REGISTRY = {
-    shopping: { handle: async (user, text, data, memory, db, sock, from) => {
+    shopping: { handle: async (user, text, data, memory, db, from) => {
         const query = (data.product || text || '').toLowerCase();
-        await sendSecureMessage(sock, from, `🛍️ *MR EVERYTHING SHOPPING*\n\nSearching top SA retailers for "${query}"...`);
-        await sendSecureMessage(sock, from, `I found the best price for you! Ready to order?`, {
+        await sendSecureMessage(from, `🛍️ *MR EVERYTHING SHOPPING*\n\nSearching top SA retailers for "${query}"...`);
+        await sendSecureMessage(from, `I found the best price for you! Ready to order?`, {
             type: 'interactive',
             image: 'https://images.unsplash.com/photo-1557821552-17105176677c?w=800',
             buttons: [{ id: 'ADD_CART', title: 'Add to Cart 🛒' }, { id: 'HELP', title: 'Need Help? ❓' }]
         });
         return null;
     }},
-    food: { handle: async (user, text, data, memory, db, sock, from) => {
-        await sendSecureMessage(sock, from, `🍗 *MR EVERYTHING FOOD*\n\n*R20 Flat Delivery* to your door! 🏃‍♂️💨`, {
+    food: { handle: async (user, text, data, memory, db, from) => {
+        await sendSecureMessage(from, `🍗 *MR EVERYTHING FOOD*\n\n*R20 Flat Delivery* to your door! 🏃‍♂️💨`, {
             type: 'interactive',
             buttons: [
                 { id: 'ORDER_KFC', title: 'Order KFC 🍗' },
@@ -884,8 +871,8 @@ const MIRAGE_REGISTRY = {
         });
         return null;
     }},
-    taxi: { handle: async (user, text, data, memory, db, sock, from) => {
-        await sendSecureMessage(sock, from, `🚐 *MR TAXI - NEW MODELS*\n\nChoose your ride style:`, {
+    taxi: { handle: async (user, text, data, memory, db, from) => {
+        await sendSecureMessage(from, `🚐 *MR TAXI - NEW MODELS*\n\nChoose your ride style:`, {
             type: 'interactive',
             buttons: [
                 { id: 'RIDE_SHARED', title: 'Shared Sedan (R35+) 🚐' },
@@ -926,14 +913,14 @@ const MIRAGE_REGISTRY = {
         await db.from('profiles').update({ full_name: name }).eq('id', user.id);
         return `✨ Nice to meet you, *${name}*! I've saved that to my memory.\n\nWhat would you like to do first? 🇿🇦`;
     }},
-    admin_panel: { handle: async (user, text, data, memory, db, sock, from) => {
-        await sendSecureMessage(sock, from, `🛠️ *MR EVERYTHING ADMIN*\n\nWelcome back, Boss.`, {
+    admin_panel: { handle: async (user, text, data, memory, db, from) => {
+        await sendSecureMessage(from, `🛠️ *MR EVERYTHING ADMIN*\n\nWelcome back, Boss.`, {
             type: 'interactive',
             buttons: [{ id: '!stats', title: 'Business Stats 📊' }, { id: '!diag', title: 'System Diag 🛠️' }]
         });
         return null;
     }},
-    RIDE_SHARED: { handle: async (user, text, data, memory, db, sock, from) => {
+    RIDE_SHARED: { handle: async (user, text, data, memory, db, from) => {
         const { data: booking } = await db.from('bookings').insert([{
             user_id: user.id,
             booking_type: 'shared_sedan',
@@ -944,13 +931,13 @@ const MIRAGE_REGISTRY = {
 
         const { payment_url } = await createTradeSafeTransaction(booking.id, user, null, { type: 'shared_sedan', distance: 10 });
 
-        await sendSecureMessage(sock, from, `🚐 *SHARED SEDAN*\n\nGreat choice! Groups of 3-4 passengers. Pricing:\n• SHORT: R35\n• MEDIUM: R50\n• LONG: R70\n\nPlease pay to secure your seat:`, {
+        await sendSecureMessage(from, `🚐 *SHARED SEDAN*\n\nGreat choice! Groups of 3-4 passengers. Pricing:\n• SHORT: R35\n• MEDIUM: R50\n• LONG: R70\n\nPlease pay to secure your seat:`, {
             type: 'interactive',
             buttons: [{ id: 'PAY_NOW', title: 'Pay R35 (Ozow) 💳' }]
         });
         return `🔗 Secure Payment Link:\n${payment_url}`;
     }},
-    RIDE_SOLO: { handle: async (user, text, data, memory, db, sock, from) => {
+    RIDE_SOLO: { handle: async (user, text, data, memory, db, from) => {
         const { data: booking } = await db.from('bookings').insert([{
             user_id: user.id,
             booking_type: 'solo_sedan',
@@ -963,7 +950,7 @@ const MIRAGE_REGISTRY = {
 
         return `🚗 *SOLO SEDAN*\n\nPrivate ride just for you. Please pay R89 via TradeSafe to dispatch your driver:\n\n🔗 ${payment_url}`;
     }},
-    RIDE_MOTO: { handle: async (user, text, data, memory, db, sock, from) => {
+    RIDE_MOTO: { handle: async (user, text, data, memory, db, from) => {
         const { data: booking } = await db.from('bookings').insert([{
             user_id: user.id,
             booking_type: 'moto_ride',
@@ -976,7 +963,7 @@ const MIRAGE_REGISTRY = {
 
         return `🏍️ *MOTO RIDE*\n\nSkip the traffic! Pricing from R25. Secure your ride here:\n\n🔗 ${payment_url}`;
     }},
-    CONFIRM_IN_TAXI: { handle: async (user, text, data, memory, db, sock, from) => {
+    CONFIRM_IN_TAXI: { handle: async (user, text, data, memory, db, from) => {
         const { data: booking } = await db.from('bookings').select('id').eq('user_id', user.id).eq('status', 'accepted').maybeSingle();
         if (booking) {
             await confirmPickup(booking.id);
@@ -996,7 +983,7 @@ const MIRAGE_REGISTRY = {
 import { fileURLToPath } from 'url';
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(process.argv[1])) {
-    startSock().catch(err => console.error("Outer Error:", err));
+    startServer().catch(err => console.error("Outer Error:", err));
 }
 
 export { calculateFare, findBestInsertion, selectDriver };
