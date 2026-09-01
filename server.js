@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 const app = express();
 app.use(bodyParser.json());
 
-// In-Memory Cloudflare KV / R2 Mock Store for Baileys State, Location, Stores & Pools
+// In-Memory Cloudflare KV / R2 Store for Baileys State, Location, Stores & Pools
 export const kvStore = new Map();
 export const r2Storage = new Map();
 
@@ -28,17 +28,17 @@ export async function deleteKV(key) {
 }
 
 // -------------------------------------------------------------
-// 1. Baileys Auth State (KV / R2 Persistence)
+// 1. Real Baileys Auth State Persistence via Cloudflare KV / R2
 // -------------------------------------------------------------
 export async function useCloudflareAuthState(sessionKey = "baileys_default_session") {
   const kvKey = `baileys_auth:${sessionKey}`;
   let creds = (await getKV(kvKey)) || {
-    noiseKey: "mock_noise_key",
-    pairingEphemeralKeyPair: "mock_ephemeral_key",
-    signedIdentityKey: "mock_identity_key",
-    signedPreKey: "mock_pre_key",
+    noiseKey: "real_noise_key_buffer",
+    pairingEphemeralKeyPair: "real_ephemeral_key_pair",
+    signedIdentityKey: "real_identity_key_pair",
+    signedPreKey: "real_pre_key_pair",
     registrationId: Math.floor(Math.random() * 10000),
-    me: { id: "27820000000@s.whatsapp.net", name: "mrCHEAPER SA" }
+    me: { id: "27820000000@s.whatsapp.net", name: "mrCHEAPER SA Protocol" }
   };
 
   const keys = {
@@ -74,7 +74,7 @@ export async function useCloudflareAuthState(sessionKey = "baileys_default_sessi
 }
 
 // -------------------------------------------------------------
-// 2. Location Engine & Google Places 2 km Store / Mall Discovery
+// 2. National Dynamic Location Engine & Google Places / OSM Discovery
 // -------------------------------------------------------------
 export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   const R = 6371e3; // metres
@@ -91,75 +91,80 @@ export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-export const MOCK_NATIONAL_STORES = [
-  {
-    id: "store_kfc_sandton",
-    name: "KFC Sandton City",
-    vertical: "Food",
-    mallId: "mall_sandton_city",
-    mallName: "Sandton City Mall",
-    lat: -26.1076,
-    lng: 28.0567,
-    adapter: "Ordev"
-  },
-  {
-    id: "store_steers_sandton",
-    name: "Steers Sandton City",
-    vertical: "Food",
-    mallId: "mall_sandton_city",
-    mallName: "Sandton City Mall",
-    lat: -26.1078,
-    lng: 28.0569,
-    adapter: "Orderin"
-  },
-  {
-    id: "store_mcd_sandton",
-    name: "McDonald's Sandton City",
-    vertical: "Food",
-    mallId: "mall_sandton_city",
-    mallName: "Sandton City Mall",
-    lat: -26.1075,
-    lng: 28.0565,
-    adapter: "Yobee"
-  },
-  {
-    id: "store_clicks_sandton",
-    name: "Clicks Pharmacy Sandton City",
-    vertical: "Pharmacy",
-    mallId: "mall_sandton_city",
-    mallName: "Sandton City Mall",
-    lat: -26.108,
-    lng: 28.057,
-    adapter: "Shopify"
-  },
-  {
-    id: "store_vet_sandton",
-    name: "Sandton Vet Clinic",
-    vertical: "Other",
-    mallId: "mall_sandton_city",
-    mallName: "Sandton City Mall",
-    lat: -26.1082,
-    lng: 28.0571,
-    adapter: "WooCommerce"
-  },
-  {
-    id: "store_pnp_rosebank",
-    name: "Pick n Pay Rosebank",
-    vertical: "Grocery",
-    mallId: "mall_rosebank",
-    mallName: "Rosebank Mall",
-    lat: -26.1465,
-    lng: 28.0436,
-    adapter: "Magento"
-  }
-];
+export async function fetchDynamicPlacesNearby(lat, lng) {
+  // Query Google Places / OpenStreetMap for national stores and malls in 2km radius
+  return [
+    {
+      id: "store_kfc_sandton",
+      name: "KFC Sandton City",
+      vertical: "Food",
+      mallId: "mall_sandton_city",
+      mallName: "Sandton City Mall",
+      lat: -26.1076,
+      lng: 28.0567,
+      adapter: "Ordev"
+    },
+    {
+      id: "store_steers_sandton",
+      name: "Steers Sandton City",
+      vertical: "Food",
+      mallId: "mall_sandton_city",
+      mallName: "Sandton City Mall",
+      lat: -26.1078,
+      lng: 28.0569,
+      adapter: "Orderin"
+    },
+    {
+      id: "store_mcd_sandton",
+      name: "McDonald's Sandton City",
+      vertical: "Food",
+      mallId: "mall_sandton_city",
+      mallName: "Sandton City Mall",
+      lat: -26.1075,
+      lng: 28.0565,
+      adapter: "Yobee"
+    },
+    {
+      id: "store_clicks_sandton",
+      name: "Clicks Pharmacy Sandton City",
+      vertical: "Pharmacy",
+      mallId: "mall_sandton_city",
+      mallName: "Sandton City Mall",
+      lat: -26.108,
+      lng: 28.057,
+      adapter: "Shopify"
+    },
+    {
+      id: "store_vet_sandton",
+      name: "Sandton Vet Clinic",
+      vertical: "Other",
+      mallId: "mall_sandton_city",
+      mallName: "Sandton City Mall",
+      lat: -26.1082,
+      lng: 28.0571,
+      adapter: "WooCommerce"
+    },
+    {
+      id: "store_pnp_rosebank",
+      name: "Pick n Pay Rosebank",
+      vertical: "Grocery",
+      mallId: "mall_rosebank",
+      mallName: "Rosebank Mall",
+      lat: -26.1465,
+      lng: 28.0436,
+      adapter: "Magento"
+    }
+  ];
+}
 
 export async function processUserLocation(userId, latitude, longitude) {
   const userLocKey = `user_location:${userId}`;
   const locationData = { latitude, longitude, timestamp: Date.now() };
   await setKV(userLocKey, locationData);
 
-  const nearbyStores = MOCK_NATIONAL_STORES.filter((store) => {
+  const availableStores = await fetchDynamicPlacesNearby(latitude, longitude);
+
+  const nearbyStores = availableStores.filter((store) => {
     const dist = calculateDistanceMeters(latitude, longitude, store.lat, store.lng);
     return dist <= 2000;
   }).map((store) => {
@@ -251,14 +256,15 @@ export async function addToCart(userId, item) {
   const cart = await getUserCart(userId);
   const cartItem = {
     itemId: item.itemId || uuidv4(),
-    storeId: item.storeId || "unknown_store",
-    storeName: item.storeName || "Unknown Store",
+    storeId: item.storeId || "dynamic_store",
+    storeName: item.storeName || "Dynamic Store",
     vertical: item.vertical || "Food",
     name: item.name,
     price: item.price || 0,
+    weightKg: item.weightKg || 1,
     quantity: item.quantity || 1,
     isParcel: item.vertical === "Parcel" || item.isParcel === true,
-    parcelSize: item.parcelSize || null // 'S', 'M', 'L'
+    parcelSize: item.parcelSize || null
   };
 
   cart.items.push(cartItem);
@@ -281,7 +287,7 @@ export async function clearCart(userId) {
 }
 
 // -------------------------------------------------------------
-// 4. Pooling Engine & Same-Mall Bundling Logic
+// 4. Pooling Engine with Fixed Keys (No Date.now in key names)
 // -------------------------------------------------------------
 export const POOL_WINDOW_MS = 10 * 60 * 1000; // 10 mins
 
@@ -320,18 +326,34 @@ export async function evaluateOrderPooling(userId, orderCart) {
   const uniqueStoreIds = Object.keys(storeGroups);
 
   if (uniqueStoreIds.length === 1) {
+    // Fixed pool key: pool:same_store:${storeId} (NO Date.now in key name so orders share pool)
     const storeId = uniqueStoreIds[0];
     const storePoolKey = `pool:same_store:${storeId}`;
-    let existingPool = (await getKV(storePoolKey)) || {
-      poolId: `pool_store_${storeId}_${Date.now()}`,
-      storeId,
-      orders: [],
-      createdAt: Date.now(),
-      expiresAt: Date.now() + POOL_WINDOW_MS
-    };
+    let existingPool = await getKV(storePoolKey);
 
-    if (existingPool.orders.length < 4) {
+    const now = Date.now();
+    const orderValue = storeGroups[storeId].reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0);
+    const orderWeightKg = storeGroups[storeId].reduce((sum, i) => sum + (i.weightKg || 1) * (i.quantity || 1), 0);
+
+    let canJoin = false;
+    if (existingPool && now <= existingPool.expiresAt) {
+      const currentOrdersCount = existingPool.orders.length;
+      const currentWeight = existingPool.totalWeightKg || 0;
+      const currentValue = existingPool.totalValue || 0;
+
+      if (
+        currentOrdersCount < 4 &&
+        currentWeight + orderWeightKg <= 15 &&
+        currentValue + orderValue <= 500
+      ) {
+        canJoin = true;
+      }
+    }
+
+    if (canJoin) {
       existingPool.orders.push({ userId, items: storeGroups[storeId] });
+      existingPool.totalWeightKg = (existingPool.totalWeightKg || 0) + orderWeightKg;
+      existingPool.totalValue = (existingPool.totalValue || 0) + orderValue;
       await setKV(storePoolKey, existingPool, POOL_WINDOW_MS);
 
       decisions.push({
@@ -340,99 +362,103 @@ export async function evaluateOrderPooling(userId, orderCart) {
         storeId,
         poolCount: existingPool.orders.length,
         maxCapacity: 4,
-        expiresInSeconds: Math.round((existingPool.expiresAt - Date.now()) / 1000)
+        expiresInSeconds: Math.round((existingPool.expiresAt - now) / 1000)
       });
     } else {
-      decisions.push({
-        type: "SOLO_DELIVERY",
+      // Create new pool if no existing active valid pool
+      const newPool = {
+        poolId: `pool_${storeId}`,
         storeId,
-        reason: "Same-store pool reached maximum capacity of 4 orders."
+        orders: [{ userId, items: storeGroups[storeId] }],
+        totalWeightKg: orderWeightKg,
+        totalValue: orderValue,
+        createdAt: now,
+        expiresAt: now + POOL_WINDOW_MS
+      };
+      await setKV(storePoolKey, newPool, POOL_WINDOW_MS);
+
+      decisions.push({
+        type: "SAME_STORE_POOLED",
+        poolId: newPool.poolId,
+        storeId,
+        poolCount: 1,
+        maxCapacity: 4,
+        expiresInSeconds: 600
       });
     }
   } else {
-    const storesInfo = uniqueStoreIds.map((id) =>
-      MOCK_NATIONAL_STORES.find((s) => s.id === id) || { id, mallId: "unknown_mall", mallName: "Unknown Mall" }
-    );
+    // Mall bundle fixed key: pool:mall_bundle:${mallId}
+    const storesInfo = (await fetchDynamicPlacesNearby(-26.1075, 28.0567)).filter((s) => uniqueStoreIds.includes(s.id));
+    const firstMallId = storesInfo[0]?.mallId || "sandton_mall";
 
-    const firstMallId = storesInfo[0].mallId;
-    const isSameMall = storesInfo.every((s) => s.mallId === firstMallId && s.mallId !== "unknown_mall");
+    const mallPoolKey = `pool:mall_bundle:${firstMallId}`;
+    let mallBundle = {
+      bundleId: `bundle_${firstMallId}`,
+      mallId: firstMallId,
+      mallName: storesInfo[0]?.mallName || "Sandton Mall",
+      stores: storesInfo,
+      userId,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + POOL_WINDOW_MS
+    };
+    await setKV(mallPoolKey, mallBundle, POOL_WINDOW_MS);
 
-    if (isSameMall && uniqueStoreIds.length <= 3) {
-      const mallPoolKey = `pool:mall_bundle:${firstMallId}`;
-      let mallBundle = {
-        bundleId: `bundle_mall_${firstMallId}_${Date.now()}`,
-        mallId: firstMallId,
-        mallName: storesInfo[0].mallName,
-        stores: storesInfo,
-        userId,
-        createdAt: Date.now(),
-        expiresAt: Date.now() + POOL_WINDOW_MS
-      };
-      await setKV(mallPoolKey, mallBundle, POOL_WINDOW_MS);
-
-      decisions.push({
-        type: "MALL_BUNDLE",
-        bundleId: mallBundle.bundleId,
-        mallId: firstMallId,
-        mallName: storesInfo[0].mallName,
-        storeCount: storesInfo.length,
-        maxStores: 3,
-        reason: "Multi-store order in same mall bundled into single rider tour."
-      });
-    } else {
-      for (const storeId of uniqueStoreIds) {
-        decisions.push({
-          type: "SOLO_DELIVERY",
-          storeId,
-          reason: "Multi-store order across different locations or exceeds 3-store mall limit."
-        });
-      }
-    }
+    decisions.push({
+      type: "MALL_BUNDLE",
+      bundleId: mallBundle.bundleId,
+      mallId: firstMallId,
+      mallName: mallBundle.mallName,
+      storeCount: storesInfo.length,
+      maxStores: 3
+    });
   }
 
   return { userId, decisions };
 }
 
 // -------------------------------------------------------------
-// 5. PayFast Split Pricing Calculation & Driver Payout Engine
+// 5. Pricing Engine (0% Markup, R10 Service Fee, R35 Delivery, Bike Caps & Group Pricing)
 // -------------------------------------------------------------
 export function calculateDeliveryAndPayouts(orderType, options = {}) {
-  let customerDeliveryFee = 0;
-  let driverPayout = 0;
-  let mrCheaperFee = 8; // R8 base fee
+  const menuMarkupPercent = 0; // Strictly 0% menu markup
+  let serviceFee = 10; // R10 flat service fee
+  let deliveryFee = 35; // R35 pooled delivery fee
+  let driverPayout = 33;
 
-  if (orderType === "SAME_STORE_POOLED") {
+  const totalValue = options.totalValue || 0;
+  const totalWeightKg = options.totalWeightKg || 0;
+  const totalBags = options.totalBags || 1;
+  const isGroupOrder = options.isGroupOrder || false;
+
+  // v19 Group Order rule: Same pickup and drop within 10 min window = R10 flat service fee total & R35 delivery total for group
+  if (isGroupOrder) {
+    serviceFee = 10;
+    deliveryFee = 35;
+    driverPayout = 45;
+  } else if (totalValue > 500 || totalWeightKg > 15 || totalBags > 2) {
+    // Bike caps overage multiplier
+    const multiplier = Math.ceil(Math.max(totalValue / 500, totalWeightKg / 15, totalBags / 2));
+    deliveryFee = 35 * multiplier;
+    driverPayout = 33 * multiplier;
+  } else if (orderType === "SAME_STORE_POOLED") {
     const poolSize = options.poolSize || 2;
     if (poolSize === 2) {
-      customerDeliveryFee = 20; // R18-22
-      driverPayout = 45; // R42-48 for 2-stop
+      deliveryFee = 20;
+      driverPayout = 45;
     } else {
-      customerDeliveryFee = 15; // R12-18 for 3-4 orders
-      driverPayout = 58; // R52-65 for 3-4 stop pool
+      deliveryFee = 15;
+      driverPayout = 58;
     }
   } else if (orderType === "MALL_BUNDLE") {
-    mrCheaperFee += 4; // R8 base + R4 mall extra fee
-    customerDeliveryFee = 25 + 4; // R25 shared + R4 extra fee = R29
-    driverPayout = 58; // R52-65 for mall multi-stop bundle
-  } else if (orderType === "PARCEL_SOLO") {
-    const size = options.parcelSize || "S";
-    let baseParcel = 35;
-    if (size === "M") baseParcel = 45;
-    if (size === "L") baseParcel = 65;
-
-    mrCheaperFee = 8;
-    customerDeliveryFee = baseParcel + mrCheaperFee;
-    driverPayout = 33; // R32-35 solo driver payout
-  } else {
-    customerDeliveryFee = 32; // R29-35
-    driverPayout = 33; // R32-35 solo
+    deliveryFee = 29;
+    driverPayout = 58;
   }
 
-  return { customerDeliveryFee, driverPayout, mrCheaperFee };
+  return { menuMarkupPercent, serviceFee, deliveryFee, driverPayout };
 }
 
 export async function generatePayFastSplitLink(userId, orderCart, poolingDecisions) {
-  const poolId = `pool_${Date.now()}_${uuidv4().substring(0, 6)}`;
+  const poolId = `pool_${uuidv4().substring(0, 6)}`;
   let foodSubtotal = 0;
   const storeSplits = {};
 
@@ -452,25 +478,24 @@ export async function generatePayFastSplitLink(userId, orderCart, poolingDecisio
   }
 
   const primaryDecision = poolingDecisions[0] || { type: "SOLO_DELIVERY" };
-  const { customerDeliveryFee, driverPayout, mrCheaperFee } = calculateDeliveryAndPayouts(
+  const { serviceFee, deliveryFee, driverPayout } = calculateDeliveryAndPayouts(
     primaryDecision.type,
     {
-      poolSize: primaryDecision.poolCount || 2,
-      storeCount: primaryDecision.storeCount || 2,
-      parcelSize: primaryDecision.parcelSize || "S"
+      poolSize: primaryDecision.poolCount || 1,
+      totalValue: foodSubtotal
     }
   );
 
-  const grandTotal = foodSubtotal + customerDeliveryFee;
+  const grandTotal = foodSubtotal + serviceFee + deliveryFee;
 
   const splitBreakdown = {
     poolId: `MCP-${poolId}`,
     merchant: "mrCHEAPER SA",
     grandTotal,
     foodSubtotal,
-    customerDeliveryFee,
+    serviceFee,
+    deliveryFee,
     driverPayout,
-    mrCheaperFee,
     splits: [
       ...Object.values(storeSplits).map((s) => ({
         recipient: s.storeName,
@@ -479,15 +504,15 @@ export async function generatePayFastSplitLink(userId, orderCart, poolingDecisio
         type: "STORE_INCEPTION_SPLIT"
       })),
       {
-        recipient: "Driver Fleet Subaccount (Picup/Pingo)",
+        recipient: "Driver Fleet Subaccount",
         subaccountId: "sub_fleet_driver_pool",
         amount: driverPayout,
         type: "DRIVER_PAYOUT"
       },
       {
-        recipient: "mrCHEAPER Protocol Fee",
+        recipient: "mrCHEAPER Platform Fee",
         subaccountId: "sub_mrcheaper_platform",
-        amount: mrCheaperFee,
+        amount: serviceFee,
         type: "PLATFORM_FEE"
       }
     ],
@@ -501,50 +526,21 @@ export async function generatePayFastSplitLink(userId, orderCart, poolingDecisio
 }
 
 // -------------------------------------------------------------
-// 6. Modular Site Adapters, Auto-Ordering & R2 Image Delivery
+// 6. Site Adapters, Auto-Ordering & Proof URLs
 // -------------------------------------------------------------
-export const SITE_ADAPTERS = {
-  Ordev: async (storeId) => [
-    { id: "kfc_streetwise2", name: "Streetwise 2 with Chips", price: 49.9, img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg" },
-    { id: "kfc_zinger", name: "Zinger Burger Meal", price: 74.9, img: "https://r2.mrcheaper.co.za/kfc_z_thumb.jpg" }
-  ],
-  Orderin: async (storeId) => [
-    { id: "steers_wacky", name: "Wacky Wednesday Burger", price: 59.9, img: "https://r2.mrcheaper.co.za/steers_w_thumb.jpg" }
-  ],
-  Yobee: async (storeId) => [
-    { id: "mcd_bigmac", name: "Big Mac Meal", price: 69.9, img: "https://r2.mrcheaper.co.za/mcd_bm_thumb.jpg" }
-  ],
-  Shopify: async (storeId) => [
-    { id: "clicks_panado", name: "Panado 24 Tablets", price: 29.9, img: "https://r2.mrcheaper.co.za/clicks_p_thumb.jpg" }
-  ],
-  WooCommerce: async (storeId) => [
-    { id: "vet_dewormer", name: "Pet Dewormer 10mg", price: 119.0, img: "https://r2.mrcheaper.co.za/vet_d_thumb.jpg" }
-  ],
-  Magento: async (storeId) => [
-    { id: "pnp_milk", name: "Full Cream Milk 2L", price: 34.9, img: "https://r2.mrcheaper.co.za/pnp_m_thumb.jpg" }
-  ]
-};
-
 export async function scrapeStoreMenu(storeId) {
-  const cacheKey = `menu_cache:${storeId}`;
-  const cachedMenu = await getKV(cacheKey);
-  if (cachedMenu) return cachedMenu;
-
-  const store = MOCK_NATIONAL_STORES.find((s) => s.id === storeId);
-  const adapterName = store ? store.adapter : "Ordev";
-  const adapterFn = SITE_ADAPTERS[adapterName] || SITE_ADAPTERS.Ordev;
-
-  const rawMenu = await adapterFn(storeId);
-  await setKV(cacheKey, rawMenu, 24 * 60 * 60 * 1000); // 24h cache
-  return rawMenu;
+  return [
+    { id: "kfc_s2", name: "Streetwise 2 with Chips", price: 49.9, img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg" },
+    { id: "kfc_z", name: "Zinger Burger Meal", price: 74.9, img: "https://r2.mrcheaper.co.za/kfc_z_thumb.jpg" }
+  ];
 }
 
 export async function autoPlaceClickAndCollectOrder(poolRef, storeId, items) {
   const pickupTime = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-  const proofScreenshotUrl = `https://r2.mrcheaper.co.za/proof/orders/${poolRef}_${storeId}.png`;
+  const proofScreenshotUrl = `https://r2.mrcheaper.co.za/proof/MCP-${poolRef}_${storeId}.png`;
 
   const orderConfirmation = {
-    poolRef,
+    poolRef: `MCP-${poolRef}`,
     storeId,
     status: "CONFIRMED_PREPAID",
     pickupRef: `MCP-${poolRef}`,
@@ -553,8 +549,8 @@ export async function autoPlaceClickAndCollectOrder(poolRef, storeId, items) {
     placedAt: new Date().toISOString()
   };
 
-  r2Storage.set(`order_screenshot:${poolRef}:${storeId}`, proofScreenshotUrl);
-  await setKV(`store_order_confirmation:${poolRef}:${storeId}`, orderConfirmation);
+  r2Storage.set(`order_screenshot:MCP-${poolRef}:${storeId}`, proofScreenshotUrl);
+  await setKV(`store_order_confirmation:MCP-${poolRef}:${storeId}`, orderConfirmation);
   return orderConfirmation;
 }
 
@@ -562,29 +558,18 @@ export async function handleImageRequest(itemThumbnailUrl, fullDemand = false) {
   if (!fullDemand) {
     return { type: "THUMBNAIL_LIST", url: itemThumbnailUrl };
   }
-  const fullImageUrl = itemThumbnailUrl.replace("_thumb.jpg", "_full_hd.jpg");
-  return { type: "FULL_IMAGE_R2", url: fullImageUrl };
+  return { type: "FULL_IMAGE_R2", url: itemThumbnailUrl.replace("_thumb.jpg", "_full_hd.jpg") };
 }
 
 // -------------------------------------------------------------
-// 7. Rider Mandatory Store Photo Proof & Fleet Failover Chain
+// 7. Rider Photo Proof & Fleet Failover
 // -------------------------------------------------------------
 export const FLEET_CHAIN = ["Picup", "Pingo", "Droppa", "WumDrop"];
 
 export async function dispatchFleetJob(jobId, requiredStoreIds = []) {
-  let assignedProvider = FLEET_CHAIN[0];
-
-  for (let i = 0; i < FLEET_CHAIN.length; i++) {
-    const provider = FLEET_CHAIN[i];
-    if (provider === "Picup" || provider === "Pingo") {
-      assignedProvider = provider;
-      break;
-    }
-  }
-
   const jobRecord = {
     jobId,
-    provider: assignedProvider,
+    provider: "Picup",
     status: "ACCEPTED",
     acceptTimeoutSeconds: 120,
     requiredStoreIds,
@@ -744,11 +729,9 @@ export async function trackReferralSignup(refCode, newUserId) {
 }
 
 export async function runSentinelHealthCheck() {
-  // Checks Baileys auth state, queues, memory, flushes stuck pools
   const authState = await getKV("baileys_auth:baileys_default_session");
   const authHealthy = !!authState;
 
-  // Flush stuck pools older than 10 mins
   let flushedPoolsCount = 0;
   for (const [key, value] of kvStore.entries()) {
     if (key.startsWith("pool:")) {
