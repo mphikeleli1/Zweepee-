@@ -18,7 +18,14 @@ export async function getKV(key) {
 export async function setKV(key, value, ttlMs = 0) {
   kvStore.set(key, value);
   if (ttlMs > 0) {
-    setTimeout(() => kvStore.delete(key), ttlMs);
+    setTimeout(() => {
+      if (kvStore.has(key)) {
+        const item = kvStore.get(key);
+        const poolId = item?.poolId || item?.bundleId || key.replace("pool:", "");
+        console.log(`pool_expired ${poolId} after 10min window`);
+        kvStore.delete(key);
+      }
+    }, ttlMs);
   }
   return true;
 }
@@ -74,7 +81,7 @@ export async function useCloudflareAuthState(sessionKey = "baileys_default_sessi
 }
 
 // -------------------------------------------------------------
-// 2. WhatsApp Baileys Interactive Message Generators (Apple-level)
+// 2. WhatsApp Baileys Interactive Message Generators
 // -------------------------------------------------------------
 export function createPresenceComposing() {
   return { presence: "composing", delayMs: 1500 };
@@ -239,7 +246,7 @@ export async function processUserLocation(userId, latitude, longitude) {
 }
 
 // -------------------------------------------------------------
-// 4. Multi-Vertical Complex Intent Parser & Open KV Cart (`cart:{userId}`)
+// 4. Multi-Vertical Complex Intent Parser & Open KV Cart
 // -------------------------------------------------------------
 export const VERTICAL_KEYWORDS = {
   Food: ["kfc", "steers", "mcdonalds", "mcd", "burger", "pizza", "food", "restaurant", "bakery", "butchery"],
@@ -330,9 +337,9 @@ export async function clearCart(userId) {
 }
 
 // -------------------------------------------------------------
-// 5. Pooling Engine with Fixed Keys
+// 5. Pooling Engine with Fixed Keys & 10-Min Window Logging
 // -------------------------------------------------------------
-export const POOL_WINDOW_MS = 10 * 60 * 1000;
+export const POOL_WINDOW_MS = 10 * 60 * 1000; // 10 mins (600,000 ms)
 
 export async function evaluateOrderPooling(userId, orderCart) {
   const items = orderCart.items || [];
@@ -341,13 +348,14 @@ export async function evaluateOrderPooling(userId, orderCart) {
 
   const decisions = [];
 
+  // Rule: Parcel NEVER pools and NEVER bundles with food
   if (parcelItems.length > 0) {
     for (const parcelItem of parcelItems) {
       decisions.push({
         type: "PARCEL_SOLO",
         itemId: parcelItem.itemId,
-        storeId: parcelItem.storeId,
-        storeName: parcelItem.storeName,
+        storeId: parcelItem.storeId || "parcel_hub",
+        storeName: parcelItem.storeName || "Parcel Hub",
         parcelSize: parcelItem.parcelSize || "S",
         reason: "Parcel strictly never pools and never bundles with food."
       });
@@ -408,7 +416,7 @@ export async function evaluateOrderPooling(userId, orderCart) {
       });
     } else {
       const newPool = {
-        poolId: `pool_${storeId}`,
+        poolId: `MCP-pool_${storeId}`,
         storeId,
         orders: [{ userId, items: storeGroups[storeId] }],
         totalWeightKg: orderWeightKg,
@@ -428,15 +436,18 @@ export async function evaluateOrderPooling(userId, orderCart) {
       });
     }
   } else {
+    // Multi-store mall bundle (up to 3 compatible stores in same mall)
     const storesInfo = (await fetchDynamicPlacesNearby(-26.1075, 28.0567)).filter((s) => uniqueStoreIds.includes(s.id));
     const firstMallId = storesInfo[0]?.mallId || "sandton_mall";
 
+    // VROOM Tour optimization: max 3 compatible stores per tour
+    const bundledStores = storesInfo.slice(0, 3);
     const mallPoolKey = `pool:mall_bundle:${firstMallId}`;
     let mallBundle = {
-      bundleId: `bundle_${firstMallId}`,
+      bundleId: `MCP-bundle_${firstMallId}`,
       mallId: firstMallId,
-      mallName: storesInfo[0]?.mallName || "Sandton Mall",
-      stores: storesInfo,
+      mallName: storesInfo[0]?.mallName || "Sandton City Mall",
+      stores: bundledStores,
       userId,
       createdAt: Date.now(),
       expiresAt: Date.now() + POOL_WINDOW_MS
@@ -448,8 +459,9 @@ export async function evaluateOrderPooling(userId, orderCart) {
       bundleId: mallBundle.bundleId,
       mallId: firstMallId,
       mallName: mallBundle.mallName,
-      storeCount: storesInfo.length,
-      maxStores: 3
+      storeCount: bundledStores.length,
+      maxStores: 3,
+      bundledStores
     });
   }
 
@@ -488,8 +500,18 @@ export function calculateDeliveryAndPayouts(orderType, options = {}) {
       driverPayout = 58;
     }
   } else if (orderType === "MALL_BUNDLE") {
+    // Mall bundle: R25 shared + R4 extra fee = R29 total delivery
+    serviceFee = 12; // R8 base + R4 mall extra fee
     deliveryFee = 29;
-    driverPayout = 58;
+    driverPayout = 58; // R52-R65 for 3-stop mall tour
+  } else if (orderType === "PARCEL_SOLO") {
+    const size = options.parcelSize || "S";
+    let baseParcel = 35;
+    if (size === "M") baseParcel = 45;
+    if (size === "L") baseParcel = 65;
+    serviceFee = 8;
+    deliveryFee = baseParcel + serviceFee;
+    driverPayout = 33;
   }
 
   return { menuMarkupPercent, serviceFee, deliveryFee, driverPayout };
@@ -520,7 +542,8 @@ export async function generatePayFastSplitLink(userId, orderCart, poolingDecisio
     primaryDecision.type,
     {
       poolSize: primaryDecision.poolCount || 1,
-      totalValue: foodSubtotal
+      totalValue: foodSubtotal,
+      parcelSize: primaryDecision.parcelSize || "S"
     }
   );
 
@@ -808,6 +831,8 @@ export async function runSentinelHealthCheck() {
   for (const [key, value] of kvStore.entries()) {
     if (key.startsWith("pool:")) {
       if (value.expiresAt && Date.now() > value.expiresAt) {
+        const poolId = value?.poolId || value?.bundleId || key;
+        console.log(`pool_expired ${poolId} after 10min window`);
         kvStore.delete(key);
         flushedPoolsCount++;
       }
