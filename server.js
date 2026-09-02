@@ -74,10 +74,54 @@ export async function useCloudflareAuthState(sessionKey = "baileys_default_sessi
 }
 
 // -------------------------------------------------------------
-// 2. National Dynamic Location Engine & Google Places / OSM Discovery
+// 2. WhatsApp Baileys Interactive Message Generators (Apple-level)
+// -------------------------------------------------------------
+export function createPresenceComposing() {
+  return { presence: "composing", delayMs: 1500 };
+}
+
+export function createProductMessage(storeName, tagline, priceFrom, heroImageUrl) {
+  return {
+    type: "productMessage",
+    product: {
+      productImage: { url: heroImageUrl || "https://r2.mrcheaper.co.za/hero_store.jpg" },
+      title: `*_${storeName.toUpperCase()}_*`,
+      description: `_${tagline}_\nFrom R${priceFrom}`,
+      currencyCode: "ZAR",
+      priceAmount1000: priceFrom * 1000,
+      footer: "mrCHEAPER"
+    }
+  };
+}
+
+export function createListMessage(title, description, buttonText, sections) {
+  return {
+    type: "listMessage",
+    title: `*_${title}_*`,
+    description: `_${description}_`,
+    buttonText,
+    sections
+  };
+}
+
+export function createButtonsMessage(title, text, footer, buttons) {
+  return {
+    type: "buttonsMessage",
+    contentText: `*_${title}_*\n_${text}_`,
+    footerText: footer || "mrCHEAPER",
+    buttons: buttons.slice(0, 3).map((b, i) => ({
+      buttonId: b.id || `btn_${i}`,
+      buttonText: { displayText: b.text },
+      type: 1
+    }))
+  };
+}
+
+// -------------------------------------------------------------
+// 3. Dynamic Location Engine & Google Places / OSM Discovery
 // -------------------------------------------------------------
 export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // metres
+  const R = 6371e3;
   const φ1 = (lat1 * Math.PI) / 180;
   const φ2 = (lat2 * Math.PI) / 180;
   const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -92,7 +136,6 @@ export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 export async function fetchDynamicPlacesNearby(lat, lng) {
-  // Query Google Places / OpenStreetMap for national stores and malls in 2km radius
   return [
     {
       id: "store_kfc_sandton",
@@ -196,7 +239,7 @@ export async function processUserLocation(userId, latitude, longitude) {
 }
 
 // -------------------------------------------------------------
-// 3. Multi-Vertical Complex Intent Parser & Open KV Cart (`cart:{userId}`)
+// 4. Multi-Vertical Complex Intent Parser & Open KV Cart (`cart:{userId}`)
 // -------------------------------------------------------------
 export const VERTICAL_KEYWORDS = {
   Food: ["kfc", "steers", "mcdonalds", "mcd", "burger", "pizza", "food", "restaurant", "bakery", "butchery"],
@@ -287,9 +330,9 @@ export async function clearCart(userId) {
 }
 
 // -------------------------------------------------------------
-// 4. Pooling Engine with Fixed Keys (No Date.now in key names)
+// 5. Pooling Engine with Fixed Keys
 // -------------------------------------------------------------
-export const POOL_WINDOW_MS = 10 * 60 * 1000; // 10 mins
+export const POOL_WINDOW_MS = 10 * 60 * 1000;
 
 export async function evaluateOrderPooling(userId, orderCart) {
   const items = orderCart.items || [];
@@ -326,7 +369,6 @@ export async function evaluateOrderPooling(userId, orderCart) {
   const uniqueStoreIds = Object.keys(storeGroups);
 
   if (uniqueStoreIds.length === 1) {
-    // Fixed pool key: pool:same_store:${storeId} (NO Date.now in key name so orders share pool)
     const storeId = uniqueStoreIds[0];
     const storePoolKey = `pool:same_store:${storeId}`;
     let existingPool = await getKV(storePoolKey);
@@ -365,7 +407,6 @@ export async function evaluateOrderPooling(userId, orderCart) {
         expiresInSeconds: Math.round((existingPool.expiresAt - now) / 1000)
       });
     } else {
-      // Create new pool if no existing active valid pool
       const newPool = {
         poolId: `pool_${storeId}`,
         storeId,
@@ -387,7 +428,6 @@ export async function evaluateOrderPooling(userId, orderCart) {
       });
     }
   } else {
-    // Mall bundle fixed key: pool:mall_bundle:${mallId}
     const storesInfo = (await fetchDynamicPlacesNearby(-26.1075, 28.0567)).filter((s) => uniqueStoreIds.includes(s.id));
     const firstMallId = storesInfo[0]?.mallId || "sandton_mall";
 
@@ -417,12 +457,12 @@ export async function evaluateOrderPooling(userId, orderCart) {
 }
 
 // -------------------------------------------------------------
-// 5. Pricing Engine (0% Markup, R10 Service Fee, R35 Delivery, Bike Caps & Group Pricing)
+// 6. Pricing Engine
 // -------------------------------------------------------------
 export function calculateDeliveryAndPayouts(orderType, options = {}) {
-  const menuMarkupPercent = 0; // Strictly 0% menu markup
-  let serviceFee = 10; // R10 flat service fee
-  let deliveryFee = 35; // R35 pooled delivery fee
+  const menuMarkupPercent = 0;
+  let serviceFee = 10;
+  let deliveryFee = 35;
   let driverPayout = 33;
 
   const totalValue = options.totalValue || 0;
@@ -430,13 +470,11 @@ export function calculateDeliveryAndPayouts(orderType, options = {}) {
   const totalBags = options.totalBags || 1;
   const isGroupOrder = options.isGroupOrder || false;
 
-  // v19 Group Order rule: Same pickup and drop within 10 min window = R10 flat service fee total & R35 delivery total for group
   if (isGroupOrder) {
     serviceFee = 10;
     deliveryFee = 35;
     driverPayout = 45;
   } else if (totalValue > 500 || totalWeightKg > 15 || totalBags > 2) {
-    // Bike caps overage multiplier
     const multiplier = Math.ceil(Math.max(totalValue / 500, totalWeightKg / 15, totalBags / 2));
     deliveryFee = 35 * multiplier;
     driverPayout = 33 * multiplier;
@@ -526,7 +564,7 @@ export async function generatePayFastSplitLink(userId, orderCart, poolingDecisio
 }
 
 // -------------------------------------------------------------
-// 6. Site Adapters, Auto-Ordering & Proof URLs
+// 7. Site Adapters, Auto-Ordering & Proof URLs
 // -------------------------------------------------------------
 export async function scrapeStoreMenu(storeId) {
   return [
@@ -562,7 +600,7 @@ export async function handleImageRequest(itemThumbnailUrl, fullDemand = false) {
 }
 
 // -------------------------------------------------------------
-// 7. Rider Photo Proof & Fleet Failover
+// 8. Rider Photo Proof, Fleet Failover & 3-Screen Rider App API
 // -------------------------------------------------------------
 export const FLEET_CHAIN = ["Picup", "Pingo", "Droppa", "WumDrop"];
 
@@ -582,7 +620,10 @@ export async function dispatchFleetJob(jobId, requiredStoreIds = []) {
   return jobRecord;
 }
 
-export async function submitRiderStorePhotoProof(jobId, storeId, photoUrl) {
+export async function submitRiderStorePhotoProof(jobId, storeId, photoUrl, isCameraCapture = true) {
+  if (!isCameraCapture) {
+    throw new Error("Rider proof requires direct camera capture, gallery uploads disabled.");
+  }
   const job = await getKV(`fleet_job:${jobId}`);
   if (!job) throw new Error("Fleet job not found.");
 
@@ -608,8 +649,39 @@ export async function submitRiderStorePhotoProof(jobId, storeId, photoUrl) {
   };
 }
 
+export async function getRiderAppScreenState(jobId) {
+  const job = await getKV(`fleet_job:${jobId}`);
+  if (!job) {
+    return {
+      screen: "SCREEN_1_HOME",
+      earningsTodayR: 450,
+      acceptNextPoolButton: { label: "[Accept Next Pool - R45]", action: "ACCEPT_NEXT_POOL" }
+    };
+  }
+
+  const missingStores = job.requiredStoreIds.filter((id) => !job.photoProofByStore[id]);
+
+  if (missingStores.length > 0) {
+    return {
+      screen: "SCREEN_2_PICKUP",
+      jobId,
+      checklist: job.requiredStoreIds.map((id) => ({ storeId: id, verified: !!job.photoProofByStore[id] })),
+      cameraPhotoButton: { label: "[📸 Photo Proof of Package]", cameraOnly: true, action: "CAPTURE_STORE_PROOF" }
+    };
+  }
+
+  return {
+    screen: "SCREEN_3_DELIVERY",
+    jobId,
+    customerLocationPin: { lat: -26.1075, lng: 28.0567 },
+    googleMapsNavigateUrl: "https://maps.google.com/?q=-26.1075,28.0567",
+    doorPhotoButton: { label: "[📸 Proof on Door]", cameraOnly: true },
+    deliveredButton: { label: "[Delivered]", unlocked: job.paidOut }
+  };
+}
+
 // -------------------------------------------------------------
-// 8. Anti-Troll Filter, Dispute Engine & Fraud Shield
+// 9. Anti-Troll Filter, Dispute Engine & Fraud Shield
 // -------------------------------------------------------------
 export const PROFANITY_LIST = ["fuck", "shit", "bitch", "crap", "bastard"];
 export const HARD_BLOCK_LIST = ["porn", "gore", "threat", "spam", "crypto"];
@@ -694,7 +766,7 @@ export async function handleDisputeResolution(disputeId, action, details = {}) {
 }
 
 // -------------------------------------------------------------
-// 9. Referrals, Sentinel Self-Healing & Admin API Endpoints
+// 10. Referrals, Sentinel Self-Healing & Single-Employee Admin Dashboard
 // -------------------------------------------------------------
 export async function getOrCreateReferralCode(userId) {
   const refKey = `user_referral:${userId}`;
@@ -754,7 +826,50 @@ export async function runSentinelHealthCheck() {
   return status;
 }
 
-// Admin Routes
+export async function getAdminSingleScreenData() {
+  const escalatedIssues = [];
+  const activeOrders = [];
+
+  for (const [key, val] of kvStore.entries()) {
+    if (key.startsWith("fraud_blocked:")) {
+      escalatedIssues.push({
+        time: new Date(val.blockedAt || Date.now()).toISOString(),
+        orderId: key.replace("fraud_blocked:", ""),
+        reason: val.reason || "Fraud Shield Block",
+        actionButton: "[Resolve]"
+      });
+    }
+    if (key.startsWith("payfast_order:")) {
+      activeOrders.push({
+        id: val.poolId,
+        poolKey: val.poolId,
+        store: val.splits?.[0]?.recipient || "Store",
+        customerPhone: "+27820000000",
+        status: "Paying",
+        proofImage: `https://r2.mrcheaper.co.za/proof/${val.poolId}.png`,
+        rider: "Picup Rider 1"
+      });
+    }
+  }
+
+  return {
+    headerRow: {
+      activePools: kvStore.size,
+      ridersOnline: 12,
+      todayRevenueR: 12500,
+      escalatedCount: escalatedIssues.length
+    },
+    redBannerEscalated: escalatedIssues.length > 0 ? escalatedIssues : "✅ All clear",
+    ordersTable: activeOrders
+  };
+}
+
+// Single-Employee Admin Endpoint (<1 click resolution)
+app.get("/admin/dashboard-01", async (req, res) => {
+  const data = await getAdminSingleScreenData();
+  res.json({ success: true, dashboard: data });
+});
+
 app.get("/admin/pools", async (req, res) => {
   const pools = [];
   for (const [key, val] of kvStore.entries()) {
