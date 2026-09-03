@@ -773,7 +773,19 @@ export async function handleImageRequest(itemThumbnailUrl, fullDemand = false) {
 // -------------------------------------------------------------
 export const FLEET_CHAIN = ["Picup", "Pingo", "Droppa", "WumDrop"];
 
-export async function dispatchFleetJob(jobId, requiredStoreIds = []) {
+export async function dispatchFleetJob(jobId, requiredStoreIds = [], options = {}) {
+  const payload = {
+    jobId,
+    poolId: options.poolId || `MCP-${jobId}`,
+    provider: "Picup",
+    pickupAddress: options.pickupAddress || "Sandton City Mall, JHB",
+    deliveryAddress: options.deliveryAddress || "Sandton Central, JHB",
+    requiredStoreIds,
+    requestedAt: new Date().toISOString()
+  };
+
+  console.log("Picup Fleet Dispatch Request Payload:", JSON.stringify(payload, null, 2));
+
   const jobRecord = {
     jobId,
     provider: "Picup",
@@ -782,6 +794,7 @@ export async function dispatchFleetJob(jobId, requiredStoreIds = []) {
     requiredStoreIds,
     photoProofByStore: {},
     paidOut: false,
+    dispatchPayload: payload,
     updatedAt: Date.now()
   };
 
@@ -844,7 +857,7 @@ export async function handleRiderTheftResolution(jobId, poolId, storeId, details
   await setKV(`fleet_remake_charge:${remakePoolId}`, remakeRecord);
 
   const newJobId = `job_remake_${Date.now()}`;
-  const newRiderJob = await dispatchFleetJob(newJobId, [storeId]);
+  const newRiderJob = await dispatchFleetJob(newJobId, [storeId], { poolId: remakePoolId });
 
   const customerResolution = {
     userId: details.userId || "user_123",
@@ -1073,7 +1086,6 @@ export async function getAdminSingleScreenData() {
     if (key.startsWith("payfast_order:")) {
       const grandTotal = val.grandTotal || 0;
       const driverPayout = val.driverPayout || 0;
-      const foodSubtotal = val.foodSubtotal || 0;
 
       totalRevenueR += grandTotal;
       totalDriverPayoutsR += driverPayout;
