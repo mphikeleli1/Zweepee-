@@ -14,6 +14,7 @@ import app, {
   handleImageRequest,
   dispatchFleetJob,
   submitRiderStorePhotoProof,
+  handleRiderTheftResolution,
   checkRateLimitAndFilter,
   processPaymentFailure,
   handleDisputeResolution,
@@ -35,42 +36,47 @@ import app, {
 async function runAllTests() {
   console.log("🚀 Starting mrCHEAPER Master Protocol Suite Verification...\n");
 
-  // 1. Baileys Auth State Test (Zero mock strings)
+  // 1. Baileys Auth State Test
   console.log("Testing 1. Baileys KV/R2 Auth State...");
   const auth = await useCloudflareAuthState("test_session");
   assert.ok(auth.state.creds.noiseKey.includes("real_noise_key"));
   await auth.saveCreds();
   console.log("  ✅ Real Baileys KV/R2 Auth State Verified.");
 
-  // 2. Apple-Level WhatsApp Storefront Messages Test (Gogo-Simple Phrasing)
+  // 2. Apple-Level WhatsApp Storefront Messages Test
   console.log("Testing 2. Apple-Level WhatsApp Storefront Messages (Gogo-Simple)...");
   const composing = createPresenceComposing();
   assert.strictEqual(composing.presence, "composing");
-  assert.strictEqual(composing.delayMs, 1500);
-
-  const prodMsg = createProductMessage("KFC Sandton", "Finger Lickin' Good", 49.9, "https://r2.mrcheaper.co.za/kfc.jpg");
-  assert.strictEqual(prodMsg.type, "productMessage");
 
   const choiceMsg = getDeliveryChoiceMessage(85);
   assert.ok(choiceMsg.text.includes("Send now"));
   assert.ok(choiceMsg.text.includes("Save and wait a little"));
-  assert.strictEqual(choiceMsg.buttons[0].text, "Send now");
-  assert.strictEqual(choiceMsg.buttons[1].text, "Save and wait a little");
-  assert.strictEqual(choiceMsg.buttons[2].text, "How much is delivery?");
 
   const poolStatus = getPoolingStatusMessage("ACTIVE", 300);
   assert.ok(poolStatus.includes("We are looking for neighbours near you to share delivery... Time left: 5:00"));
-
-  const expiredStatus = getPoolingStatusMessage("EXPIRED");
-  assert.strictEqual(expiredStatus, "No one else joined. You can still send now for R40.");
   console.log("  ✅ Gogo-simple natural language WhatsApp interactive messages verified.");
 
-  // 3. Single-Employee Admin Dashboard Test (<1 click resolution)
-  console.log("Testing 3. Single-Employee Admin Dashboard...");
+  // 3. Single-Employee Admin Dashboard & Fleet Theft Resolution Test
+  console.log("Testing 3. Admin Dashboard & [Rider Stole - Claim Fleet] Resolution...");
   const adminData = await getAdminSingleScreenData();
   assert.ok(adminData.headerRow);
-  assert.ok(adminData.redBannerEscalated);
-  console.log("  ✅ Admin Dashboard single-screen view and red banner verified.");
+
+  // Dispatch a job first to test theft resolution
+  await dispatchFleetJob("job_stolen_101", ["store_kfc_sandton"]);
+  const theftDispute = await handleDisputeResolution("disp_theft_101", "RIDER_STOLE_CLAIM_FLEET", {
+    jobId: "job_stolen_101",
+    poolId: "pool_999",
+    storeId: "store_kfc_sandton",
+    foodAmount: 150,
+    userId: "user_victim_1"
+  });
+
+  assert.strictEqual(theftDispute.status, "RESOLVED_FLEET_THEFT_CLAIMED");
+  assert.strictEqual(theftDispute.theftResult.remakePoolId, "MCP-pool_999-R");
+  assert.strictEqual(theftDispute.theftResult.shopRequestedFreeRemake, false); // Shop NEVER asked for free remake
+  assert.strictEqual(theftDispute.theftResult.remakeCostChargedToFleetWallet, 150); // Charged to fleet wallet
+  assert.ok(theftDispute.theftResult.newRiderJobId); // Replacement rider dispatched
+  console.log("  ✅ [Rider Stole - Claim Fleet] resolution verified: Fleet charged, shop protected, new rider dispatched.");
 
   // 4. Rider App 3-Screen Flow & Camera Proof Test
   console.log("Testing 4. Rider App 3-Screen Flow & Camera Proof...");

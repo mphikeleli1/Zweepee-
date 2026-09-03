@@ -124,7 +124,6 @@ export function createButtonsMessage(title, text, footer, buttons) {
   };
 }
 
-// Gogo-simple natural language message templates
 export function getDeliveryChoiceMessage(itemTotalR = 85) {
   const soloTotalR = itemTotalR + 40;
   return {
@@ -642,7 +641,7 @@ export async function handleImageRequest(itemThumbnailUrl, fullDemand = false) {
 }
 
 // -------------------------------------------------------------
-// 8. Rider Photo Proof, Fleet Failover & 3-Screen Rider App API
+// 8. Rider Photo Proof, Fleet Failover & Fleet Theft Resolution
 // -------------------------------------------------------------
 export const FLEET_CHAIN = ["Picup", "Pingo", "Droppa", "WumDrop"];
 
@@ -688,6 +687,61 @@ export async function submitRiderStorePhotoProof(jobId, storeId, photoUrl, isCam
     paidOut: job.paidOut,
     missingStoresCount: missingStores.length,
     status: job.status
+  };
+}
+
+export async function handleRiderTheftResolution(jobId, poolId, storeId, details = {}) {
+  // Case: Rider collected package (photo proof exists) then absconded/no delivery
+  // Rule: Fleet Fault, NOT Shop Fault. Shop already fulfilled; do NOT ask shop for free remake.
+  const job = await getKV(`fleet_job:${jobId}`);
+  if (!job) throw new Error("Fleet job not found for theft resolution.");
+
+  const provider = job.provider || "Picup";
+  const remakePoolId = `${poolId}-R`;
+
+  // 1. Block rider on fleet provider
+  await setKV(`fleet_blocked_rider:${job.riderId || "rider_999"}`, {
+    provider,
+    reason: "Rider absconded after package collection (Theft)",
+    blockedAt: Date.now()
+  });
+
+  // 2. Charge fleet wallet for remake order MCP-{poolId}-R without asking shop for free remake
+  const remakeRecord = {
+    remakePoolId: `MCP-${remakePoolId}`,
+    originalPoolId: poolId,
+    storeId,
+    remakeCost: details.foodAmount || 150,
+    chargedToFleet: provider,
+    chargedFleetWallet: true,
+    shopRequestFreeRemake: false,
+    createdAt: Date.now()
+  };
+  await setKV(`fleet_remake_charge:${remakePoolId}`, remakeRecord);
+
+  // 3. Dispatch new replacement rider for remake delivery
+  const newJobId = `job_remake_${Date.now()}`;
+  const newRiderJob = await dispatchFleetJob(newJobId, [storeId]);
+
+  // 4. Customer gets full delivery fee refund OR free remake (never pays twice)
+  const customerResolution = {
+    userId: details.userId || "user_123",
+    deliveryFeeRefunded: true,
+    freeRemakeDispatched: true,
+    remakePoolId: `MCP-${remakePoolId}`
+  };
+
+  job.status = "RESOLVED_FLEET_THEFT_CLAIMED";
+  await setKV(`fleet_job:${jobId}`, job);
+
+  return {
+    disputeAction: "[Rider Stole - Claim Fleet]",
+    riderBlockedOnFleet: provider,
+    remakePoolId: `MCP-${remakePoolId}`,
+    remakeCostChargedToFleetWallet: remakeRecord.remakeCost,
+    shopRequestedFreeRemake: false,
+    newRiderJobId: newRiderJob.jobId,
+    customerResolution
   };
 }
 
@@ -789,7 +843,16 @@ export async function handleDisputeResolution(disputeId, action, details = {}) {
     createdAt: Date.now()
   };
 
-  if (action === "REFUND_FEES_ONLY") {
+  if (action === "RIDER_STOLE_CLAIM_FLEET") {
+    const theftResult = await handleRiderTheftResolution(
+      details.jobId || "job_rider_1",
+      details.poolId || "MCP-pool_123",
+      details.storeId || "store_kfc_sandton",
+      details
+    );
+    dispute.status = "RESOLVED_FLEET_THEFT_CLAIMED";
+    dispute.theftResult = theftResult;
+  } else if (action === "REFUND_FEES_ONLY") {
     dispute.status = "RESOLVED_REFUND_FEES_ONLY";
     dispute.refundAmount = details.deliveryFee || 20;
   } else if (action === "REFUND_FOOD_MANUAL") {
@@ -891,7 +954,8 @@ export async function getAdminSingleScreenData() {
         customerPhone: "+27820000000",
         status: "Paying",
         proofImage: `https://r2.mrcheaper.co.za/proof/${val.poolId}.png`,
-        rider: "Picup Rider 1"
+        rider: "Picup Rider 1",
+        actionButton: "[Rider Stole - Claim Fleet]"
       });
     }
   }
