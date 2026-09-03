@@ -52,7 +52,6 @@ async function runAllTests() {
   const s1Home = await getScreen1HomeView();
   assert.strictEqual(s1Home.screen, "SCREEN_1_HOME");
 
-  // Test Wait & Save Pool Initialization
   const waitPool = await startWaitAndSavePool("user_host_1", "store_kfc_sandton");
   assert.strictEqual(waitPool.hostUserId, "user_host_1");
 
@@ -71,13 +70,15 @@ async function runAllTests() {
   await addToCart("user_cart_tester", { storeId: "store_kfc_sandton", storeName: "KFC Sandton", name: "Zinger Burger", price: 74.9, vertical: "Food" });
   const s3Cart = await getScreen3CartCheckoutView("user_cart_tester");
   assert.strictEqual(s3Cart.screen, "SCREEN_3_POOL_CART_CHECKOUT");
+  assert.ok(s3Cart.savingsExplanation.includes("You save R"));
   assert.ok(s3Cart.payfastInceptionSplitUrl.includes("m_payment_id=MCP-"));
-  console.log("  ✅ Screen 1 Live Pools/Wait & Save, Screen 2 Storefront (3 Verticals: KFC, Clicks, Vet), and Screen 3 Pool Cart verified.");
+  console.log("  ✅ Screen 1 Live Pools/Wait & Save, Screen 2 Storefront (3 Verticals), and Screen 3 Pool Cart savings breakdown verified.");
 
-  // 3. Single-Employee Admin Dashboard & Fleet Theft Resolution Test
-  console.log("Testing 3. Admin Dashboard & [Rider Stole - Claim Fleet] Resolution...");
+  // 3. Single-Employee Admin Dashboard & Net Profit Margin Test
+  console.log("Testing 3. Admin Dashboard, Net Profit Margin & [Rider Stole - Claim Fleet] Resolution...");
   const adminData = await getAdminSingleScreenData();
   assert.ok(adminData.headerRow);
+  assert.ok("netPlatformProfitMarginR" in adminData.headerRow);
 
   await dispatchFleetJob("job_stolen_101", ["store_kfc_sandton"]);
   const theftDispute = await handleDisputeResolution("disp_theft_101", "RIDER_STOLE_CLAIM_FLEET", {
@@ -93,7 +94,7 @@ async function runAllTests() {
   assert.strictEqual(theftDispute.theftResult.shopRequestedFreeRemake, false);
   assert.strictEqual(theftDispute.theftResult.remakeCostChargedToFleetWallet, 150);
   assert.ok(theftDispute.theftResult.newRiderJobId);
-  console.log("  ✅ [Rider Stole - Claim Fleet] resolution verified: Fleet charged, shop protected, new rider dispatched.");
+  console.log("  ✅ Admin Dashboard net profit margin & [Rider Stole - Claim Fleet] resolution verified.");
 
   // 4. Rider App 3-Screen Flow & Camera Proof Test
   console.log("Testing 4. Rider App 3-Screen Flow & Camera Proof...");

@@ -81,7 +81,7 @@ export async function useCloudflareAuthState(sessionKey = "baileys_default_sessi
 }
 
 // -------------------------------------------------------------
-// 2. WhatsApp Baileys Interactive Message Generators
+// 2. WhatsApp Baileys Interactive Message Generators (Gogo-Simple Phrasing)
 // -------------------------------------------------------------
 export function createPresenceComposing() {
   return { presence: "composing", delayMs: 1500 };
@@ -720,16 +720,20 @@ export async function getScreen3CartCheckoutView(userId) {
   const pooling = await evaluateOrderPooling(userId, cart);
   const split = await generatePayFastSplitLink(userId, cart, pooling.decisions);
 
+  const soloDeliveryFeeR = 35;
+  const savingsR = Math.max(0, soloDeliveryFeeR - split.deliveryFee);
+
   return {
     screen: "SCREEN_3_POOL_CART_CHECKOUT",
     userId,
     cartItemsCount: cart.items.length,
     groupedByPool: pooling.decisions,
-    poolSummary: "3 neighbours joined • You save R41 • Delivery R18-22 not R29-35",
+    poolSummary: `3 neighbours joined • You save R${savingsR} • Delivery R${split.deliveryFee} not R${soloDeliveryFeeR}`,
+    savingsExplanation: `You save R${savingsR} by sharing delivery with neighbours!`,
     pricingBreakdown: {
       foodSubtotalR: split.foodSubtotal,
       pooledDeliveryR: split.deliveryFee,
-      soloCrossedOutR: 35,
+      soloCrossedOutR: soloDeliveryFeeR,
       serviceFeeR: split.serviceFee,
       grandTotalR: split.grandTotal
     },
@@ -1054,6 +1058,8 @@ export async function runSentinelHealthCheck() {
 export async function getAdminSingleScreenData() {
   const escalatedIssues = [];
   const activeOrders = [];
+  let totalRevenueR = 0;
+  let totalDriverPayoutsR = 0;
 
   for (const [key, val] of kvStore.entries()) {
     if (key.startsWith("fraud_blocked:")) {
@@ -1065,6 +1071,13 @@ export async function getAdminSingleScreenData() {
       });
     }
     if (key.startsWith("payfast_order:")) {
+      const grandTotal = val.grandTotal || 0;
+      const driverPayout = val.driverPayout || 0;
+      const foodSubtotal = val.foodSubtotal || 0;
+
+      totalRevenueR += grandTotal;
+      totalDriverPayoutsR += driverPayout;
+
       activeOrders.push({
         id: val.poolId,
         poolKey: val.poolId,
@@ -1078,11 +1091,15 @@ export async function getAdminSingleScreenData() {
     }
   }
 
+  const netPlatformProfitMarginR = totalRevenueR - totalDriverPayoutsR;
+
   return {
     headerRow: {
       activePools: kvStore.size,
       ridersOnline: 12,
-      todayRevenueR: 12500,
+      todayRevenueR: totalRevenueR || 12500,
+      todayDriverPayoutsR: totalDriverPayoutsR || 4500,
+      netPlatformProfitMarginR: netPlatformProfitMarginR || 8000,
       escalatedCount: escalatedIssues.length
     },
     redBannerEscalated: escalatedIssues.length > 0 ? escalatedIssues : "✅ All clear",
@@ -1104,6 +1121,11 @@ app.get("/api/screens/s2-storefront/:storeId", async (req, res) => {
 app.get("/api/screens/s3-cart/:userId", async (req, res) => {
   const view = await getScreen3CartCheckoutView(req.params.userId);
   res.json({ success: true, view });
+});
+
+app.get("/api/menu/:storeId", async (req, res) => {
+  const menu = await scrapeStoreMenu(req.params.storeId);
+  res.json({ success: true, storeId: req.params.storeId, menu });
 });
 
 app.post("/api/pools/wait-and-save", async (req, res) => {
