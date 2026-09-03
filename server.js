@@ -81,7 +81,7 @@ export async function useCloudflareAuthState(sessionKey = "baileys_default_sessi
 }
 
 // -------------------------------------------------------------
-// 2. WhatsApp Baileys Interactive Message Generators
+// 2. WhatsApp Baileys Interactive Message Generators (Gogo-Simple Phrasing)
 // -------------------------------------------------------------
 export function createPresenceComposing() {
   return { presence: "composing", delayMs: 1500 };
@@ -122,6 +122,29 @@ export function createButtonsMessage(title, text, footer, buttons) {
       type: 1
     }))
   };
+}
+
+// Gogo-simple natural language message templates
+export function getDeliveryChoiceMessage(itemTotalR = 85) {
+  const soloTotalR = itemTotalR + 40;
+  return {
+    title: "How do you want us to deliver it?",
+    text: `🚀 Send now - Pay R40 delivery now. Total R${soloTotalR}.\n\n👥 Save and wait a little - Wait up to 10 minutes. If someone else nearby orders, you share delivery and pay less, from R15. If no one joins after 10 minutes, you just pay the normal R40.`,
+    buttons: [
+      { id: "send_now", text: "Send now" },
+      { id: "save_wait", text: "Save and wait a little" },
+      { id: "check_price", text: "How much is delivery?" }
+    ]
+  };
+}
+
+export function getPoolingStatusMessage(status, secondsLeft = 600) {
+  if (status === "EXPIRED") {
+    return "No one else joined. You can still send now for R40.";
+  }
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = (secondsLeft % 60).toString().padStart(2, "0");
+  return `We are looking for neighbours near you to share delivery... Time left: ${minutes}:${seconds}`;
 }
 
 // -------------------------------------------------------------
@@ -268,7 +291,7 @@ export function parseComplexIntent(inputText) {
     let matchedVertical = "Other";
     let matchedStoreName = token;
 
-    if (token.includes("parcel") || token.includes("package") || token.includes("doc")) {
+    if (token.includes("parcel") || token.includes("package") || token.includes("doc") || token.includes("send something")) {
       hasParcel = true;
       matchedVertical = "Parcel";
     } else {
@@ -339,7 +362,7 @@ export async function clearCart(userId) {
 // -------------------------------------------------------------
 // 5. Pooling Engine with Fixed Keys & 10-Min Window Logging
 // -------------------------------------------------------------
-export const POOL_WINDOW_MS = 10 * 60 * 1000; // 10 mins (600,000 ms)
+export const POOL_WINDOW_MS = 10 * 60 * 1000;
 
 export async function evaluateOrderPooling(userId, orderCart) {
   const items = orderCart.items || [];
@@ -348,7 +371,6 @@ export async function evaluateOrderPooling(userId, orderCart) {
 
   const decisions = [];
 
-  // Rule: Parcel NEVER pools and NEVER bundles with food
   if (parcelItems.length > 0) {
     for (const parcelItem of parcelItems) {
       decisions.push({
@@ -436,11 +458,9 @@ export async function evaluateOrderPooling(userId, orderCart) {
       });
     }
   } else {
-    // Multi-store mall bundle (up to 3 compatible stores in same mall)
     const storesInfo = (await fetchDynamicPlacesNearby(-26.1075, 28.0567)).filter((s) => uniqueStoreIds.includes(s.id));
     const firstMallId = storesInfo[0]?.mallId || "sandton_mall";
 
-    // VROOM Tour optimization: max 3 compatible stores per tour
     const bundledStores = storesInfo.slice(0, 3);
     const mallPoolKey = `pool:mall_bundle:${firstMallId}`;
     let mallBundle = {
@@ -500,10 +520,9 @@ export function calculateDeliveryAndPayouts(orderType, options = {}) {
       driverPayout = 58;
     }
   } else if (orderType === "MALL_BUNDLE") {
-    // Mall bundle: R25 shared + R4 extra fee = R29 total delivery
-    serviceFee = 12; // R8 base + R4 mall extra fee
+    serviceFee = 12;
     deliveryFee = 29;
-    driverPayout = 58; // R52-R65 for 3-stop mall tour
+    driverPayout = 58;
   } else if (orderType === "PARCEL_SOLO") {
     const size = options.parcelSize || "S";
     let baseParcel = 35;

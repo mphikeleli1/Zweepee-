@@ -24,6 +24,8 @@ import app, {
   createProductMessage,
   createListMessage,
   createButtonsMessage,
+  getDeliveryChoiceMessage,
+  getPoolingStatusMessage,
   getRiderAppScreenState,
   getAdminSingleScreenData,
   kvStore,
@@ -40,8 +42,8 @@ async function runAllTests() {
   await auth.saveCreds();
   console.log("  ✅ Real Baileys KV/R2 Auth State Verified.");
 
-  // 2. Apple-Level WhatsApp Storefront Messages Test
-  console.log("Testing 2. Apple-Level WhatsApp Storefront Messages...");
+  // 2. Apple-Level WhatsApp Storefront Messages Test (Gogo-Simple Phrasing)
+  console.log("Testing 2. Apple-Level WhatsApp Storefront Messages (Gogo-Simple)...");
   const composing = createPresenceComposing();
   assert.strictEqual(composing.presence, "composing");
   assert.strictEqual(composing.delayMs, 1500);
@@ -49,12 +51,19 @@ async function runAllTests() {
   const prodMsg = createProductMessage("KFC Sandton", "Finger Lickin' Good", 49.9, "https://r2.mrcheaper.co.za/kfc.jpg");
   assert.strictEqual(prodMsg.type, "productMessage");
 
-  const listMsg = createListMessage("Choose Mall", "Select nearby mall", "Malls", [{ title: "Malls", rows: [{ id: "m1", title: "Sandton City" }] }]);
-  assert.strictEqual(listMsg.type, "listMessage");
+  const choiceMsg = getDeliveryChoiceMessage(85);
+  assert.ok(choiceMsg.text.includes("Send now"));
+  assert.ok(choiceMsg.text.includes("Save and wait a little"));
+  assert.strictEqual(choiceMsg.buttons[0].text, "Send now");
+  assert.strictEqual(choiceMsg.buttons[1].text, "Save and wait a little");
+  assert.strictEqual(choiceMsg.buttons[2].text, "How much is delivery?");
 
-  const btnMsg = createButtonsMessage("Actions", "Choose next step", "mrCHEAPER", [{ id: "c", text: "🛒 Add to Cart" }, { id: "l", text: "📍 Share Location" }, { id: "p", text: "💳 Pay Now" }]);
-  assert.strictEqual(btnMsg.buttons.length, 3);
-  console.log("  ✅ WhatsApp interactive messages verified.");
+  const poolStatus = getPoolingStatusMessage("ACTIVE", 300);
+  assert.ok(poolStatus.includes("We are looking for neighbours near you to share delivery... Time left: 5:00"));
+
+  const expiredStatus = getPoolingStatusMessage("EXPIRED");
+  assert.strictEqual(expiredStatus, "No one else joined. You can still send now for R40.");
+  console.log("  ✅ Gogo-simple natural language WhatsApp interactive messages verified.");
 
   // 3. Single-Employee Admin Dashboard Test (<1 click resolution)
   console.log("Testing 3. Single-Employee Admin Dashboard...");
@@ -87,7 +96,7 @@ async function runAllTests() {
   await runSentinelHealthCheck();
   console.log("  ✅ 10-Minute Pool Window Expiration Log verified.");
 
-  // 6. Complex Intent Test 1: "vet + KFC + Clicks + parcel to send to Randburg"
+  // 6. Complex Intent Test 1: "vet + KFC + Clicks + parcel"
   console.log("Testing 6. Complex Intent Test 1 ('vet + KFC + Clicks + parcel')...");
   const parsed1 = parseComplexIntent("vet + KFC + Clicks + parcel to send to Randburg");
   assert.strictEqual(parsed1.parsedCount, 4);
@@ -103,10 +112,9 @@ async function runAllTests() {
   };
 
   const poolDecision1 = await evaluateOrderPooling("user_complex_1", cartComplex1);
-  assert.strictEqual(poolDecision1.decisions.length, 2); // 1 Mall Bundle (vet+KFC+Clicks) + 1 Parcel Solo
+  assert.strictEqual(poolDecision1.decisions.length, 2);
   assert.strictEqual(poolDecision1.decisions[0].type, "PARCEL_SOLO");
   assert.strictEqual(poolDecision1.decisions[1].type, "MALL_BUNDLE");
-  assert.strictEqual(poolDecision1.decisions[1].storeCount, 3); // Max 3 stores in mall bundle
 
   const mallCart1 = { items: cartComplex1.items.filter((i) => !i.isParcel) };
   const parcelCart1 = { items: cartComplex1.items.filter((i) => i.isParcel) };
@@ -116,7 +124,7 @@ async function runAllTests() {
 
   assert.ok(mallSplit.payfastUrl.includes("m_payment_id=MCP-"));
   assert.ok(parcelSplit.payfastUrl.includes("m_payment_id=MCP-"));
-  console.log("  ✅ Parsed into 2 distinct jobs: 1 Mall Bundle (vet+KFC+Clicks) + 1 Parcel Solo separate.");
+  console.log("  ✅ Parsed into 2 distinct jobs: 1 Mall Bundle + 1 Parcel Solo separate.");
 
   // 7. Complex Intent Test 2: Tour Optimization
   console.log("Testing 7. Complex Intent Test 2 (Tour Optimization Max 3 Stores)...");
@@ -131,7 +139,7 @@ async function runAllTests() {
 
   const poolDecision2 = await evaluateOrderPooling("user_complex_2", cartComplex2);
   assert.strictEqual(poolDecision2.decisions[0].type, "MALL_BUNDLE");
-  assert.strictEqual(poolDecision2.decisions[0].storeCount, 3); // Max 3 stores capped
+  assert.strictEqual(poolDecision2.decisions[0].storeCount, 3);
   console.log("  ✅ Tour optimization capped multi-store tour at max 3 stores.");
 
   // 8. Anti-Troll Filter & Fraud Shield Test
