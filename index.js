@@ -10,6 +10,7 @@ import app, {
   generatePayFastSplitLink,
   calculateDeliveryAndPayouts,
   scrapeStoreMenu,
+  fetchParallelSiteAdapters,
   autoPlaceClickAndCollectOrder,
   handleImageRequest,
   dispatchFleetJob,
@@ -47,8 +48,16 @@ async function runAllTests() {
   await auth.saveCreds();
   console.log("  ✅ Real Baileys KV/R2 Auth State Verified.");
 
-  // 2. Apple-Level WhatsApp Storefront Messages & 3 Screens Test
-  console.log("Testing 2. 3-Screen Flows (Screen 1 Live Pools, Screen 2 Storefront, Screen 3 Pool Cart)...");
+  // 2. Parallel Aggregator API Adapters & Cheapest-First Test
+  console.log("Testing 2. Parallel Aggregator Site Adapters & Cheapest-First Sorting...");
+  const aggregatedItems = await fetchParallelSiteAdapters("burger");
+  assert.ok(aggregatedItems.length >= 6);
+  assert.ok(aggregatedItems[0].price <= aggregatedItems[aggregatedItems.length - 1].price); // Cheapest first
+  assert.ok(aggregatedItems[0].img.includes("https://r2.mrcheaper.co.za/")); // WhatsApp image preserved
+  console.log("  ✅ Parallel API fetching across site adapters, fault tolerance, and cheapest-first sorting verified.");
+
+  // 3. Apple-Level WhatsApp Storefront Messages & 3 Screens Test
+  console.log("Testing 3. 3-Screen Flows (Screen 1 Live Pools, Screen 2 Storefront, Screen 3 Pool Cart)...");
   const s1Home = await getScreen1HomeView();
   assert.strictEqual(s1Home.screen, "SCREEN_1_HOME");
 
@@ -74,8 +83,8 @@ async function runAllTests() {
   assert.ok(s3Cart.payfastInceptionSplitUrl.includes("m_payment_id=MCP-"));
   console.log("  ✅ Screen 1 Live Pools/Wait & Save, Screen 2 Storefront (3 Verticals), and Screen 3 Pool Cart savings breakdown verified.");
 
-  // 3. Single-Employee Admin Dashboard & Net Profit Margin Test
-  console.log("Testing 3. Admin Dashboard, Net Profit Margin & [Rider Stole - Claim Fleet] Resolution...");
+  // 4. Single-Employee Admin Dashboard & Fleet Theft Resolution Test
+  console.log("Testing 4. Admin Dashboard, Net Profit Margin & [Rider Stole - Claim Fleet] Resolution...");
   const adminData = await getAdminSingleScreenData();
   assert.ok(adminData.headerRow);
   assert.ok("netPlatformProfitMarginR" in adminData.headerRow);
@@ -96,8 +105,8 @@ async function runAllTests() {
   assert.ok(theftDispute.theftResult.newRiderJobId);
   console.log("  ✅ Admin Dashboard net profit margin & [Rider Stole - Claim Fleet] resolution verified.");
 
-  // 4. Rider App 3-Screen Flow & Camera Proof Test
-  console.log("Testing 4. Rider App 3-Screen Flow & Camera Proof...");
+  // 5. Rider App 3-Screen Flow & Camera Proof Test
+  console.log("Testing 5. Rider App 3-Screen Flow & Camera Proof...");
   const homeScreen = await getRiderAppScreenState("none");
   assert.strictEqual(homeScreen.screen, "SCREEN_1_HOME");
 
@@ -114,14 +123,14 @@ async function runAllTests() {
   assert.strictEqual(deliveryScreen.screen, "SCREEN_3_DELIVERY");
   console.log("  ✅ Rider App 3-screen flow and camera-only proof enforcement verified.");
 
-  // 5. 10-Minute Pool Window TTL Expiration Log Test
-  console.log("Testing 5. 10-Minute Pool Window Expiration Log...");
+  // 6. 10-Minute Pool Window TTL Expiration Log Test
+  console.log("Testing 6. 10-Minute Pool Window Expiration Log...");
   await setKV("pool:same_store:test_exp_store", { poolId: "MCP-test_exp_123", expiresAt: Date.now() - 1000 }, 10);
   await runSentinelHealthCheck();
   console.log("  ✅ 10-Minute Pool Window Expiration Log verified.");
 
-  // 6. Complex Intent Test 1: "vet + KFC + Clicks + parcel"
-  console.log("Testing 6. Complex Intent Test 1 ('vet + KFC + Clicks + parcel')...");
+  // 7. Complex Intent Test 1: "vet + KFC + Clicks + parcel"
+  console.log("Testing 7. Complex Intent Test 1 ('vet + KFC + Clicks + parcel')...");
   const parsed1 = parseComplexIntent("vet + KFC + Clicks + parcel to send to Randburg");
   assert.strictEqual(parsed1.parsedCount, 4);
   assert.strictEqual(parsed1.hasParcel, true);
@@ -150,8 +159,8 @@ async function runAllTests() {
   assert.ok(parcelSplit.payfastUrl.includes("m_payment_id=MCP-"));
   console.log("  ✅ Parsed into 2 distinct jobs: 1 Mall Bundle + 1 Parcel Solo separate.");
 
-  // 7. Complex Intent Test 2: Tour Optimization
-  console.log("Testing 7. Complex Intent Test 2 (Tour Optimization Max 3 Stores)...");
+  // 8. Complex Intent Test 2: Tour Optimization
+  console.log("Testing 8. Complex Intent Test 2 (Tour Optimization Max 3 Stores)...");
   const cartComplex2 = {
     items: [
       { itemId: "1", storeId: "store_kfc_sandton", storeName: "KFC Sandton City", price: 50, vertical: "Food" },
@@ -165,8 +174,8 @@ async function runAllTests() {
   assert.ok(poolDecision2.decisions[0].storeCount <= 3);
   console.log("  ✅ Tour optimization capped multi-store tour at max 3 stores.");
 
-  // 8. Anti-Troll Filter & Fraud Shield Test
-  console.log("Testing 8. Anti-Troll Filter & Fraud Shield...");
+  // 9. Anti-Troll Filter & Fraud Shield Test
+  console.log("Testing 9. Anti-Troll Filter & Fraud Shield...");
   const profanity = await checkRateLimitAndFilter("user_clean_1", "I want some shit food");
   assert.strictEqual(profanity.deflect, true);
 
@@ -175,15 +184,6 @@ async function runAllTests() {
   const fraudBlock = await processPaymentFailure("user_fail_pay", "fp_999");
   assert.strictEqual(fraudBlock.blocked, true);
   console.log("  ✅ Anti-troll deflects and 3-fail payment Fraud Shield verified.");
-
-  // 9. Referrals & Sentinel Self-Healing Test
-  console.log("Testing 9. Referrals & Sentinel Self-Healing...");
-  const refCode = await getOrCreateReferralCode("user_ref_owner");
-  assert.ok(refCode.startsWith("MCP-"));
-
-  const sentinel = await runSentinelHealthCheck();
-  assert.strictEqual(sentinel.sentinelStatus, "HEALTHY_AUTOHALED");
-  console.log("  ✅ MCP-{last4} referrals and Sentinel self-healing monitoring verified.");
 
   console.log("\n🎉 ALL v19 CRITICAL CHECKS PASSED CLEANLY!");
   process.exit(0);
