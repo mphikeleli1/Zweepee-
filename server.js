@@ -81,7 +81,7 @@ export async function useCloudflareAuthState(sessionKey = "baileys_default_sessi
 }
 
 // -------------------------------------------------------------
-// 2. WhatsApp Baileys Interactive Message Generators (Gogo-Simple Phrasing)
+// 2. WhatsApp Baileys Interactive Message Generators
 // -------------------------------------------------------------
 export function createPresenceComposing() {
   return { presence: "composing", delayMs: 1500 };
@@ -174,27 +174,11 @@ export async function fetchDynamicPlacesNearby(lat, lng) {
       mallName: "Sandton City Mall",
       lat: -26.1076,
       lng: 28.0567,
-      adapter: "Ordev"
-    },
-    {
-      id: "store_steers_sandton",
-      name: "Steers Sandton City",
-      vertical: "Food",
-      mallId: "mall_sandton_city",
-      mallName: "Sandton City Mall",
-      lat: -26.1078,
-      lng: 28.0569,
-      adapter: "Orderin"
-    },
-    {
-      id: "store_mcd_sandton",
-      name: "McDonald's Sandton City",
-      vertical: "Food",
-      mallId: "mall_sandton_city",
-      mallName: "Sandton City Mall",
-      lat: -26.1075,
-      lng: 28.0565,
-      adapter: "Yobee"
+      adapter: "Ordev",
+      rating: "4.8 ★",
+      deliveryTime: "15-20 min",
+      heroImage: "https://r2.mrcheaper.co.za/kfc_hero.jpg",
+      tagline: "Finger Lickin' Good Chicken"
     },
     {
       id: "store_clicks_sandton",
@@ -204,27 +188,25 @@ export async function fetchDynamicPlacesNearby(lat, lng) {
       mallName: "Sandton City Mall",
       lat: -26.108,
       lng: 28.057,
-      adapter: "Shopify"
+      adapter: "Shopify",
+      rating: "4.9 ★",
+      deliveryTime: "10-15 min",
+      heroImage: "https://r2.mrcheaper.co.za/clicks_hero.jpg",
+      tagline: "Health, Beauty & Wellness Essentials"
     },
     {
       id: "store_vet_sandton",
-      name: "Sandton Vet Clinic",
-      vertical: "Other",
+      name: "Sandton Vet Clinic & Petshop",
+      vertical: "Vet",
       mallId: "mall_sandton_city",
       mallName: "Sandton City Mall",
       lat: -26.1082,
       lng: 28.0571,
-      adapter: "WooCommerce"
-    },
-    {
-      id: "store_pnp_rosebank",
-      name: "Pick n Pay Rosebank",
-      vertical: "Grocery",
-      mallId: "mall_rosebank",
-      mallName: "Rosebank Mall",
-      lat: -26.1465,
-      lng: 28.0436,
-      adapter: "Magento"
+      adapter: "WooCommerce",
+      rating: "4.9 ★",
+      deliveryTime: "15-25 min",
+      heroImage: "https://r2.mrcheaper.co.za/vet_hero.jpg",
+      tagline: "Pet Care, Dewormers & Prescription Food"
     }
   ];
 }
@@ -359,9 +341,28 @@ export async function clearCart(userId) {
 }
 
 // -------------------------------------------------------------
-// 5. Pooling Engine with Fixed Keys & 10-Min Window Logging
+// 5. Pooling Engine with Fixed Keys & Wait & Save Engine
 // -------------------------------------------------------------
 export const POOL_WINDOW_MS = 10 * 60 * 1000;
+
+export async function startWaitAndSavePool(userId, storeId) {
+  const storePoolKey = `pool:same_store:${storeId}`;
+  const now = Date.now();
+
+  const newPool = {
+    poolId: `MCP-pool_${storeId}`,
+    storeId,
+    hostUserId: userId,
+    orders: [{ userId, items: [] }],
+    totalWeightKg: 0,
+    totalValue: 0,
+    createdAt: now,
+    expiresAt: now + POOL_WINDOW_MS
+  };
+
+  await setKV(storePoolKey, newPool, POOL_WINDOW_MS);
+  return newPool;
+}
 
 export async function evaluateOrderPooling(userId, orderCart) {
   const items = orderCart.items || [];
@@ -605,13 +606,136 @@ export async function generatePayFastSplitLink(userId, orderCart, poolingDecisio
 }
 
 // -------------------------------------------------------------
-// 7. Site Adapters, Auto-Ordering & Proof URLs
+// 7. Site Adapters, Universal Storefront Data & Screen Renderers
 // -------------------------------------------------------------
 export async function scrapeStoreMenu(storeId) {
+  if (storeId.includes("clicks")) {
+    return [
+      { id: "clicks_panado", name: "Panado 24 Tablets", price: 29.9, weightKg: 0.1, category: "Pharmacy", img: "https://r2.mrcheaper.co.za/clicks_panado_thumb.jpg", badge: "Rx" },
+      { id: "clicks_vitc", name: "Vitamin C 1000mg Effervescent", price: 89.9, weightKg: 0.2, category: "Wellness", img: "https://r2.mrcheaper.co.za/clicks_vitc_thumb.jpg", badge: "Popular" }
+    ];
+  }
+  if (storeId.includes("vet")) {
+    return [
+      { id: "vet_dewormer", name: "Pet Dewormer 10mg Tablets", price: 119.0, weightKg: 0.1, category: "Dewormers", img: "https://r2.mrcheaper.co.za/vet_dewormer_thumb.jpg", badge: "Pet Care" },
+      { id: "vet_food", name: "Prescription Adult Pet Food 2kg", price: 299.0, weightKg: 2.0, category: "Prescription Food", img: "https://r2.mrcheaper.co.za/vet_food_thumb.jpg", badge: "Sale" }
+    ];
+  }
   return [
-    { id: "kfc_s2", name: "Streetwise 2 with Chips", price: 49.9, img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg" },
-    { id: "kfc_z", name: "Zinger Burger Meal", price: 74.9, img: "https://r2.mrcheaper.co.za/kfc_z_thumb.jpg" }
+    { id: "kfc_s2", name: "Streetwise 2 with Chips", price: 49.9, weightKg: 0.5, category: "Meals", img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg", badge: "Popular" },
+    { id: "kfc_z", name: "Zinger Burger Meal", price: 74.9, weightKg: 0.6, category: "Burgers", img: "https://r2.mrcheaper.co.za/kfc_z_thumb.jpg", badge: "Hot" }
   ];
+}
+
+// SCREEN 1: Home / Live Pools View Renderer
+export async function getScreen1HomeView(lat = -26.1075, lng = 28.0567) {
+  const stores = await fetchDynamicPlacesNearby(lat, lng);
+  const livePools = [];
+
+  for (const store of stores) {
+    const pool = await getKV(`pool:same_store:${store.id}`);
+    if (pool && Date.now() <= pool.expiresAt) {
+      livePools.push({
+        poolId: pool.poolId,
+        storeId: store.id,
+        storeName: store.name,
+        vertical: store.vertical,
+        heroImage: store.heroImage,
+        joinedAvatarsCount: pool.orders.length,
+        timeLeftMs: pool.expiresAt - Date.now(),
+        deliveryNotice: "Delivery R18-22 pooled"
+      });
+    }
+  }
+
+  return {
+    screen: "SCREEN_1_HOME",
+    livePoolsCount: livePools.length,
+    livePools,
+    emptyState: livePools.length === 0 ? {
+      title: "No pools live nearby — Wait & Save?",
+      notice: "Pay R18-22 pooled instead of R29-35 solo",
+      ctaButtons: [
+        { label: "Order Now Solo R29-35", action: "ORDER_SOLO" },
+        { label: "Wait & Save R18-22 — Start Pool 10min", action: "START_WAIT_SAVE_POOL" }
+      ]
+    } : null
+  };
+}
+
+// SCREEN 2: Universal Storefront View Renderer (Apple-Level)
+export async function getScreen2StorefrontView(storeId, userId) {
+  const stores = await fetchDynamicPlacesNearby(-26.1075, 28.0567);
+  const store = stores.find((s) => s.id === storeId) || stores[0];
+  const items = await scrapeStoreMenu(storeId);
+
+  const poolKey = `pool:same_store:${storeId}`;
+  const activePool = await getKV(poolKey);
+
+  let poolBarText = "No active pool";
+  if (activePool && Date.now() <= activePool.expiresAt) {
+    const secsLeft = Math.round((activePool.expiresAt - Date.now()) / 1000);
+    const mins = Math.floor(secsLeft / 60);
+    const secs = (secsLeft % 60).toString().padStart(2, "0");
+
+    if (activePool.hostUserId === userId) {
+      poolBarText = `You started Wait & Save • ${mins}:${secs} • ${activePool.orders.length} joined • Invite neighbours`;
+    } else {
+      poolBarText = `Pool closes in ${mins}:${secs} • ${activePool.orders.length} joined • R18-22 pooled`;
+    }
+  }
+
+  return {
+    screen: "SCREEN_2_UNIVERSAL_STOREFRONT",
+    header: {
+      storeId: store.id,
+      storeName: store.name,
+      tagline: store.tagline,
+      rating: store.rating,
+      deliveryTime: store.deliveryTime,
+      heroImage: store.heroImage,
+      poolBarText
+    },
+    categoriesHorizontal: ["All", "Popular", "Meals", "Wellness", "Pet Care"],
+    productCards: items.map((item) => ({
+      itemId: item.id,
+      title: item.name,
+      priceR: item.price,
+      weightKg: item.weightKg,
+      badge: item.badge,
+      r2ThumbnailUrl: item.img,
+      hapticsEnabled: true,
+      softShadowClass: "shadow-lg rounded-2xl"
+    })),
+    footerStickyCart: {
+      label: "View Pool Cart",
+      savingsHint: "Save R41 by pooling delivery"
+    }
+  };
+}
+
+// SCREEN 3: Pool Cart + Checkout View Renderer
+export async function getScreen3CartCheckoutView(userId) {
+  const cart = await getUserCart(userId);
+  const pooling = await evaluateOrderPooling(userId, cart);
+  const split = await generatePayFastSplitLink(userId, cart, pooling.decisions);
+
+  return {
+    screen: "SCREEN_3_POOL_CART_CHECKOUT",
+    userId,
+    cartItemsCount: cart.items.length,
+    groupedByPool: pooling.decisions,
+    poolSummary: "3 neighbours joined • You save R41 • Delivery R18-22 not R29-35",
+    pricingBreakdown: {
+      foodSubtotalR: split.foodSubtotal,
+      pooledDeliveryR: split.deliveryFee,
+      soloCrossedOutR: 35,
+      serviceFeeR: split.serviceFee,
+      grandTotalR: split.grandTotal
+    },
+    payfastInceptionSplitUrl: split.payfastUrl,
+    livePoolTracking: "Driver picking up for pool — camera photo proof per store required"
+  };
 }
 
 export async function autoPlaceClickAndCollectOrder(poolRef, storeId, items) {
@@ -691,22 +815,18 @@ export async function submitRiderStorePhotoProof(jobId, storeId, photoUrl, isCam
 }
 
 export async function handleRiderTheftResolution(jobId, poolId, storeId, details = {}) {
-  // Case: Rider collected package (photo proof exists) then absconded/no delivery
-  // Rule: Fleet Fault, NOT Shop Fault. Shop already fulfilled; do NOT ask shop for free remake.
   const job = await getKV(`fleet_job:${jobId}`);
   if (!job) throw new Error("Fleet job not found for theft resolution.");
 
   const provider = job.provider || "Picup";
   const remakePoolId = `${poolId}-R`;
 
-  // 1. Block rider on fleet provider
   await setKV(`fleet_blocked_rider:${job.riderId || "rider_999"}`, {
     provider,
     reason: "Rider absconded after package collection (Theft)",
     blockedAt: Date.now()
   });
 
-  // 2. Charge fleet wallet for remake order MCP-{poolId}-R without asking shop for free remake
   const remakeRecord = {
     remakePoolId: `MCP-${remakePoolId}`,
     originalPoolId: poolId,
@@ -719,11 +839,9 @@ export async function handleRiderTheftResolution(jobId, poolId, storeId, details
   };
   await setKV(`fleet_remake_charge:${remakePoolId}`, remakeRecord);
 
-  // 3. Dispatch new replacement rider for remake delivery
   const newJobId = `job_remake_${Date.now()}`;
   const newRiderJob = await dispatchFleetJob(newJobId, [storeId]);
 
-  // 4. Customer gets full delivery fee refund OR free remake (never pays twice)
   const customerResolution = {
     userId: details.userId || "user_123",
     deliveryFeeRefunded: true,
@@ -971,6 +1089,28 @@ export async function getAdminSingleScreenData() {
     ordersTable: activeOrders
   };
 }
+
+// Endpoint APIs for Screen 1, 2, and 3
+app.get("/api/screens/s1-home", async (req, res) => {
+  const view = await getScreen1HomeView();
+  res.json({ success: true, view });
+});
+
+app.get("/api/screens/s2-storefront/:storeId", async (req, res) => {
+  const view = await getScreen2StorefrontView(req.params.storeId, req.query.userId || "user_123");
+  res.json({ success: true, view });
+});
+
+app.get("/api/screens/s3-cart/:userId", async (req, res) => {
+  const view = await getScreen3CartCheckoutView(req.params.userId);
+  res.json({ success: true, view });
+});
+
+app.post("/api/pools/wait-and-save", async (req, res) => {
+  const { userId, storeId } = req.body;
+  const pool = await startWaitAndSavePool(userId, storeId);
+  res.json({ success: true, pool });
+});
 
 // Single-Employee Admin Endpoint (<1 click resolution)
 app.get("/admin/dashboard-01", async (req, res) => {
