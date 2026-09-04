@@ -35,6 +35,16 @@ export const FETCH_ADAPTERS = {
 };
 
 export async function scrapeStoreMenuRouter(storeId, query = "") {
+  // Check fast fetch adapters if specific match exists
+  if (storeId.includes("pnp")) return await FETCH_ADAPTERS.Pnp(storeId);
+  if (storeId.includes("takealot")) return await FETCH_ADAPTERS.Takealot(storeId);
+  if (storeId.includes("sixty60")) return await FETCH_ADAPTERS.Sixty60(storeId);
+  if (storeId.includes("woolies")) return await FETCH_ADAPTERS.Woolies(storeId);
+  if (storeId.includes("onecart")) return await FETCH_ADAPTERS.Onecart(storeId);
+  if (storeId.includes("mrd")) return await FETCH_ADAPTERS.Mrd(storeId);
+  if (storeId.includes("ubereats")) return await FETCH_ADAPTERS.Ubereats(storeId);
+
+  // Fallback to Puppeteer scrapers for Shopify (Clicks), WooCommerce (Vet), Ordev (KFC/General)
   try {
     if (storeId.includes("clicks")) {
       return await PUPPETEER_ADAPTERS.Shopify(storeId);

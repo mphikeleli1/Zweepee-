@@ -492,7 +492,27 @@ export async function evaluateOrderPooling(userId, orderCart) {
 // -------------------------------------------------------------
 // 6. Pricing Engine (Locked Pricing Tiers & Driver Multi-Stop Payouts)
 // -------------------------------------------------------------
-export function calculateDeliveryAndPayouts(orderType, options = {}) {
+export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", options = {}) {
+  if (typeof orderType === "number") {
+    const distanceKm = orderType;
+    const poolSize = typeof options === "number" ? options : (options.poolSize || 2);
+    const baseRate = 50 + (distanceKm * 2);
+    const driverPayout = baseRate;
+    const ourCut = baseRate * 0.20;
+    const customerTotal = baseRate + ourCut;
+    const customerPerPerson = customerTotal / Math.max(1, poolSize);
+    return {
+      menuMarkupPercent: 0,
+      serviceFee: Math.round(ourCut),
+      deliveryFee: Math.round(customerPerPerson),
+      driverPayout: Math.round(driverPayout),
+      baseRate,
+      ourCut,
+      customerTotal,
+      customerPerPerson
+    };
+  }
+
   const menuMarkupPercent = 0; // Strictly 0% menu markup
   let serviceFee = 10;
   let deliveryFee = 35; // Solo R29-35
@@ -534,7 +554,21 @@ export function calculateDeliveryAndPayouts(orderType, options = {}) {
     driverPayout = 33;
   }
 
-  return { menuMarkupPercent, serviceFee, deliveryFee, driverPayout };
+  const baseRate = driverPayout;
+  const ourCut = serviceFee;
+  const customerTotal = deliveryFee + serviceFee;
+  const customerPerPerson = deliveryFee;
+
+  return {
+    menuMarkupPercent,
+    serviceFee,
+    deliveryFee,
+    driverPayout,
+    baseRate,
+    ourCut,
+    customerTotal,
+    customerPerPerson
+  };
 }
 
 export async function generatePayFastSplitLink(userId, orderCart, poolingDecisions) {
