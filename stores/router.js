@@ -35,28 +35,23 @@ export const FETCH_ADAPTERS = {
 };
 
 export async function scrapeStoreMenuRouter(storeId, query = "") {
-  // Check fast fetch adapters if specific match exists
-  if (storeId.includes("pnp")) return await FETCH_ADAPTERS.Pnp(storeId);
-  if (storeId.includes("takealot")) return await FETCH_ADAPTERS.Takealot(storeId);
-  if (storeId.includes("sixty60")) return await FETCH_ADAPTERS.Sixty60(storeId);
-  if (storeId.includes("woolies")) return await FETCH_ADAPTERS.Woolies(storeId);
-  if (storeId.includes("onecart")) return await FETCH_ADAPTERS.Onecart(storeId);
-  if (storeId.includes("mrd")) return await FETCH_ADAPTERS.Mrd(storeId);
-  if (storeId.includes("ubereats")) return await FETCH_ADAPTERS.Ubereats(storeId);
-
-  // Fallback to Puppeteer scrapers for Shopify (Clicks), WooCommerce (Vet), Ordev (KFC/General)
-  try {
-    if (storeId.includes("clicks")) {
-      return await PUPPETEER_ADAPTERS.Shopify(storeId);
+  // First dynamically iterate over fetch adapters
+  for (const fetchFn of Object.values(FETCH_ADAPTERS)) {
+    try {
+      const menu = await fetchFn(storeId);
+      if (Array.isArray(menu) && menu.length > 0 && !storeId.includes("clicks") && !storeId.includes("vet") && !storeId.includes("kfc")) {
+        return menu;
+      }
+    } catch (e) {
+      // ignore
     }
-    if (storeId.includes("vet")) {
-      return await PUPPETEER_ADAPTERS.WooCommerce(storeId);
-    }
-    return await PUPPETEER_ADAPTERS.Ordev(storeId);
-  } catch (err) {
-    console.error(`Router error for ${storeId}, using fallback:`, err);
-    return [
-      { id: "kfc_s2", name: "Streetwise 2 with Chips", price: 49.9, weightKg: 0.5, category: "Meals", img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg", badge: "Popular" }
-    ];
   }
+
+  // Fallback to Puppeteer adapters dynamically
+  if (storeId.includes("clicks")) return await PUPPETEER_ADAPTERS.Shopify(storeId);
+  if (storeId.includes("vet")) return await PUPPETEER_ADAPTERS.WooCommerce(storeId);
+  if (storeId.includes("steers")) return await PUPPETEER_ADAPTERS.Orderin(storeId);
+  if (storeId.includes("mcd")) return await PUPPETEER_ADAPTERS.Yobee(storeId);
+
+  return await PUPPETEER_ADAPTERS.Ordev(storeId);
 }

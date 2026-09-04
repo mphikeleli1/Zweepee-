@@ -408,6 +408,11 @@ export async function evaluateOrderPooling(userId, orderCart) {
     const orderValue = storeGroups[storeId].reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0);
     const orderWeightKg = storeGroups[storeId].reduce((sum, i) => sum + (i.weightKg || 1) * (i.quantity || 1), 0);
 
+    // Enforce vehicle type checks
+    const sampleItem = storeGroups[storeId][0] || {};
+    const vehicleInfo = getVehicleType(sampleItem.name || sampleItem.vertical || "", orderWeightKg);
+    const maxAllowedPoolCapacity = vehicleInfo.maxPoolCount || 4;
+
     let canJoin = false;
     if (existingPool && now <= existingPool.expiresAt) {
       const currentOrdersCount = existingPool.orders.length;
@@ -415,7 +420,7 @@ export async function evaluateOrderPooling(userId, orderCart) {
       const currentValue = existingPool.totalValue || 0;
 
       if (
-        currentOrdersCount < 4 &&
+        currentOrdersCount < maxAllowedPoolCapacity &&
         currentWeight + orderWeightKg <= 15 &&
         currentValue + orderValue <= 500
       ) {
@@ -493,24 +498,14 @@ export async function evaluateOrderPooling(userId, orderCart) {
 // 6. Pricing Engine (Locked Pricing Tiers & Driver Multi-Stop Payouts)
 // -------------------------------------------------------------
 export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", options = {}) {
+  let typeStr = typeof orderType === "string" ? orderType : "SAME_STORE_POOLED";
+  let opts = typeof orderType === "object" ? orderType : (typeof options === "object" ? options : {});
+
   if (typeof orderType === "number") {
-    const distanceKm = orderType;
-    const poolSize = typeof options === "number" ? options : (options.poolSize || 2);
-    const baseRate = 50 + (distanceKm * 2);
-    const driverPayout = baseRate;
-    const ourCut = baseRate * 0.20;
-    const customerTotal = baseRate + ourCut;
-    const customerPerPerson = customerTotal / Math.max(1, poolSize);
-    return {
-      menuMarkupPercent: 0,
-      serviceFee: Math.round(ourCut),
-      deliveryFee: Math.round(customerPerPerson),
-      driverPayout: Math.round(driverPayout),
-      baseRate,
-      ourCut,
-      customerTotal,
-      customerPerPerson
-    };
+    opts = { ...opts, distanceKm: orderType };
+    if (typeof options === "number") {
+      opts.poolSize = options;
+    }
   }
 
   const menuMarkupPercent = 0; // Strictly 0% menu markup
@@ -518,10 +513,10 @@ export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", opt
   let deliveryFee = 35; // Solo R29-35
   let driverPayout = 33; // Solo driver payout R32-35
 
-  const totalValue = options.totalValue || 0;
-  const totalWeightKg = options.totalWeightKg || 0;
-  const totalBags = options.totalBags || 1;
-  const isGroupOrder = options.isGroupOrder || false;
+  const totalValue = opts.totalValue || 0;
+  const totalWeightKg = opts.totalWeightKg || 0;
+  const totalBags = opts.totalBags || 1;
+  const isGroupOrder = opts.isGroupOrder || false;
 
   if (isGroupOrder) {
     serviceFee = 10;
@@ -531,8 +526,8 @@ export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", opt
     const multiplier = Math.ceil(Math.max(totalValue / 500, totalWeightKg / 15, totalBags / 2));
     deliveryFee = 35 * multiplier;
     driverPayout = 33 * multiplier;
-  } else if (orderType === "SAME_STORE_POOLED") {
-    const poolSize = options.poolSize || 2;
+  } else if (typeStr === "SAME_STORE_POOLED") {
+    const poolSize = opts.poolSize || 2;
     if (poolSize === 2) {
       deliveryFee = 20; // Same-store pooled 2 orders: R18-22
       driverPayout = 45; // 2-stop pool driver payout: R42-48
@@ -540,12 +535,12 @@ export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", opt
       deliveryFee = 15; // Same-store pooled 3-4 orders: R12-18
       driverPayout = 58; // 3-4 stop pool driver payout: R52-65
     }
-  } else if (orderType === "MALL_BUNDLE") {
+  } else if (typeStr === "MALL_BUNDLE") {
     serviceFee = 12; // R8 base + R4 mall extra fee
     deliveryFee = 29; // R25 shared + R4 extra fee
     driverPayout = 58; // Mall multi-stop bundle driver payout: R52-65
-  } else if (orderType === "PARCEL_SOLO") {
-    const size = options.parcelSize || "S";
+  } else if (typeStr === "PARCEL_SOLO") {
+    const size = opts.parcelSize || "S";
     let baseParcel = 35;
     if (size === "M") baseParcel = 45;
     if (size === "L") baseParcel = 65;
@@ -567,7 +562,8 @@ export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", opt
     baseRate,
     ourCut,
     customerTotal,
-    customerPerPerson
+    customerPerPerson,
+    breakdown: { baseRate, ourCut, customerTotal }
   };
 }
 
