@@ -220,7 +220,7 @@ export async function processUserLocation(userId, latitude, longitude) {
 
   const nearbyStores = availableStores.filter((store) => {
     const dist = calculateDistanceMeters(latitude, longitude, store.lat, store.lng);
-    return dist <= 2000;
+    return dist <= 2000; // Enforce 2 km dynamic location radius
   }).map((store) => {
     const dist = calculateDistanceMeters(latitude, longitude, store.lat, store.lng);
     return { ...store, distanceMeters: Math.round(dist) };
@@ -489,13 +489,13 @@ export async function evaluateOrderPooling(userId, orderCart) {
 }
 
 // -------------------------------------------------------------
-// 6. Pricing Engine
+// 6. Pricing Engine (Locked Pricing Tiers & Driver Multi-Stop Payouts)
 // -------------------------------------------------------------
 export function calculateDeliveryAndPayouts(orderType, options = {}) {
-  const menuMarkupPercent = 0;
+  const menuMarkupPercent = 0; // Strictly 0% menu markup
   let serviceFee = 10;
-  let deliveryFee = 35;
-  let driverPayout = 33;
+  let deliveryFee = 35; // Solo R29-35
+  let driverPayout = 33; // Solo driver payout R32-35
 
   const totalValue = options.totalValue || 0;
   const totalWeightKg = options.totalWeightKg || 0;
@@ -513,16 +513,16 @@ export function calculateDeliveryAndPayouts(orderType, options = {}) {
   } else if (orderType === "SAME_STORE_POOLED") {
     const poolSize = options.poolSize || 2;
     if (poolSize === 2) {
-      deliveryFee = 20;
-      driverPayout = 45;
+      deliveryFee = 20; // Same-store pooled 2 orders: R18-22
+      driverPayout = 45; // 2-stop pool driver payout: R42-48
     } else {
-      deliveryFee = 15;
-      driverPayout = 58;
+      deliveryFee = 15; // Same-store pooled 3-4 orders: R12-18
+      driverPayout = 58; // 3-4 stop pool driver payout: R52-65
     }
   } else if (orderType === "MALL_BUNDLE") {
-    serviceFee = 12;
-    deliveryFee = 29;
-    driverPayout = 58;
+    serviceFee = 12; // R8 base + R4 mall extra fee
+    deliveryFee = 29; // R25 shared + R4 extra fee
+    driverPayout = 58; // Mall multi-stop bundle driver payout: R52-65
   } else if (orderType === "PARCEL_SOLO") {
     const size = options.parcelSize || "S";
     let baseParcel = 35;
