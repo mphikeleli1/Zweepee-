@@ -10,7 +10,6 @@ import app, {
   generatePayFastSplitLink,
   calculateDeliveryAndPayouts,
   scrapeStoreMenu,
-  fetchParallelSiteAdapters,
   autoPlaceClickAndCollectOrder,
   handleImageRequest,
   dispatchFleetJob,
@@ -48,13 +47,17 @@ async function runAllTests() {
   await auth.saveCreds();
   console.log("  ✅ Real Baileys KV/R2 Auth State Verified.");
 
-  // 2. Parallel Aggregator API Adapters & Cheapest-First Test
-  console.log("Testing 2. Parallel Aggregator Site Adapters & Cheapest-First Sorting...");
-  const aggregatedItems = await fetchParallelSiteAdapters("burger");
-  assert.ok(aggregatedItems.length >= 6);
-  assert.ok(aggregatedItems[0].price <= aggregatedItems[aggregatedItems.length - 1].price); // Cheapest first
-  assert.ok(aggregatedItems[0].img.includes("https://r2.mrcheaper.co.za/")); // WhatsApp image preserved
-  console.log("  ✅ Parallel API fetching across site adapters, fault tolerance, and cheapest-first sorting verified.");
+  // 2. Hybrid Scrapers & Puppeteer Click & Collect Auto-Ordering Test
+  console.log("Testing 2. Hybrid Store Scrapers & Puppeteer Click & Collect Auto-Ordering...");
+  const menuKfc = await scrapeStoreMenu("store_kfc_sandton");
+  const menuVet = await scrapeStoreMenu("store_vet_sandton");
+  assert.ok(menuKfc.length > 0);
+  assert.ok(menuVet.length > 0);
+
+  const autoOrder = await autoPlaceClickAndCollectOrder("pool_test_123", "store_kfc_sandton", menuKfc);
+  assert.strictEqual(autoOrder.status, "CONFIRMED_PREPAID");
+  assert.ok(autoOrder.screenshotProofUrl.includes("https://r2.mrcheaper.co.za/proof/MCP-"));
+  console.log("  ✅ Hybrid Puppeteer scrapers and auto-ordering with ref MCP-{poolId} + screenshot proof verified.");
 
   // 3. Apple-Level WhatsApp Storefront Messages & 3 Screens Test
   console.log("Testing 3. 3-Screen Flows (Screen 1 Live Pools, Screen 2 Storefront, Screen 3 Pool Cart)...");

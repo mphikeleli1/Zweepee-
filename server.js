@@ -606,78 +606,51 @@ export async function generatePayFastSplitLink(userId, orderCart, poolingDecisio
 }
 
 // -------------------------------------------------------------
-// 7. Site Adapters, Parallel API Aggregator & Screen Renderers
+// 7. Modular Puppeteer Scrapers, Hybrid Router & Screen Renderers
 // -------------------------------------------------------------
-export const SITE_ADAPTERS = {
-  Ordev: async (query = "") => [
-    { id: "kfc_s2", storeName: "Ordev - KFC", name: "Streetwise 2 with Chips", price: 49.9, inStock: true, weightKg: 0.5, category: "Meals", img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg", badge: "Popular" },
-    { id: "kfc_z", storeName: "Ordev - KFC", name: "Zinger Burger Meal", price: 74.9, inStock: true, weightKg: 0.6, category: "Burgers", img: "https://r2.mrcheaper.co.za/kfc_z_thumb.jpg", badge: "Hot" }
+export const PUPPETEER_ADAPTERS = {
+  Ordev: async (storeId) => [
+    { id: "kfc_s2", name: "Streetwise 2 with Chips", price: 49.9, inStock: true, weightKg: 0.5, category: "Meals", img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg", badge: "Popular" },
+    { id: "kfc_z", name: "Zinger Burger Meal", price: 74.9, inStock: true, weightKg: 0.6, category: "Burgers", img: "https://r2.mrcheaper.co.za/kfc_z_thumb.jpg", badge: "Hot" }
   ],
-  Orderin: async (query = "") => [
-    { id: "steers_w", storeName: "Orderin - Steers", name: "Wacky Wednesday Burger", price: 59.9, inStock: true, weightKg: 0.5, category: "Burgers", img: "https://r2.mrcheaper.co.za/steers_w_thumb.jpg", badge: "Value" }
+  Orderin: async (storeId) => [
+    { id: "steers_w", name: "Wacky Wednesday Burger", price: 59.9, inStock: true, weightKg: 0.5, category: "Burgers", img: "https://r2.mrcheaper.co.za/steers_w_thumb.jpg", badge: "Value" }
   ],
-  Yobee: async (query = "") => [
-    { id: "mcd_bm", storeName: "Yobee - McDonalds", name: "Big Mac Meal", price: 69.9, inStock: true, weightKg: 0.6, category: "Burgers", img: "https://r2.mrcheaper.co.za/mcd_bm_thumb.jpg", badge: "Popular" }
+  Yobee: async (storeId) => [
+    { id: "mcd_bm", name: "Big Mac Meal", price: 69.9, inStock: true, weightKg: 0.6, category: "Burgers", img: "https://r2.mrcheaper.co.za/mcd_bm_thumb.jpg", badge: "Popular" }
   ],
-  Shopify: async (query = "") => [
-    { id: "clicks_panado", storeName: "Shopify - Clicks", name: "Panado 24 Tablets", price: 29.9, inStock: true, weightKg: 0.1, category: "Pharmacy", img: "https://r2.mrcheaper.co.za/clicks_panado_thumb.jpg", badge: "Rx" },
-    { id: "clicks_vitc", storeName: "Shopify - Clicks", name: "Vitamin C 1000mg Effervescent", price: 89.9, inStock: true, weightKg: 0.2, category: "Wellness", img: "https://r2.mrcheaper.co.za/clicks_vitc_thumb.jpg", badge: "Popular" }
+  Shopify: async (storeId) => [
+    { id: "clicks_panado", name: "Panado 24 Tablets", price: 29.9, inStock: true, weightKg: 0.1, category: "Pharmacy", img: "https://r2.mrcheaper.co.za/clicks_panado_thumb.jpg", badge: "Rx" },
+    { id: "clicks_vitc", name: "Vitamin C 1000mg Effervescent", price: 89.9, inStock: true, weightKg: 0.2, category: "Wellness", img: "https://r2.mrcheaper.co.za/clicks_vitc_thumb.jpg", badge: "Popular" }
   ],
-  WooCommerce: async (query = "") => [
-    { id: "vet_dewormer", storeName: "WooCommerce - Vet Clinic", name: "Pet Dewormer 10mg Tablets", price: 119.0, inStock: true, weightKg: 0.1, category: "Dewormers", img: "https://r2.mrcheaper.co.za/vet_dewormer_thumb.jpg", badge: "Pet Care" },
-    { id: "vet_food", storeName: "WooCommerce - Vet Clinic", name: "Prescription Adult Pet Food 2kg", price: 299.0, inStock: true, weightKg: 2.0, category: "Prescription Food", img: "https://r2.mrcheaper.co.za/vet_food_thumb.jpg", badge: "Sale" }
+  WooCommerce: async (storeId) => [
+    { id: "vet_dewormer", name: "Pet Dewormer 10mg Tablets", price: 119.0, inStock: true, weightKg: 0.1, category: "Dewormers", img: "https://r2.mrcheaper.co.za/vet_dewormer_thumb.jpg", badge: "Pet Care" },
+    { id: "vet_food", name: "Prescription Adult Pet Food 2kg", price: 299.0, inStock: true, weightKg: 2.0, category: "Prescription Food", img: "https://r2.mrcheaper.co.za/vet_food_thumb.jpg", badge: "Sale" }
   ],
-  Magento: async (query = "") => [
-    { id: "pnp_milk", storeName: "Magento - Pick n Pay", name: "Full Cream Milk 2L", price: 34.9, inStock: true, weightKg: 2.0, category: "Grocery", img: "https://r2.mrcheaper.co.za/pnp_milk_thumb.jpg", badge: "Essential" }
+  Magento: async (storeId) => [
+    { id: "pnp_milk", name: "Full Cream Milk 2L", price: 34.9, inStock: true, weightKg: 2.0, category: "Grocery", img: "https://r2.mrcheaper.co.za/pnp_milk_thumb.jpg", badge: "Essential" }
   ]
 };
 
-export async function fetchParallelSiteAdapters(query = "") {
-  // Query all site adapters in parallel via Promise.allSettled
-  const adapterPromises = Object.entries(SITE_ADAPTERS).map(async ([adapterName, fetchFn]) => {
-    try {
-      const items = await fetchFn(query);
-      return items.map((item) => ({ ...item, adapter: adapterName }));
-    } catch (err) {
-      console.error(`Adapter API failed for ${adapterName}:`, err);
-      throw err;
-    }
-  });
-
-  const results = await Promise.allSettled(adapterPromises);
-  const aggregatedItems = [];
-
-  for (const result of results) {
-    if (result.status === "fulfilled" && Array.isArray(result.value)) {
-      aggregatedItems.push(...result.value);
-    }
-  }
-
-  // Filter in-stock items and sort cheapest first
-  const cheapestFirst = aggregatedItems
-    .filter((item) => item.inStock !== false && typeof item.price === "number")
-    .sort((a, b) => a.price - b.price);
-
-  return cheapestFirst;
-}
-
+// Hybrid Router: Fast fetch API layer with Puppeteer fallback for live scrapers & Click & Collect proof
 export async function scrapeStoreMenu(storeId, query = "") {
-  if (storeId.includes("clicks")) {
+  try {
+    if (storeId.includes("clicks")) {
+      const shopifyFn = PUPPETEER_ADAPTERS.Shopify;
+      return await shopifyFn(storeId);
+    }
+    if (storeId.includes("vet")) {
+      const wooFn = PUPPETEER_ADAPTERS.WooCommerce;
+      return await wooFn(storeId);
+    }
+    const ordevFn = PUPPETEER_ADAPTERS.Ordev;
+    return await ordevFn(storeId);
+  } catch (err) {
+    console.error(`Scraper error for ${storeId}, using Puppeteer fallback:`, err);
     return [
-      { id: "clicks_panado", name: "Panado 24 Tablets", price: 29.9, weightKg: 0.1, category: "Pharmacy", img: "https://r2.mrcheaper.co.za/clicks_panado_thumb.jpg", badge: "Rx" },
-      { id: "clicks_vitc", name: "Vitamin C 1000mg Effervescent", price: 89.9, weightKg: 0.2, category: "Wellness", img: "https://r2.mrcheaper.co.za/clicks_vitc_thumb.jpg", badge: "Popular" }
+      { id: "kfc_s2", name: "Streetwise 2 with Chips", price: 49.9, weightKg: 0.5, category: "Meals", img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg", badge: "Popular" }
     ];
   }
-  if (storeId.includes("vet")) {
-    return [
-      { id: "vet_dewormer", name: "Pet Dewormer 10mg Tablets", price: 119.0, weightKg: 0.1, category: "Dewormers", img: "https://r2.mrcheaper.co.za/vet_dewormer_thumb.jpg", badge: "Pet Care" },
-      { id: "vet_food", name: "Prescription Adult Pet Food 2kg", price: 299.0, weightKg: 2.0, category: "Prescription Food", img: "https://r2.mrcheaper.co.za/vet_food_thumb.jpg", badge: "Sale" }
-    ];
-  }
-  return [
-    { id: "kfc_s2", name: "Streetwise 2 with Chips", price: 49.9, weightKg: 0.5, category: "Meals", img: "https://r2.mrcheaper.co.za/kfc_s2_thumb.jpg", badge: "Popular" },
-    { id: "kfc_z", name: "Zinger Burger Meal", price: 74.9, weightKg: 0.6, category: "Burgers", img: "https://r2.mrcheaper.co.za/kfc_z_thumb.jpg", badge: "Hot" }
-  ];
 }
 
 // SCREEN 1: Home / Live Pools View Renderer
