@@ -35,19 +35,21 @@ export const FETCH_ADAPTERS = {
 };
 
 export async function scrapeStoreMenuRouter(storeId, query = "") {
-  // First attempt Puppeteer adapters based on store characteristics
+  // First check specific Puppeteer matches for known chains/platforms
   if (storeId.includes("clicks") || storeId.includes("shopify")) return await PUPPETEER_ADAPTERS.Shopify(storeId);
   if (storeId.includes("vet") || storeId.includes("woo")) return await PUPPETEER_ADAPTERS.WooCommerce(storeId);
   if (storeId.includes("steers") || storeId.includes("orderin")) return await PUPPETEER_ADAPTERS.Orderin(storeId);
   if (storeId.includes("mcd") || storeId.includes("yobee")) return await PUPPETEER_ADAPTERS.Yobee(storeId);
 
   // Dynamically attempt fetch adapters
-  for (const fetchFn of Object.values(FETCH_ADAPTERS)) {
+  for (const fetchAdapter of Object.values(FETCH_ADAPTERS)) {
     try {
-      const menu = await fetchFn(storeId);
-      if (Array.isArray(menu) && menu.length > 0) return menu;
+      const menu = await fetchAdapter(storeId);
+      if (Array.isArray(menu) && menu.length > 0) {
+        return menu;
+      }
     } catch (e) {
-      // continue
+      // ignore
     }
   }
 
