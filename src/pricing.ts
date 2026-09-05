@@ -60,7 +60,6 @@ export function calculateDeliveryAndPayouts(orderType: string | number = "SAME_S
     driverPayout = 33;
   }
 
-  // Calculate distance-adjusted baseRate and 20% margin
   const baseRate = 50 + (distanceKm * 2);
   const ourCut = baseRate * 0.20;
   const customerTotal = baseRate + ourCut;
