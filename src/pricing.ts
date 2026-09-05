@@ -1,5 +1,5 @@
 // /src/pricing.ts
-// mrCHEAPER v19 Locked Pricing Engine
+// mrCHEAPER v19 Pricing Engine
 export function calculateDeliveryAndPayouts(orderType: string | number = "SAME_STORE_POOLED", options: any = {}) {
   let typeStr = typeof orderType === "string" ? orderType : "SAME_STORE_POOLED";
   let opts = typeof orderType === "object" ? orderType : (typeof options === "object" ? options : {});
@@ -74,6 +74,7 @@ export function calculateDeliveryAndPayouts(orderType: string | number = "SAME_S
     ourCut,
     customerTotal,
     customerPerPerson,
+    perPerson: customerPerPerson,
     breakdown: { baseRate, ourCut, customerTotal }
   };
 }
