@@ -35,23 +35,22 @@ export const FETCH_ADAPTERS = {
 };
 
 export async function scrapeStoreMenuRouter(storeId, query = "") {
-  // First dynamically iterate over fetch adapters
+  // First attempt Puppeteer adapters based on store characteristics
+  if (storeId.includes("clicks") || storeId.includes("shopify")) return await PUPPETEER_ADAPTERS.Shopify(storeId);
+  if (storeId.includes("vet") || storeId.includes("woo")) return await PUPPETEER_ADAPTERS.WooCommerce(storeId);
+  if (storeId.includes("steers") || storeId.includes("orderin")) return await PUPPETEER_ADAPTERS.Orderin(storeId);
+  if (storeId.includes("mcd") || storeId.includes("yobee")) return await PUPPETEER_ADAPTERS.Yobee(storeId);
+
+  // Dynamically attempt fetch adapters
   for (const fetchFn of Object.values(FETCH_ADAPTERS)) {
     try {
       const menu = await fetchFn(storeId);
-      if (Array.isArray(menu) && menu.length > 0 && !storeId.includes("clicks") && !storeId.includes("vet") && !storeId.includes("kfc")) {
-        return menu;
-      }
+      if (Array.isArray(menu) && menu.length > 0) return menu;
     } catch (e) {
-      // ignore
+      // continue
     }
   }
 
-  // Fallback to Puppeteer adapters dynamically
-  if (storeId.includes("clicks")) return await PUPPETEER_ADAPTERS.Shopify(storeId);
-  if (storeId.includes("vet")) return await PUPPETEER_ADAPTERS.WooCommerce(storeId);
-  if (storeId.includes("steers")) return await PUPPETEER_ADAPTERS.Orderin(storeId);
-  if (storeId.includes("mcd")) return await PUPPETEER_ADAPTERS.Yobee(storeId);
-
+  // Fallback to default Ordev adapter
   return await PUPPETEER_ADAPTERS.Ordev(storeId);
 }

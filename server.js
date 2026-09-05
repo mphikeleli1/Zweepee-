@@ -408,10 +408,15 @@ export async function evaluateOrderPooling(userId, orderCart) {
     const orderValue = storeGroups[storeId].reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0);
     const orderWeightKg = storeGroups[storeId].reduce((sum, i) => sum + (i.weightKg || 1) * (i.quantity || 1), 0);
 
-    // Enforce vehicle type checks
-    const sampleItem = storeGroups[storeId][0] || {};
-    const vehicleInfo = getVehicleType(sampleItem.name || sampleItem.vertical || "", orderWeightKg);
-    const maxAllowedPoolCapacity = vehicleInfo.maxPoolCount || 4;
+    // Enforce vehicle type checks across ALL items in store group
+    let maxAllowedPoolCapacity = 4;
+    for (const item of storeGroups[storeId]) {
+      const vInfo = getVehicleType(item.name || item.vertical || "", item.weightKg || orderWeightKg);
+      if (vInfo.type === "BAKKIE" || vInfo.isBulky) {
+        maxAllowedPoolCapacity = 1;
+        break;
+      }
+    }
 
     let canJoin = false;
     if (existingPool && now <= existingPool.expiresAt) {
@@ -501,11 +506,20 @@ export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", opt
   let typeStr = typeof orderType === "string" ? orderType : "SAME_STORE_POOLED";
   let opts = typeof orderType === "object" ? orderType : (typeof options === "object" ? options : {});
 
+  let distanceKm = 5;
+  let poolSize = 2;
+
   if (typeof orderType === "number") {
-    opts = { ...opts, distanceKm: orderType };
+    distanceKm = orderType;
     if (typeof options === "number") {
-      opts.poolSize = options;
+      poolSize = options;
     }
+  } else if (opts.distanceKm) {
+    distanceKm = opts.distanceKm;
+  }
+
+  if (opts.poolSize) {
+    poolSize = opts.poolSize;
   }
 
   const menuMarkupPercent = 0; // Strictly 0% menu markup
@@ -527,7 +541,6 @@ export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", opt
     deliveryFee = 35 * multiplier;
     driverPayout = 33 * multiplier;
   } else if (typeStr === "SAME_STORE_POOLED") {
-    const poolSize = opts.poolSize || 2;
     if (poolSize === 2) {
       deliveryFee = 20; // Same-store pooled 2 orders: R18-22
       driverPayout = 45; // 2-stop pool driver payout: R42-48
@@ -549,10 +562,10 @@ export function calculateDeliveryAndPayouts(orderType = "SAME_STORE_POOLED", opt
     driverPayout = 33;
   }
 
-  const baseRate = driverPayout;
-  const ourCut = serviceFee;
-  const customerTotal = deliveryFee + serviceFee;
-  const customerPerPerson = deliveryFee;
+  const baseRate = 50 + (distanceKm * 2);
+  const ourCut = baseRate * 0.20;
+  const customerTotal = baseRate + ourCut;
+  const customerPerPerson = customerTotal / Math.max(1, poolSize);
 
   return {
     menuMarkupPercent,

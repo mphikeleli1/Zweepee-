@@ -4,11 +4,20 @@ export function calculateDeliveryAndPayouts(orderType: string | number = "SAME_S
   let typeStr = typeof orderType === "string" ? orderType : "SAME_STORE_POOLED";
   let opts = typeof orderType === "object" ? orderType : (typeof options === "object" ? options : {});
 
+  let distanceKm = 5;
+  let poolSize = 2;
+
   if (typeof orderType === "number") {
-    opts = { ...opts, distanceKm: orderType };
+    distanceKm = orderType;
     if (typeof options === "number") {
-      opts.poolSize = options;
+      poolSize = options;
     }
+  } else if (opts.distanceKm) {
+    distanceKm = opts.distanceKm;
+  }
+
+  if (opts.poolSize) {
+    poolSize = opts.poolSize;
   }
 
   const menuMarkupPercent = 0; // Strictly 0% menu markup
@@ -30,7 +39,6 @@ export function calculateDeliveryAndPayouts(orderType: string | number = "SAME_S
     deliveryFee = 35 * multiplier;
     driverPayout = 33 * multiplier;
   } else if (typeStr === "SAME_STORE_POOLED") {
-    const poolSize = opts.poolSize || 2;
     if (poolSize === 2) {
       deliveryFee = 20;
       driverPayout = 45;
@@ -52,10 +60,11 @@ export function calculateDeliveryAndPayouts(orderType: string | number = "SAME_S
     driverPayout = 33;
   }
 
-  const baseRate = driverPayout;
-  const ourCut = serviceFee;
-  const customerTotal = deliveryFee + serviceFee;
-  const customerPerPerson = deliveryFee;
+  // Calculate distance-adjusted baseRate and 20% margin
+  const baseRate = 50 + (distanceKm * 2);
+  const ourCut = baseRate * 0.20;
+  const customerTotal = baseRate + ourCut;
+  const customerPerPerson = customerTotal / Math.max(1, poolSize);
 
   return {
     menuMarkupPercent,
