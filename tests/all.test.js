@@ -16,6 +16,10 @@ import { WhatsAppSessionEngine } from '../src/whatsapp/sessionEngine.js';
 import { PaystackPaymentGateway } from '../src/payments/paystack.js';
 import { PayFastPaymentGateway } from '../src/payments/payfast.js';
 import { SentinelSelfHealingMonitor } from '../src/sentinel/sentinel.js';
+import { ExternalAgentInteropAdapter } from '../src/network/interop.js';
+import { AgentMatchingEngine } from '../src/network/matching.js';
+import { NetworkDiscovery } from '../src/network/discovery.js';
+import { CatalogExtractor } from '../src/agents/catalogExtractor.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000; // R50.00 transport quote
@@ -244,4 +248,31 @@ test('11. Sentinel Self-Healing & Jargon-Free Owner Notification', async () => {
   assert.ok(!report.ownerAlertMessage.includes('database'));
   assert.ok(!report.ownerAlertMessage.includes('SQL'));
   assert.ok(!report.ownerAlertMessage.includes('HTTP'));
+});
+
+test('12. External Agent Interoperability & Catalog Ingestion Extractor', async () => {
+  const discovery = new NetworkDiscovery();
+  const matching = new AgentMatchingEngine(discovery);
+  const interop = new ExternalAgentInteropAdapter(matching);
+
+  const request = {
+    protocol: 'GOOGLE_A2A_V1',
+    senderAgentId: 'ext_agent_google_123',
+    action: 'DISCOVER_OR_MATCH',
+    query: 'Streetwise Two'
+  };
+
+  const response = await interop.handleExternalAgentQuery(request);
+  assert.equal(response.status, 'SUCCESS');
+  assert.equal(response.protocol, 'GOOGLE_A2A_V1');
+
+  // Test Catalog Extractor
+  const extractor = new CatalogExtractor();
+  const rawText = 'Pizza Margherita - R120.00\nBurger Meal - R85.50';
+  const catalog = extractor.parseTextToCatalog(rawText);
+
+  assert.equal(catalog.length, 2);
+  assert.equal(catalog[0].name, 'Pizza Margherita');
+  assert.equal(catalog[0].priceCents, 12000);
+  assert.equal(catalog[1].priceCents, 8550);
 });
