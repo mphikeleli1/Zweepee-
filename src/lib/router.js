@@ -1,8 +1,3 @@
-/**
- * Intent Router — MANDATORY
- * Classifies every inbound user message / request before pricing or matching.
- */
-
 export const INTENT_MODES = {
   A2A_SELL: 'A2A_SELL',
   A2A_BUY: 'A2A_BUY',
@@ -17,7 +12,6 @@ export function classifyIntent(messageText, metadata = {}) {
 
   const text = (messageText || '').toLowerCase().trim();
 
-  // Check for P2P Selling intent
   if (
     text.startsWith('sell') ||
     text.includes('selling my') ||
@@ -30,7 +24,6 @@ export function classifyIntent(messageText, metadata = {}) {
     return INTENT_MODES.A2A_SELL;
   }
 
-  // Check for Transport Only intent
   if (
     text.includes('transport only') ||
     text.includes('deliver my parcel') ||
@@ -48,7 +41,6 @@ export function classifyIntent(messageText, metadata = {}) {
     return INTENT_MODES.TRANSPORT_ONLY;
   }
 
-  // Check for P2P buying vs Store buying
   if (
     text.includes('used iphone') ||
     text.includes('second hand') ||
@@ -59,6 +51,5 @@ export function classifyIntent(messageText, metadata = {}) {
     return INTENT_MODES.A2A_BUY;
   }
 
-  // Default mode for general product/merchant requests (KFC, Steers, Woolies, Checkers, groceries, electronics, etc.)
   return INTENT_MODES.BUY_PLUS_DELIVER;
 }

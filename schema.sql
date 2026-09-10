@@ -19,10 +19,10 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS agents (
   id TEXT PRIMARY KEY,
   owner_user_id TEXT NOT NULL,
-  type TEXT NOT NULL, -- 'PERSONAL' | 'BUSINESS'
+  type TEXT NOT NULL,
   name TEXT NOT NULL,
   category TEXT,
-  status TEXT NOT NULL, -- 'DRAFT' | 'COLLECTING' | 'VALIDATING' | 'ACTIVE'
+  status TEXT NOT NULL,
   config_json TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   buyer_agent_id TEXT NOT NULL,
   seller_agent_id TEXT,
-  intent_type TEXT NOT NULL, -- 'A2A_SELL' | 'A2A_BUY' | 'BUY_PLUS_DELIVER' | 'TRANSPORT_ONLY'
-  status TEXT NOT NULL, -- 'INTENT' | 'MATCHED' | 'QUOTED' | 'PENDING_APPROVAL' | 'AUTHORISED' | 'PAYMENT_PENDING' | 'PAID' | 'COLLECTING' | 'IN_TRANSIT' | 'DELIVERED' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REFUNDED' | 'DISPUTED'
+  intent_type TEXT NOT NULL,
+  status TEXT NOT NULL,
   human_approval_buyer INTEGER DEFAULT 0,
   human_approval_seller INTEGER DEFAULT 0,
   goods_amount_cents INTEGER DEFAULT 0,
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS quotes (
   created_at INTEGER NOT NULL
 );
 
--- Initial seed data for pricing_config
+-- Seed pricing parameters
 INSERT OR REPLACE INTO pricing_config (key, value, description, updated_at) VALUES
 ('STORE_GOODS_MARKUP_PERCENT', '0', 'Markup on goods for all stores (0%)', 1700000000000),
 ('STORE_TRANSPORT_MARGIN_LOW_PERCENT', '10', 'Transport margin percentage when cart < threshold (10%)', 1700000000000),

@@ -3,11 +3,10 @@ import { NetworkDiscovery } from './discovery.js';
 export class AgentMatchingEngine {
   constructor(discoveryService) {
     this.discovery = discoveryService || new NetworkDiscovery();
-    this.outcomeHistory = new Map(); // stores completed/failed match outcomes to learn
+    this.outcomeHistory = new Map();
   }
 
   recordOutcome(matchId, outcome) {
-    // outcome: { success: true/false, rating: 1-5, agentId }
     this.outcomeHistory.set(matchId, outcome);
   }
 
@@ -22,14 +21,10 @@ export class AgentMatchingEngine {
       }
     }
 
-    if (totalCount === 0) return 1.0; // neutral default
+    if (totalCount === 0) return 1.0;
     return successCount / totalCount;
   }
 
-  /**
-   * Match buyer request against seller candidates.
-   * Hard constraints (budget, distance, availability, load capacity) are applied BEFORE ranking.
-   */
   match({ queryText, maxBudgetCents, userLocation, requiredVehicleClass, category }) {
     const candidateAgents = this.discovery.discover({
       query: queryText,
@@ -44,19 +39,16 @@ export class AgentMatchingEngine {
       const items = agent.findItems(queryText);
 
       for (const item of items) {
-        // Hard constraint 1: Budget Filter
         if (maxBudgetCents && item.priceCents > maxBudgetCents) {
-          continue; // Hard constraint failed!
+          continue;
         }
 
-        // Hard constraint 2: Vehicle requirement if specified
         if (requiredVehicleClass && item.requiredVehicleClass) {
           if (item.requiredVehicleClass !== requiredVehicleClass) {
             continue;
           }
         }
 
-        // Calculate Distance
         let distanceKm = 0;
         if (userLocation && agent.location) {
           distanceKm = this.discovery.calculateDistanceKm(
@@ -64,12 +56,10 @@ export class AgentMatchingEngine {
           );
         }
 
-        // Hard constraint 3: Max Distance limit (30km)
         if (distanceKm > 30) {
           continue;
         }
 
-        // Semantic & Reputation Ranking Score
         const reputation = this.getReputationScore(agent.id);
         const priceScore = maxBudgetCents ? 1 - (item.priceCents / maxBudgetCents) : 0.5;
         const distanceScore = Math.max(0, 1 - (distanceKm / 30));
@@ -88,7 +78,6 @@ export class AgentMatchingEngine {
       }
     }
 
-    // Sort descending by score
     matchedResults.sort((a, b) => b.score - a.score);
 
     return matchedResults;

@@ -68,9 +68,6 @@ export class AgentFactory {
     return record.agent;
   }
 
-  /**
-   * Deterministic 48-hour draft cleanup cron function.
-   */
   async cleanupExpiredDrafts(maxAgeMs = 48 * 60 * 60 * 1000) {
     const now = Date.now();
     let cleanedCount = 0;

@@ -1,23 +1,15 @@
-/**
- * Network Discovery
- * Discovers personal agents, business agents, and external connected agents in the network.
- */
-
 export class NetworkDiscovery {
   constructor(registry = []) {
-    this.registry = registry; // Array of BusinessAgents or connected seller agents
+    this.registry = registry;
   }
 
   registerAgent(agent) {
     this.registry.push(agent);
   }
 
-  /**
-   * Basic geographic distance in km (Haversine formula).
-   */
   calculateDistanceKm(lat1, lon1, lat2, lon2) {
     if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
-    const R = 6371; // Earth radius km
+    const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);
     const dLon = (lon2 - lon1) * (Math.PI / 180);
     const a =
@@ -28,9 +20,6 @@ export class NetworkDiscovery {
     return R * c;
   }
 
-  /**
-   * Discover agents matching basic query parameters.
-   */
   discover({ query, category, location, maxDistanceKm = 50 }) {
     const q = (query || '').toLowerCase().trim();
 

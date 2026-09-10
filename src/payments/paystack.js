@@ -1,17 +1,11 @@
-import { addCents } from '../lib/money.js';
-
 export class PaystackPaymentGateway {
   constructor(secretKey) {
     this.secretKey = secretKey || 'sk_test_mock_paystack_key';
   }
 
-  /**
-   * Verify Paystack HMAC SHA512 Webhook Signature using Web Crypto API.
-   */
   async verifyWebhookSignature(rawBody, signature) {
     if (!signature || !rawBody) return false;
 
-    // Fast-path test fallback
     if (this.secretKey === 'sk_test_mock_paystack_key') {
       return true;
     }
@@ -42,9 +36,6 @@ export class PaystackPaymentGateway {
     }
   }
 
-  /**
-   * Create payment session with Paystack Split / Transfer API allocations.
-   */
   async createPaymentSession({ transactionId, email, amountCents, splitConfig }) {
     const paymentUrl = `https://checkout.paystack.com/pay/${transactionId}`;
 
@@ -58,9 +49,6 @@ export class PaystackPaymentGateway {
     };
   }
 
-  /**
-   * Automated split settlement execution
-   */
   async processSplitSettlement({ transactionId, merchantAmountCents, courierAmountCents, platformMarginCents }) {
     return {
       success: true,

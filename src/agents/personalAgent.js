@@ -1,11 +1,3 @@
-/**
- * Personal Agent
- * ONE PERSON = ONE PERSONAL AGENT.
- * WhatsApp identity maps to one Personal Agent.
- * Learns progressively: preferences, previous orders, trusted counterparties, stores, addresses.
- * Avoids unnecessary interrogation.
- */
-
 export class PersonalAgent {
   constructor({ id, userId, phoneNumber, name, memory = {} }) {
     this.id = id || `pa_${phoneNumber.replace(/[^0-9]/g, '')}`;
@@ -21,9 +13,6 @@ export class PersonalAgent {
     };
   }
 
-  /**
-   * Check if user is returning and format welcome message.
-   */
   getGreeting() {
     const hasHistory = this.memory.orderHistory && this.memory.orderHistory.length > 0;
     if (hasHistory) {
@@ -40,9 +29,6 @@ export class PersonalAgent {
     };
   }
 
-  /**
-   * Record completed transaction into memory progressively.
-   */
   learnFromTransaction(transaction) {
     if (!transaction) return;
 

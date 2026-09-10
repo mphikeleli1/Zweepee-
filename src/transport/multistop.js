@@ -1,14 +1,4 @@
-/**
- * Multi-stop Route Sequence Optimizer (VROOM / TSP greedy nearest neighbor solver)
- */
-
 export class MultiStopRouteOptimizer {
-  constructor() {}
-
-  /**
-   * Optimise pickup and dropoff stop sequence.
-   * @param {Array<{id: string, lat: number, lng: number, type: 'PICKUP'|'DROPOFF', name: string}>} stops
-   */
   optimiseRoute(stops = []) {
     if (stops.length <= 2) {
       return {
@@ -20,7 +10,6 @@ export class MultiStopRouteOptimizer {
     const pickups = stops.filter(s => s.type === 'PICKUP');
     const dropoffs = stops.filter(s => s.type === 'DROPOFF');
 
-    // Route rule: Pick up all orders first in nearest-neighbor order, then drop off to customer
     const sortedPickups = [...pickups];
     const orderedStops = [...sortedPickups, ...dropoffs];
 

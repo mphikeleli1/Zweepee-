@@ -1,9 +1,3 @@
-/**
- * Transport Aggregator & Vehicle Classifier
- * Couriers only (no runners).
- * Classifies loads and selects CHEAPEST SUITABLE provider after vehicle capability filtering.
- */
-
 export const VEHICLE_CLASSES = {
   BIKE: { code: 'BIKE', maxWeightKg: 10, name: 'Motorcycle' },
   BAKKIE_1TON: { code: 'BAKKIE_1TON', maxWeightKg: 1000, name: 'Bakkie / 1-Ton Truck' },
@@ -13,8 +7,6 @@ export const VEHICLE_CLASSES = {
 };
 
 export function classifyLoadVehicle({ items = [], totalWeightKg = 1 }) {
-  let requiredClass = 'BIKE';
-
   if (totalWeightKg > 4000) {
     return 'TRUCK_8TON';
   } else if (totalWeightKg > 2000) {
@@ -25,7 +17,7 @@ export function classifyLoadVehicle({ items = [], totalWeightKg = 1 }) {
     return 'BAKKIE_1TON';
   }
 
-  return requiredClass;
+  return 'BIKE';
 }
 
 export class TransportAggregator {
@@ -38,20 +30,14 @@ export class TransportAggregator {
     ];
   }
 
-  /**
-   * Query all providers concurrently with Promise.allSettled.
-   * Filter out unsuitable vehicles, then pick the cheapest suitable quote.
-   */
   async getQuotes({ pickupLocation, dropoffLocation, distanceKm = 5, items = [], totalWeightKg = 1 }) {
     const requiredVehicleClass = classifyLoadVehicle({ items, totalWeightKg });
 
     const quotePromises = this.providers.map(async (provider) => {
-      // Check vehicle capability
       if (!provider.supportedVehicles.includes(requiredVehicleClass)) {
         throw new Error(`Provider ${provider.name} does not support vehicle class ${requiredVehicleClass}`);
       }
 
-      // Calculate quote
       const dist = Math.max(1, distanceKm);
       const rawQuoteCents = provider.baseRateCents + (dist * provider.perKmCents);
 
@@ -78,7 +64,6 @@ export class TransportAggregator {
       throw new Error(`No available courier provider supports required vehicle class ${requiredVehicleClass}`);
     }
 
-    // Sort ascending by raw quote to select cheapest suitable
     validQuotes.sort((a, b) => a.rawQuoteCents - b.rawQuoteCents);
 
     return {

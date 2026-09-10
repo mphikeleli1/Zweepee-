@@ -47,14 +47,10 @@ export class WhatsAppSessionEngine {
     }
   }
 
-  /**
-   * Main conversational message dispatcher
-   */
   async handleIncomingMessage(waId, incomingText, buttonPayload = null) {
     let session = await this.getSession(waId);
     const text = (incomingText || '').trim();
 
-    // 1. New User Onboarding Check
     let userProfile = await this.onboardingEngine.getUserProfile(waId);
     if (!userProfile) {
       if (!session.onboardingStep) {
@@ -80,7 +76,6 @@ export class WhatsAppSessionEngine {
       return onboardingResult.screen;
     }
 
-    // 2. Check for interactive button tap payloads
     if (buttonPayload) {
       if (buttonPayload === 'action_food') {
         const items = await this.commerce.searchCatalog('kfc');
@@ -181,7 +176,6 @@ export class WhatsAppSessionEngine {
       }
     }
 
-    // 3. Text Message NLU Intent Processing
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 
@@ -195,7 +189,6 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // Default: Search catalog and render Storefront
     const items = await this.commerce.searchCatalog(maskedText);
     if (items.length > 0) {
       session.step = 'STATE_STORE_CATALOG';

@@ -1,25 +1,14 @@
-/**
- * Conversational Catalog Extractor for Agent Factory
- * Parses unstructured text, menu lists, and PDF data into structured product items.
- */
-
 export class CatalogExtractor {
-  /**
-   * Parse menu/list text into structured catalog array.
-   * e.g., "Streetwise 2 - R45, Burger Meal - R75"
-   */
   parseTextToCatalog(rawText) {
     if (!rawText) return [];
 
     const items = [];
-    // Split by line or semicolon/comma
     const lines = rawText.split(/[\n;]/);
 
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
 
-      // Regex match product name and Rand price (e.g. "Pizza - R120" or "Burger R85.50")
       const match = trimmed.match(/(.+?)(?:-|\:|\s+)*R\s?([0-9]+(?:\.[0-9]{2})?)/i);
 
       if (match) {

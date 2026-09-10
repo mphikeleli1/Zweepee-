@@ -1,9 +1,6 @@
 import { centsToRandsFormatted } from '../lib/money.js';
 
 export class WhatsAppUIBuilder {
-  /**
-   * SCREEN 1: DISCOVER STORES & MERCHANTS
-   */
   renderDiscoverScreen({ stores = [] }) {
     let text = `✨ *myAI™ Live Storefront* ✨\n` +
       `───────────────\n\n` +
@@ -32,9 +29,6 @@ export class WhatsAppUIBuilder {
     };
   }
 
-  /**
-   * SCREEN 2: ELITE STOREFRONT / PRODUCT CATALOG
-   */
   renderProductScreen({ storeName, items = [] }) {
     let text = `🏬 *${storeName.toUpperCase()}* — Live Catalog\n` +
       `───────────────\n\n`;
@@ -63,13 +57,10 @@ export class WhatsAppUIBuilder {
     return {
       type: 'PRODUCT_SCREEN',
       text,
-      buttons: itemButtons.slice(0, 3) // Max 3 interactive WhatsApp buttons per message
+      buttons: itemButtons.slice(0, 3)
     };
   }
 
-  /**
-   * SCREEN 3: UNIFIED CART
-   */
   renderCartScreen({ items = [], goodsSubtotalCents }) {
     let text = `🛒 *Your Unified Shopping Cart*\n` +
       `───────────────\n\n`;
@@ -92,9 +83,6 @@ export class WhatsAppUIBuilder {
     };
   }
 
-  /**
-   * SCREEN 4: COURIER DELIVERY SELECTION
-   */
   renderDeliveryScreen({ vehicleClass, providerName, transportCostCents, etaMinutes }) {
     const vehicleIcon = vehicleClass === 'BIKE' ? '🏍️' : '🚛';
 
@@ -116,9 +104,6 @@ export class WhatsAppUIBuilder {
     };
   }
 
-  /**
-   * SCREEN 5 & 6: CONFIRM & PAY (ALL-IN TRANSPARENT TOTAL)
-   */
   renderConfirmScreen({ transactionId, totalCustomerPaysCents, isP2P = false }) {
     let text = `🧾 *Final Order Confirmation*\n` +
       `───────────────\n\n` +
@@ -141,9 +126,6 @@ export class WhatsAppUIBuilder {
     };
   }
 
-  /**
-   * SCREEN 7: LIVE ORDER TRACKING
-   */
   renderLiveOrderScreen({ orderId, status, courierName, etaMinutes }) {
     const text = `📦 *Live Order Status*\n` +
       `───────────────\n\n` +
@@ -160,9 +142,6 @@ export class WhatsAppUIBuilder {
     };
   }
 
-  /**
-   * SCREEN 8: DELIVERED & RATING
-   */
   renderDeliveredScreen({ orderId, deliveryPhotoUrl }) {
     let text = `🎉 *Order Delivered!*\n` +
       `───────────────\n\n` +

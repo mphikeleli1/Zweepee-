@@ -21,14 +21,12 @@ export default {
     const path = url.pathname;
     const method = request.method;
 
-    // Route: GET / (Health Check)
     if (path === '/' || path === '/health') {
       return new Response(JSON.stringify({ status: 'ok', service: 'myAI v25 Network Node' }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Route: GET /api/v25/sentinel/health (Plain English Owner Diagnostic & Self-Healing Update)
     if (path === '/api/v25/sentinel/health' && method === 'GET') {
       const sentinel = new SentinelSelfHealingMonitor(env?.DB, env?.SESSIONS_KV, env?.CATALOG_CACHE_KV);
       const report = await sentinel.runHealthCheckAndSelfHeal();
@@ -37,7 +35,6 @@ export default {
       });
     }
 
-    // Route: WhatsApp Webhook GET Verification
     if (path === '/api/v25/webhook/whatsapp' && method === 'GET') {
       const mode = url.searchParams.get('hub.mode');
       const token = url.searchParams.get('hub.verify_token');
@@ -51,11 +48,10 @@ export default {
       return new Response('Forbidden', { status: 403 });
     }
 
-    // Route: WhatsApp Webhook POST Message Processing
     if (path === '/api/v25/webhook/whatsapp' && method === 'POST') {
       try {
         const body = await request.json();
-        const sessionEngine = new WhatsAppSessionEngine(env?.SESSIONS_KV, env?.DB);
+        const sessionEngine = new WhatsAppSessionEngine(env?.SESSIONS_KV, env?.USERS_KV, env?.DB);
 
         const messageText = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || '';
         const buttonPayload = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive?.button_reply?.id || null;
@@ -71,7 +67,6 @@ export default {
       }
     }
 
-    // Route: Paystack Webhook
     if (path === '/api/v25/webhook/paystack' && method === 'POST') {
       const paystack = new PaystackPaymentGateway();
       const rawBody = await request.text();
@@ -91,12 +86,10 @@ export default {
       return new Response(JSON.stringify({ status: 'success' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Route: PayFast Webhook
     if (path === '/api/v25/webhook/payfast' && method === 'POST') {
       return new Response(JSON.stringify({ status: 'success' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Route: PicUp Webhook
     if (path === '/api/v25/webhook/picup' && method === 'POST') {
       return new Response(JSON.stringify({ status: 'success' }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -104,7 +97,6 @@ export default {
     return new Response('Not Found', { status: 404 });
   },
 
-  // Cron Trigger for Autonomous Sentinel Self-Healing & Draft Cleanup
   async scheduled(event, env, ctx) {
     const factory = new AgentFactory(env?.DB);
     const draftResult = await factory.cleanupExpiredDrafts();

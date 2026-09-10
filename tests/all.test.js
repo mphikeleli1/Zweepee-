@@ -23,9 +23,8 @@ import { CatalogExtractor } from '../src/agents/catalogExtractor.js';
 import { UserOnboardingEngine } from '../src/whatsapp/onboarding.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
-  const rawTransport = 5000; // R50.00 transport quote
+  const rawTransport = 5000;
 
-  // Case A: Cart = R99.99 (9999 cents) -> < R100 threshold -> 10% transport margin (500 cents)
   const price9999 = calculatePricing({
     intentMode: 'BUY_PLUS_DELIVER',
     goodsSubtotalCents: 9999,
@@ -35,7 +34,6 @@ test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   assert.equal(price9999.goodsMarkupCents, 0, 'Store goods markup must be 0%');
   assert.equal(price9999.transportMarginCents, 500, 'R99.99 cart must use 10% transport margin');
 
-  // Case B: Cart = R100.00 (10000 cents) -> >= R100 threshold -> 20% transport margin (1000 cents)
   const price10000 = calculatePricing({
     intentMode: 'BUY_PLUS_DELIVER',
     goodsSubtotalCents: 10000,
@@ -45,7 +43,6 @@ test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   assert.equal(price10000.goodsMarkupCents, 0, 'Store goods markup must be 0%');
   assert.equal(price10000.transportMarginCents, 1000, 'R100.00 cart must exclusively use 20% transport margin');
 
-  // Case C: Cart = R100.01 (10001 cents) -> >= R100 threshold -> 20% transport margin (1000 cents)
   const price10001 = calculatePricing({
     intentMode: 'BUY_PLUS_DELIVER',
     goodsSubtotalCents: 10001,
@@ -54,11 +51,10 @@ test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   });
   assert.equal(price10001.transportMarginCents, 1000, 'R100.01 cart must use 20% transport margin');
 
-  // Case D: P2P Sale -> 5% goods commission + 20% transport margin
   const p2pPrice = calculatePricing({
     intentMode: 'P2P_SALE',
-    goodsSubtotalCents: 20000, // R200.00
-    rawTransportQuoteCents: 10000, // R100.00
+    goodsSubtotalCents: 20000,
+    rawTransportQuoteCents: 10000,
     config: DEFAULT_PRICING_CONFIG
   });
   assert.equal(p2pPrice.p2pCommissionCents, 1000, 'P2P goods commission must be 5% of R200 = R10 (1000 cents)');
@@ -71,7 +67,6 @@ test('2. Double-Entry Ledger Balancing & Minor Units Formatting', async () => {
   assert.equal(randsToCents('R 1,250.50'), 125050);
   assert.equal(centsToRandsFormatted(125050), 'R1,250.50');
 
-  // Balanced transaction
   const result = await ledger.recordTransaction({
     transactionId: 'tx_123',
     idempotencyKey: 'idem_ledger_1',
@@ -86,7 +81,6 @@ test('2. Double-Entry Ledger Balancing & Minor Units Formatting', async () => {
   assert.equal(result.success, true);
   assert.equal(result.totalAmountCents, 15000);
 
-  // Unbalanced transaction should throw error
   await assert.rejects(async () => {
     await ledger.recordTransaction({
       transactionId: 'tx_124',
@@ -106,28 +100,23 @@ test('3. State Machine Invalid Transitions & Approval Gate Enforcement', () => {
     state: TRANSACTION_STATES.INTENT
   });
 
-  // Valid flow up to PENDING_APPROVAL
   smP2P.transitionTo(TRANSACTION_STATES.MATCHED);
   smP2P.transitionTo(TRANSACTION_STATES.QUOTED);
   smP2P.transitionTo(TRANSACTION_STATES.PENDING_APPROVAL);
 
-  // Attempting PENDING_APPROVAL -> AUTHORISED without approvals must fail
   assert.throws(() => {
     smP2P.transitionTo(TRANSACTION_STATES.AUTHORISED);
   }, /Approval Gate Block/);
 
-  // Register buyer approval only -> still fails for P2P
   smP2P.registerBuyerApproval();
   assert.throws(() => {
     smP2P.transitionTo(TRANSACTION_STATES.AUTHORISED);
   }, /Approval Gate Block/);
 
-  // Register seller approval -> now succeeds!
   smP2P.registerSellerApproval();
   const transitionResult = smP2P.transitionTo(TRANSACTION_STATES.AUTHORISED);
   assert.equal(transitionResult.newState, TRANSACTION_STATES.AUTHORISED);
 
-  // Invalid state jump from AUTHORISED directly to COMPLETED must fail
   assert.throws(() => {
     smP2P.transitionTo(TRANSACTION_STATES.COMPLETED);
   }, /Invalid state transition/);
@@ -221,26 +210,22 @@ test('9. Scam Prevention, IMEI Luhn Check & Contact Masking', () => {
   assert.ok(maskedText.includes('[CONTACT MASKED BY MYAI]'));
   assert.ok(maskedText.includes('[ACCOUNT MASKED BY MYAI]'));
 
-  // Test IMEI Luhn verification algorithm
   assert.equal(scamEngine.isValidIMEI('352099001761481'), true);
   assert.equal(scamEngine.isValidIMEI('123456789012345'), false);
 });
 
 test('10. Stateful WhatsApp Session Engine & Payment Webhooks', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
-  // New user gets onboarding screen first
+
   const onboardingScreen = await sessionEngine.handleIncomingMessage('27820000000', 'hello');
   assert.ok(onboardingScreen.text.includes('Welcome to myAI'));
 
-  // Submit name
   const nameScreen = await sessionEngine.handleIncomingMessage('27820000000', 'John Doe');
   assert.ok(nameScreen.text.includes('Nice to meet you'));
 
-  // Submit address
   const addressScreen = await sessionEngine.handleIncomingMessage('27820000000', 'Sandton');
   assert.ok(addressScreen.text.includes('You\'re All Set'));
 
-  // Now user can search catalog
   const productScreen = await sessionEngine.handleIncomingMessage('27820000000', 'kfc');
   assert.equal(productScreen.type, 'PRODUCT_SCREEN');
 
@@ -279,7 +264,6 @@ test('12. External Agent Interoperability & Catalog Ingestion Extractor', async 
   assert.equal(response.status, 'SUCCESS');
   assert.equal(response.protocol, 'GOOGLE_A2A_V1');
 
-  // Test Catalog Extractor
   const extractor = new CatalogExtractor();
   const rawText = 'Pizza Margherita - R120.00\nBurger Meal - R85.50';
   const catalog = extractor.parseTextToCatalog(rawText);

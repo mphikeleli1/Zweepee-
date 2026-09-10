@@ -37,7 +37,7 @@ const VALID_TRANSITIONS = {
 export class TransactionStateMachine {
   constructor(transactionData) {
     this.id = transactionData.id;
-    this.intentMode = transactionData.intentMode; // 'BUY_PLUS_DELIVER', 'A2A_SELL', 'P2P_SALE', etc.
+    this.intentMode = transactionData.intentMode;
     this.state = transactionData.state || TRANSACTION_STATES.INTENT;
     this.humanApprovalBuyer = Boolean(transactionData.humanApprovalBuyer);
     this.humanApprovalSeller = Boolean(transactionData.humanApprovalSeller);
@@ -62,17 +62,14 @@ export class TransactionStateMachine {
       throw new Error(`Invalid state transition from ${this.state} to ${nextState}`);
     }
 
-    // ENHANCEMENT CLARIFICATION 5: PENDING_APPROVAL -> AUTHORISED Approval Gate Enforcement
     if (this.state === TRANSACTION_STATES.PENDING_APPROVAL && nextState === TRANSACTION_STATES.AUTHORISED) {
       const isP2P = ['A2A_SELL', 'A2A_BUY', 'P2P_SALE'].includes(this.intentMode);
 
       if (isP2P) {
-        // P2P / A2A requires human approval from BOTH buyer AND seller
         if (!this.humanApprovalBuyer || !this.humanApprovalSeller) {
           throw new Error('Approval Gate Block: Both buyer and seller human approvals are required for P2P/A2A deals before AUTHORISED state');
         }
       } else {
-        // Store purchase requires human approval from buyer
         if (!this.humanApprovalBuyer) {
           throw new Error('Approval Gate Block: Buyer human approval is required before AUTHORISED state');
         }

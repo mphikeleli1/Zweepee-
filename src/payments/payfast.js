@@ -5,13 +5,8 @@ export class PayFastPaymentGateway {
     this.passphrase = passphrase || '';
   }
 
-  /**
-   * Verify PayFast signature from POST parameters.
-   */
   verifyWebhookSignature(payload = {}) {
     if (!payload || Object.keys(payload).length === 0) return false;
-
-    // Test fallback
     if (this.merchantId === '10000100') return true;
 
     if (payload.merchant_id && payload.merchant_id !== this.merchantId) {

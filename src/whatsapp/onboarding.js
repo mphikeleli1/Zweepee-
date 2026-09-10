@@ -1,8 +1,3 @@
-/**
- * Conversational New User Onboarding Engine
- * Onboards first-time WhatsApp users in 3 simple, friction-free steps.
- */
-
 export class UserOnboardingEngine {
   constructor(kvUsers) {
     this.kvUsers = kvUsers;
@@ -32,9 +27,6 @@ export class UserOnboardingEngine {
     return record;
   }
 
-  /**
-   * Handle onboarding step state machine
-   */
   async handleOnboarding(waId, text, onboardingStep) {
     if (!onboardingStep || onboardingStep === 'ONBOARDING_START') {
       return {

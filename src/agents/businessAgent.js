@@ -1,16 +1,10 @@
-/**
- * Business Agent
- * Represents a business entity (restaurant, store, taxi business, hardware, etc.) or seller.
- * Personal Agents can own/control multiple Business Agents.
- */
-
 export class BusinessAgent {
   constructor(config = {}) {
     this.id = config.id || `ba_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     this.ownerUserId = config.ownerUserId;
     this.name = config.name || 'Business Agent';
     this.category = config.category || 'General';
-    this.status = config.status || 'DRAFT'; // DRAFT | COLLECTING | VALIDATING | ACTIVE
+    this.status = config.status || 'DRAFT';
     this.location = config.location || { lat: -26.2041, lng: 28.0473, address: 'Johannesburg' };
     this.catalog = config.catalog || [];
     this.policies = config.policies || {

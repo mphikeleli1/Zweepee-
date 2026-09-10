@@ -34,7 +34,6 @@ export class MockStoreAdapter extends CommerceAdapterInterface {
 export class CommerceAggregator {
   constructor() {
     this.adapters = new Map();
-    // Pre-populate standard merchants (KFC, Steers, Pick n Pay, Woolies, Checkers, Dischem)
     this.registerAdapter('kfc', new MockStoreAdapter('kfc', 'KFC'));
     this.registerAdapter('steers', new MockStoreAdapter('steers', 'Steers'));
     this.registerAdapter('pnp', new MockStoreAdapter('pnp', 'Pick n Pay'));

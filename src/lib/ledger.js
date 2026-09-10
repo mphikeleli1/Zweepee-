@@ -6,10 +6,6 @@ export class DoubleEntryLedger {
     this.inMemoryEntries = [];
   }
 
-  /**
-   * Record balanced double-entry transaction.
-   * Debits must equal Credits.
-   */
   async recordTransaction({ transactionId, idempotencyKey, entries, description = '' }) {
     if (!idempotencyKey) {
       throw new Error("Idempotency key required for ledger entry");

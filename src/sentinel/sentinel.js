@@ -1,9 +1,3 @@
-/**
- * Sentinel Self-Healing & Jargon-Free Alert Engine
- * Designed for 100% non-technical owner operation.
- * Automatically self-heals system issues and sends plain-English notifications.
- */
-
 export class SentinelSelfHealingMonitor {
   constructor(db, kvSessions, kvCatalog) {
     this.db = db;
@@ -11,9 +5,6 @@ export class SentinelSelfHealingMonitor {
     this.kvCatalog = kvCatalog;
   }
 
-  /**
-   * Run full autonomous system diagnostic and self-healing routine.
-   */
   async runHealthCheckAndSelfHeal() {
     const report = {
       timestamp: Date.now(),
@@ -22,7 +13,6 @@ export class SentinelSelfHealingMonitor {
       ownerAlertMessage: ''
     };
 
-    // 1. Check and auto-recover stuck pending orders
     try {
       const recoveredCount = await this.recoverStuckTransactions();
       if (recoveredCount > 0) {
@@ -32,7 +22,6 @@ export class SentinelSelfHealingMonitor {
       report.healedIssues.push('Checked order delivery pipeline and kept things flowing smoothly.');
     }
 
-    // 2. Check catalog storage memory and clean stale cache
     try {
       if (this.kvCatalog) {
         report.healedIssues.push('Refreshed shop product menus to keep listings fast and up to date.');
@@ -41,15 +30,10 @@ export class SentinelSelfHealingMonitor {
       // self-healed
     }
 
-    // 3. Format plain-English, jargon-free message for non-technical owner
     report.ownerAlertMessage = this.formatOwnerUpdate(report);
-
     return report;
   }
 
-  /**
-   * Self-healing: Recovers transactions stuck in PAYMENT_PENDING or COLLECTING > 30 minutes
-   */
   async recoverStuckTransactions(maxStuckMinutes = 30) {
     if (!this.db) return 0;
 
@@ -69,10 +53,6 @@ export class SentinelSelfHealingMonitor {
     return results.length;
   }
 
-  /**
-   * Formats simple, warm, natural English updates for non-technical owners.
-   * ABSOLUTELY NO TECHNICAL JARGON (No "database", "SQL", "KV", "HMAC", "HTTP", "error code").
-   */
   formatOwnerUpdate(report) {
     if (report.healedIssues.length === 0) {
       return `Hi Boss 👋 Everything is running smoothly! All customer orders, delivery drivers, and payments are working perfectly without any issues.`;

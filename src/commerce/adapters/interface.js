@@ -1,7 +1,3 @@
-/**
- * Standardized Commerce Adapter Interface
- */
-
 export class CommerceAdapterInterface {
   constructor(merchantConfig = {}) {
     this.merchantConfig = merchantConfig;

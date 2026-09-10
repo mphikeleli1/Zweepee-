@@ -1,16 +1,8 @@
-/**
- * External Agent Interoperability Protocol Adapter
- * Supports Google A2A, Meta Agent Ecosystem, and Open Agent Protocol standard messages.
- */
-
 export class ExternalAgentInteropAdapter {
   constructor(matchingEngine) {
     this.matchingEngine = matchingEngine;
   }
 
-  /**
-   * Handle incoming external agent protocol request (JSON payload).
-   */
   async handleExternalAgentQuery(externalRequest) {
     const { protocol, senderAgentId, action, query, maxBudgetCents, userLocation } = externalRequest;
 

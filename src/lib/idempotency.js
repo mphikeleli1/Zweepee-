@@ -1,7 +1,3 @@
-/**
- * Idempotency module backed by KV or in-memory fallback.
- */
-
 export class IdempotencyManager {
   constructor(kvNamespace) {
     this.kv = kvNamespace;
