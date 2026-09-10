@@ -1,5 +1,6 @@
 import { CommerceAdapterInterface } from './adapters/interface.js';
 import { UniversalClickCollectAdapter } from './adapters/universal.js';
+import { OneCartAggregatorAdapter } from './adapters/onecart.js';
 
 export class MockStoreAdapter extends CommerceAdapterInterface {
   constructor(storeId, storeName) {
@@ -35,6 +36,7 @@ export class MockStoreAdapter extends CommerceAdapterInterface {
 export class CommerceAggregator {
   constructor() {
     this.adapters = new Map();
+    this.onecartAdapter = new OneCartAggregatorAdapter();
     this.registerAdapter('kfc', new MockStoreAdapter('kfc', 'KFC'));
     this.registerAdapter('steers', new MockStoreAdapter('steers', 'Steers'));
     this.registerAdapter('pnp', new MockStoreAdapter('pnp', 'Pick n Pay'));
@@ -47,14 +49,16 @@ export class CommerceAggregator {
   }
 
   /**
-   * Search catalog across fixed store adapters AND universal Click & Collect stores
-   * (Makro, Dischem, Specsavers, Game, Vets, Builders, etc.)
+   * Hybrid Search Hierarchy:
+   * 1. Check direct merchant adapters (KFC, Steers, Woolies, Pick n Pay).
+   * 2. Query OneCart / Sixty60 Aggregator API for broad store coverage.
+   * 3. Query Universal Click & Collect Adapter for long-tail shops (Makro, Dischem, Specsavers, Vets, etc.).
    */
   async searchCatalog(query) {
     const results = [];
     const q = (query || '').toLowerCase().trim();
 
-    // 1. Check fixed store adapters
+    // 1. Check direct store adapters
     for (const [storeId, adapter] of this.adapters.entries()) {
       const catalog = await adapter.fetchCatalog();
       for (const item of catalog) {
@@ -64,7 +68,17 @@ export class CommerceAggregator {
       }
     }
 
-    // 2. Query Universal Click & Collect Adapter for broad store coverage
+    // 2. Query OneCart API Feed
+    if (q) {
+      const onecartItems = await this.onecartAdapter.fetchCatalog(q);
+      for (const item of onecartItems) {
+        if (!results.some(r => r.name === item.name)) {
+          results.push(item);
+        }
+      }
+    }
+
+    // 3. Query Universal Click & Collect Adapter for long-tail stores
     if (q) {
       const universalAdapter = new UniversalClickCollectAdapter(q, 'Click & Collect Store');
       const universalItems = await universalAdapter.fetchCatalog(q);

@@ -33,7 +33,8 @@ export class UserOnboardingEngine {
         nextStep: 'ONBOARDING_AWAITING_NAME',
         screen: {
           text: `🌟 *Welcome to myAI™!*\n\n` +
-            `I'm your personal autonomous digital agent on WhatsApp. I can order food, buy groceries, move furniture, or sell items for you with zero markup!\n\n` +
+            `I help you buy or sell anything, and you can shop at ANY store across South Africa!\n\n` +
+            `Whether it's food, groceries from Pick n Pay or Woolworths, items from Makro or Dischem, furniture, pet food from the vet, or selling pre-owned items—I handle it all with zero price markup!\n\n` +
             `To get started, what is your *name*?`
         }
       };
@@ -46,7 +47,7 @@ export class UserOnboardingEngine {
         draftProfile: { name },
         screen: {
           text: `Nice to meet you, *${name}*! 👋\n\n` +
-            `Where should your orders or deliveries be sent by default? (Please reply with your delivery suburb or address, e.g. *Sandton, Johannesburg*).`
+            `Where should your orders or deliveries be sent by default? (You can type your address or suburb, e.g. *Sandton, Johannesburg*, or tap the attachment icon and send a 📍 Location Pin).`
         }
       };
     }

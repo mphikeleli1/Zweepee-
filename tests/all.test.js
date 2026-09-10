@@ -22,6 +22,8 @@ import { NetworkDiscovery } from '../src/network/discovery.js';
 import { CatalogExtractor } from '../src/agents/catalogExtractor.js';
 import { UserOnboardingEngine } from '../src/whatsapp/onboarding.js';
 import { CommerceAggregator } from '../src/commerce/aggregator.js';
+import { DisputeResolutionEngine } from '../src/trust/disputes.js';
+import { OneCartAggregatorAdapter } from '../src/commerce/adapters/onecart.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -291,7 +293,6 @@ test('13. New User Onboarding Engine', async () => {
 test('14. GPS Location Pin Capturing & Universal Click & Collect Stores', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
 
-  // Test GPS Location Pin message
   const gpsPinScreen = await sessionEngine.handleIncomingMessage(
     '27822222222',
     '',
@@ -302,7 +303,6 @@ test('14. GPS Location Pin Capturing & Universal Click & Collect Stores', async 
   assert.equal(gpsPinScreen.type, 'LOCATION_PIN_SCREEN');
   assert.ok(gpsPinScreen.text.includes('-26.1076'));
 
-  // Test Universal Click & Collect stores (Makro, Dischem, Specsavers, Vets)
   const commerce = new CommerceAggregator();
   const makroItems = await commerce.searchCatalog('makro');
   assert.ok(makroItems.some(i => i.storeName === 'Makro'));
@@ -315,4 +315,25 @@ test('14. GPS Location Pin Capturing & Universal Click & Collect Stores', async 
 
   const vetItems = await commerce.searchCatalog('vet');
   assert.ok(vetItems.some(i => i.storeName === 'Vet Clinic & Pet Shop'));
+});
+
+test('15. Dispute Resolution Engine & OneCart Aggregator', async () => {
+  const disputeEngine = new DisputeResolutionEngine();
+  const dispute = await disputeEngine.fileDispute({
+    orderId: 'ord_test_99',
+    customerPhone: '27820000000',
+    issueType: 'PARCEL_NOT_DELIVERED',
+    comments: 'Parcel not delivered'
+  });
+
+  assert.equal(dispute.status, 'UNDER_INVESTIGATION');
+  assert.equal(dispute.payoutStatus, 'PAUSED');
+
+  const resolution = await disputeEngine.resolveDispute(dispute.disputeId, 'FREE_REMAKE');
+  assert.equal(resolution.success, true);
+  assert.ok(resolution.customerMessage.includes('brand new replacement order'));
+
+  const onecart = new OneCartAggregatorAdapter();
+  const items = await onecart.fetchCatalog('woolworths');
+  assert.ok(items.length > 0);
 });

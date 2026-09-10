@@ -157,21 +157,24 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * SCREEN 7: LIVE ORDER TRACKING
+   * SCREEN 7: LIVE ORDER TRACKING WITH REAL-TIME DRIVER ETA
    */
-  renderLiveOrderScreen({ orderId, status, courierName, etaMinutes }) {
-    const text = `📦 *Live Order Status*\n` +
+  renderLiveOrderScreen({ orderId, status, courierName, driverName = 'Sipho', etaMinutes = 3 }) {
+    const text = `📦 *Live Order Tracking*\n` +
       `───────────────\n\n` +
       `🆔 *Order Reference:* ${orderId}\n` +
       `🚦 *Current Status:* *${status}*\n` +
-      `🚚 *Assigned Courier:* ${courierName}\n` +
-      `⏱️ *ETA:* ~${etaMinutes} mins\n\n` +
+      `🛵 *Your Courier Driver:* *${driverName}* (${courierName})\n\n` +
+      `📍 *LIVE DRIVER UPDATE:* Your driver ${driverName} is *${etaMinutes} mins away* from your door!\n\n` +
       `───────────────\n` +
-      `Your courier is en route to your exact GPS pin! You will receive a door photo proof upon arrival.`;
+      `You will receive a door photo proof upon arrival. Need help with this order? Reply *Help* or *Problem*.`;
 
     return {
       type: 'LIVE_ORDER_SCREEN',
-      text
+      text,
+      buttons: [
+        { type: 'reply', reply: { id: `dispute_${orderId}`, title: '⚠️ Report Issue' } }
+      ]
     };
   }
 

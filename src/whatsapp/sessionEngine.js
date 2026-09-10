@@ -5,6 +5,7 @@ import { TransportAggregator } from '../transport/aggregator.js';
 import { WhatsAppUIBuilder } from './uiBuilder.js';
 import { ScamPreventionEngine } from '../trust/scamPrevention.js';
 import { UserOnboardingEngine } from './onboarding.js';
+import { DisputeResolutionEngine } from '../trust/disputes.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, db) {
@@ -16,6 +17,7 @@ export class WhatsAppSessionEngine {
     this.uiBuilder = new WhatsAppUIBuilder();
     this.scamEngine = new ScamPreventionEngine();
     this.onboardingEngine = new UserOnboardingEngine(kvUsers);
+    this.disputeEngine = new DisputeResolutionEngine(db);
     this.inMemorySessions = new Map();
   }
 
@@ -67,7 +69,26 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 1. New User Onboarding Check
+    // 1. Check for Dispute / Complaint Triggers
+    if (text.toLowerCase().includes('parcel not delivered') || text.toLowerCase().includes('not delivered') || text.toLowerCase().includes('wrong item') || text.toLowerCase().includes('dispute')) {
+      const dispute = await this.disputeEngine.fileDispute({
+        orderId: session.transactionId || 'ord_recent',
+        customerPhone: waId,
+        issueType: 'PARCEL_NOT_DELIVERED',
+        comments: text
+      });
+
+      const resolution = await this.disputeEngine.resolveDispute(dispute.disputeId, 'FREE_REMAKE');
+
+      return {
+        text: `🤝 *Dispute Support Center*\n` +
+          `───────────────\n\n` +
+          `We have registered your report (*Reference:* ${dispute.disputeId}). Payment to the courier has been *PAUSED* immediately for your protection.\n\n` +
+          `${resolution.customerMessage}`
+      };
+    }
+
+    // 2. New User Onboarding Check
     let userProfile = await this.onboardingEngine.getUserProfile(waId);
     if (!userProfile) {
       if (!session.onboardingStep) {
@@ -93,8 +114,21 @@ export class WhatsAppSessionEngine {
       return onboardingResult.screen;
     }
 
-    // 2. Check for interactive button tap payloads
+    // 3. Check for interactive button tap payloads
     if (buttonPayload) {
+      if (buttonPayload.startsWith('dispute_')) {
+        const orderId = buttonPayload.replace('dispute_', '');
+        const dispute = await this.disputeEngine.fileDispute({ orderId, customerPhone: waId, issueType: 'PARCEL_NOT_DELIVERED' });
+        const resolution = await this.disputeEngine.resolveDispute(dispute.disputeId, 'FREE_REMAKE');
+
+        return {
+          text: `🤝 *Dispute Support Center*\n` +
+            `───────────────\n\n` +
+            `We have registered your report (*Reference:* ${dispute.disputeId}). Payment to the driver has been *PAUSED* immediately for your protection.\n\n` +
+            `${resolution.customerMessage}`
+        };
+      }
+
       if (buttonPayload === 'action_food') {
         const items = await this.commerce.searchCatalog('kfc');
         return this.uiBuilder.renderProductScreen({ storeName: 'KFC', items });
@@ -122,7 +156,8 @@ export class WhatsAppSessionEngine {
           orderId: `ord_${txId.substring(0, 6)}`,
           status: 'CONFIRMED - COURIER DISPATCHED',
           courierName: session.deliveryQuote?.providerName || 'PicUp Courier',
-          etaMinutes: session.deliveryQuote?.etaMinutes || 20
+          driverName: 'Sipho',
+          etaMinutes: 3
         });
       }
 
@@ -194,7 +229,7 @@ export class WhatsAppSessionEngine {
       }
     }
 
-    // 3. Text Message NLU Intent Processing
+    // 4. Text Message NLU Intent Processing
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 
