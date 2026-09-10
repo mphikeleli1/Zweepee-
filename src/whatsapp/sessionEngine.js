@@ -1,0 +1,168 @@
+import { classifyIntent, INTENT_MODES } from '../lib/router.js';
+import { calculatePricing, getPricingConfig } from '../lib/pricing.js';
+import { TransactionStateMachine, TRANSACTION_STATES } from '../lib/stateMachine.js';
+import { CommerceAggregator } from '../commerce/aggregator.js';
+import { TransportAggregator } from '../transport/aggregator.js';
+import { WhatsAppUIBuilder } from './uiBuilder.js';
+import { ScamPreventionEngine } from '../trust/scamPrevention.js';
+
+export class WhatsAppSessionEngine {
+  constructor(kvSessions, db) {
+    this.kvSessions = kvSessions;
+    this.db = db;
+    this.commerce = new CommerceAggregator();
+    this.transport = new TransportAggregator();
+    this.uiBuilder = new WhatsAppUIBuilder();
+    this.scamEngine = new ScamPreventionEngine();
+    this.inMemorySessions = new Map();
+  }
+
+  async getSession(waId) {
+    const key = `session:${waId}`;
+    if (this.kvSessions) {
+      const data = await this.kvSessions.get(key);
+      if (data) return JSON.parse(data);
+    }
+    if (this.inMemorySessions.has(key)) {
+      return this.inMemorySessions.get(key);
+    }
+    return {
+      waId,
+      step: 'STATE_IDLE',
+      cart: [],
+      selectedStore: null,
+      deliveryQuote: null,
+      transaction: null
+    };
+  }
+
+  async saveSession(waId, session) {
+    const key = `session:${waId}`;
+    if (this.kvSessions) {
+      await this.kvSessions.put(key, JSON.stringify(session), { expirationTtl: 86400 });
+    } else {
+      this.inMemorySessions.set(key, session);
+    }
+  }
+
+  /**
+   * Main conversational message dispatcher
+   */
+  async handleIncomingMessage(waId, incomingText, buttonPayload = null) {
+    let session = await this.getSession(waId);
+    const text = (incomingText || '').trim();
+
+    // 1. Check for interactive button tap payloads
+    if (buttonPayload) {
+      if (buttonPayload.startsWith('tap_approve_')) {
+        const txId = buttonPayload.replace('tap_approve_', '');
+        session.step = 'STATE_LIVE_ORDER';
+        await this.saveSession(waId, session);
+
+        return this.uiBuilder.renderLiveOrderScreen({
+          orderId: `ord_${txId.substring(0, 6)}`,
+          status: 'CONFIRMED - COURIER DISPATCHED',
+          courierName: session.deliveryQuote?.providerName || 'PicUp Courier',
+          etaMinutes: session.deliveryQuote?.etaMinutes || 20
+        });
+      }
+
+      if (buttonPayload.startsWith('tap_cancel_')) {
+        session.step = 'STATE_IDLE';
+        session.cart = [];
+        await this.saveSession(waId, session);
+        return { text: '❌ Order cancelled. What else can I help you with today?' };
+      }
+
+      if (buttonPayload.startsWith('add_')) {
+        const itemId = buttonPayload.replace('add_', '');
+        const items = await this.commerce.searchCatalog('');
+        const item = items.find(i => i.id === itemId);
+        if (item) {
+          session.cart.push(item);
+          session.step = 'STATE_CART';
+          await this.saveSession(waId, session);
+
+          const goodsSubtotal = session.cart.reduce((acc, i) => acc + i.priceCents, 0);
+          return this.uiBuilder.renderCartScreen({
+            items: session.cart,
+            goodsSubtotalCents: goodsSubtotal
+          });
+        }
+      }
+
+      if (buttonPayload === 'proceed_delivery') {
+        const goodsSubtotal = session.cart.reduce((acc, i) => acc + i.priceCents, 0);
+        const quotes = await this.transport.getQuotes({
+          distanceKm: 5,
+          items: session.cart
+        });
+
+        session.deliveryQuote = quotes.cheapestQuote;
+        session.step = 'STATE_DELIVERY';
+        await this.saveSession(waId, session);
+
+        return this.uiBuilder.renderDeliveryScreen({
+          vehicleClass: quotes.requiredVehicleClass,
+          providerName: quotes.cheapestQuote.providerName,
+          transportCostCents: quotes.cheapestQuote.rawQuoteCents,
+          etaMinutes: quotes.cheapestQuote.etaMinutes
+        });
+      }
+
+      if (buttonPayload === 'confirm_transport') {
+        const goodsSubtotal = session.cart.reduce((acc, i) => acc + i.priceCents, 0);
+        const config = await getPricingConfig(this.db);
+
+        const pricing = calculatePricing({
+          intentMode: 'BUY_PLUS_DELIVER',
+          goodsSubtotalCents: goodsSubtotal,
+          rawTransportQuoteCents: session.deliveryQuote.rawQuoteCents,
+          config
+        });
+
+        session.pricing = pricing;
+        session.step = 'STATE_AWAITING_APPROVAL';
+        const txId = `tx_${Date.now()}`;
+        session.transactionId = txId;
+        await this.saveSession(waId, session);
+
+        return this.uiBuilder.renderConfirmScreen({
+          transactionId: txId,
+          totalCustomerPaysCents: pricing.totalCustomerPaysCents,
+          isP2P: false
+        });
+      }
+    }
+
+    // 2. Text Message NLU intent parsing
+    const maskedText = this.scamEngine.maskOffPlatformContacts(text);
+    const intentMode = classifyIntent(maskedText);
+
+    if (intentMode === INTENT_MODES.A2A_SELL) {
+      session.step = 'STATE_IDLE';
+      await this.saveSession(waId, session);
+      return {
+        text: `🏷️ *Create Listing*\n\n` +
+          `What item are you selling? Please reply with:\n` +
+          `Item Name, Price in Rand, and Category (e.g. *iPhone 15, R12000, Electronics*).`
+      };
+    }
+
+    // Default: Search catalog and render Screen 1/2
+    const items = await this.commerce.searchCatalog(maskedText);
+    if (items.length > 0) {
+      session.step = 'STATE_STORE_CATALOG';
+      await this.saveSession(waId, session);
+
+      return this.uiBuilder.renderProductScreen({
+        storeName: items[0].storeName || 'Store Catalog',
+        items: items.slice(0, 5)
+      });
+    }
+
+    return {
+      text: `Hello! 👋 How can I help you today? You can order food (KFC, Steers), groceries, furniture, or sell an item!`
+    };
+  }
+}

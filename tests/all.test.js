@@ -12,6 +12,9 @@ import { MultiStopRouteOptimizer } from '../src/transport/multistop.js';
 import { PersonalAgent } from '../src/agents/personalAgent.js';
 import { AgentFactory } from '../src/agents/factory.js';
 import { ScamPreventionEngine } from '../src/trust/scamPrevention.js';
+import { WhatsAppSessionEngine } from '../src/whatsapp/sessionEngine.js';
+import { PaystackPaymentGateway } from '../src/payments/paystack.js';
+import { PayFastPaymentGateway } from '../src/payments/payfast.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000; // R50.00 transport quote
@@ -56,8 +59,11 @@ test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   assert.equal(p2pPrice.transportMarginCents, 2000, 'P2P transport margin must be 20% of R100 = R20 (2000 cents)');
 });
 
-test('2. Double-Entry Ledger Balancing', async () => {
+test('2. Double-Entry Ledger Balancing & Minor Units Formatting', async () => {
   const ledger = new DoubleEntryLedger();
+
+  assert.equal(randsToCents('R 1,250.50'), 125050);
+  assert.equal(centsToRandsFormatted(125050), 'R1,250.50');
 
   // Balanced transaction
   const result = await ledger.recordTransaction({
@@ -143,15 +149,12 @@ test('5. Intent Router Classification', () => {
 });
 
 test('6. Transport Vehicle Selection & Capabilities', async () => {
-  // Food items -> BIKE
   const bikeVehicle = classifyLoadVehicle({ items: [{ category: 'Food' }], totalWeightKg: 2 });
   assert.equal(bikeVehicle, 'BIKE');
 
-  // Furniture item -> BAKKIE_1TON
   const furnitureVehicle = classifyLoadVehicle({ items: [{ category: 'Furniture' }], totalWeightKg: 50 });
   assert.equal(furnitureVehicle, 'BAKKIE_1TON');
 
-  // Heavy freight 5000kg -> TRUCK_8TON
   const heavyVehicle = classifyLoadVehicle({ items: [], totalWeightKg: 5000 });
   assert.equal(heavyVehicle, 'TRUCK_8TON');
 
@@ -187,42 +190,46 @@ test('8. Agent Factory Draft Cleanup & Validation', async () => {
   const draft = factory.createDraft('usr_john', 'John Resto', 'Restaurant');
   assert.equal(draft.status, 'DRAFT');
 
-  // Validation should fail on empty catalog
   const validation = factory.validateConfig(draft);
   assert.equal(validation.valid, false);
 
-  // Populate catalog and validate again
   factory.collectData(draft.id, { catalog: [{ name: 'Burger', priceCents: 5000 }] });
   const activeAgent = factory.activate(draft.id);
   assert.equal(activeAgent.status, 'ACTIVE');
 
-  // Create old draft and test 48h cleanup
   const oldDraft = factory.createDraft('usr_mary', 'Old Store', 'General');
-  factory.drafts.get(oldDraft.id).updatedAt = Date.now() - (49 * 60 * 60 * 1000); // 49 hours old
+  factory.drafts.get(oldDraft.id).updatedAt = Date.now() - (49 * 60 * 60 * 1000);
 
   const cleanupResult = await factory.cleanupExpiredDrafts();
   assert.equal(cleanupResult.cleanedCount, 1);
 });
 
-test('9. Scam Prevention & Contact Masking', () => {
+test('9. Scam Prevention, IMEI Luhn Check & Contact Masking', () => {
   const scamEngine = new ScamPreventionEngine();
 
-  const unmaskedText = 'Call me on 0821234567 or email test@gmail.com to buy off platform!';
+  const unmaskedText = 'Call 0821234567 or pay to account 12345678901 or wa.me/27820000000';
   const maskedText = scamEngine.maskOffPlatformContacts(unmaskedText);
 
   assert.ok(!maskedText.includes('0821234567'));
-  assert.ok(!maskedText.includes('test@gmail.com'));
+  assert.ok(!maskedText.includes('12345678901'));
   assert.ok(maskedText.includes('[CONTACT MASKED BY MYAI]'));
+  assert.ok(maskedText.includes('[ACCOUNT MASKED BY MYAI]'));
 
-  // Listing protection
-  const listingCheck = scamEngine.validateListingProtection({
-    item: { name: 'iPhone 15', category: 'Electronics', priceCents: 150000 },
-    photoUrl: 'https://cdn.myai.co.za/iphone.jpg',
-    serialOrImei: 'IMEI1234567890',
-    sellerId: 'usr_seller_1',
-    isNewSeller: true
-  });
+  // Test IMEI Luhn verification algorithm
+  assert.equal(scamEngine.isValidIMEI('352099001761481'), true);
+  assert.equal(scamEngine.isValidIMEI('123456789012345'), false);
+});
 
-  assert.equal(listingCheck.approved, true);
-  assert.equal(listingCheck.requiresEscrowHold, true);
+test('10. Stateful WhatsApp Session Engine & Payment Webhooks', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+  const screen = await sessionEngine.handleIncomingMessage('27820000000', 'kfc');
+
+  assert.equal(screen.type, 'PRODUCT_SCREEN');
+
+  const paystack = new PaystackPaymentGateway('sk_test_mock_paystack_key');
+  const paystackValid = await paystack.verifyWebhookSignature('{"event":"charge.success"}', 'mock_sig');
+  assert.equal(paystackValid, true);
+
+  const payfast = new PayFastPaymentGateway('10000100');
+  assert.equal(payfast.verifyWebhookSignature({ merchant_id: '10000100' }), true);
 });

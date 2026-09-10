@@ -11,11 +11,11 @@ export const INTENT_MODES = {
 };
 
 export function classifyIntent(messageText, metadata = {}) {
-  const text = (messageText || '').toLowerCase().trim();
-
   if (metadata.explicitIntent) {
     return metadata.explicitIntent;
   }
+
+  const text = (messageText || '').toLowerCase().trim();
 
   // Check for P2P Selling intent
   if (
@@ -23,7 +23,9 @@ export function classifyIntent(messageText, metadata = {}) {
     text.includes('selling my') ||
     text.includes('i want to sell') ||
     text.includes('list item') ||
-    text.includes('for sale')
+    text.includes('for sale') ||
+    text.includes('selling a ') ||
+    text.includes('second hand for sale')
   ) {
     return INTENT_MODES.A2A_SELL;
   }
@@ -37,13 +39,23 @@ export function classifyIntent(messageText, metadata = {}) {
     text.includes('courier only') ||
     text.includes('already bought') ||
     text.includes('furniture move') ||
-    text.includes('bakkie needed')
+    text.includes('bakkie needed') ||
+    text.includes('bakkie to move') ||
+    text.includes('fetch my parcel') ||
+    text.includes('move my couch') ||
+    text.includes('pickup and drop')
   ) {
     return INTENT_MODES.TRANSPORT_ONLY;
   }
 
   // Check for P2P buying vs Store buying
-  if (text.includes('used iphone') || text.includes('second hand') || text.includes('pre-owned') || text.includes('from another user')) {
+  if (
+    text.includes('used iphone') ||
+    text.includes('second hand') ||
+    text.includes('pre-owned') ||
+    text.includes('from another user') ||
+    text.includes('buy used')
+  ) {
     return INTENT_MODES.A2A_BUY;
   }
 
