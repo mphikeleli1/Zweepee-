@@ -403,3 +403,24 @@ test('19. Apple-Level 1-Tap Instant Checkout', async () => {
   assert.ok(screen.text.includes('Instant Checkout'));
   assert.ok(screen.buttons[0].reply.title.includes('Pay R'));
 });
+
+test('20. Dynamic Location Switcher (Work vs Home Address)', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  await sessionEngine.handleIncomingMessage('27855555555', 'hi');
+  await sessionEngine.handleIncomingMessage('27855555555', 'Lindiwe');
+  await sessionEngine.handleIncomingMessage('27855555555', 'Home: Sandton');
+
+  // Request order -> Initially assigned Home: Sandton
+  const screen1 = await sessionEngine.handleIncomingMessage('27855555555', 'Get me KFC Streetwise 2');
+  assert.ok(screen1.text.includes('Home: Sandton'));
+
+  // User taps [ Change Address / Work ]
+  const promptScreen = await sessionEngine.handleIncomingMessage('27855555555', '', 'change_location');
+  assert.equal(promptScreen.type, 'LOCATION_PROMPT_SCREEN');
+
+  // User types new Work address
+  const screen2 = await sessionEngine.handleIncomingMessage('27855555555', 'Work: Rosebank Office Park');
+  assert.equal(screen2.type, 'ONE_TAP_CHECKOUT_SCREEN');
+  assert.ok(screen2.text.includes('Work: Rosebank Office Park'));
+});

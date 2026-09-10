@@ -2,8 +2,8 @@ import { centsToRandsFormatted } from '../lib/money.js';
 
 export class WhatsAppUIBuilder {
   /**
-   * APPLE-LEVEL 1-TAP INSTANT CHECKOUT SCREEN
-   * Replaces 8 screens with 1 single elegant display!
+   * APPLE-LEVEL 1-TAP INSTANT CHECKOUT SCREEN WITH LOCATION SWITCHER
+   * Allows 1-tap switching between Home, Work, or sending a new GPS pin!
    */
   renderOneTapCheckoutScreen({ storeName, itemName, itemPriceCents, vehicleClass, providerName, transportCostCents, totalCustomerPaysCents, deliveryAddress, transactionId }) {
     const vehicleIcon = vehicleClass === 'BIKE' ? '🏍️' : '🚛';
@@ -13,7 +13,7 @@ export class WhatsAppUIBuilder {
       `🏬 *Merchant:* ${storeName}\n` +
       `🛍️ *Item:* ${itemName} (${centsToRandsFormatted(itemPriceCents)})\n` +
       `${vehicleIcon} *Delivery:* ${providerName} (${centsToRandsFormatted(transportCostCents)})\n` +
-      `📍 *Deliver To:* ${deliveryAddress || 'Saved GPS Pin'}\n\n` +
+      `📍 *Deliver To:* *${deliveryAddress || 'Saved GPS Location'}*\n\n` +
       `───────────────\n` +
       `💳 *ONE TOTAL:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n` +
       `💡 *0% Store Markup Guarantee*`;
@@ -23,8 +23,21 @@ export class WhatsAppUIBuilder {
       text,
       buttons: [
         { type: 'reply', reply: { id: `tap_approve_${transactionId}`, title: `💳 Pay ${centsToRandsFormatted(totalCustomerPaysCents)}` } },
+        { type: 'reply', reply: { id: 'change_location', title: '📍 Change Address / Work' } },
         { type: 'reply', reply: { id: `tap_cancel_${transactionId}`, title: '❌ Cancel' } }
       ]
+    };
+  }
+
+  /**
+   * Location Switcher Prompt Screen
+   */
+  renderLocationPromptScreen() {
+    return {
+      type: 'LOCATION_PROMPT_SCREEN',
+      text: `📍 *Where should we deliver this order?*\n` +
+        `───────────────\n\n` +
+        `Please reply with your new delivery suburb/address (e.g. *Work: Rosebank*), or tap the attachment icon and send a 📍 *GPS Location Pin*!`
     };
   }
 

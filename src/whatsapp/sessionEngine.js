@@ -69,6 +69,7 @@ export class WhatsAppSessionEngine {
         lng: locationObj.longitude,
         address: locationObj.address || locationObj.name || `${locationObj.latitude.toFixed(4)}, ${locationObj.longitude.toFixed(4)}`
       };
+      session.activeAddress = session.gpsLocation.address;
       await this.saveSession(waId, session);
 
       return this.uiBuilder.renderLocationPinCaptured({
@@ -117,14 +118,50 @@ export class WhatsAppSessionEngine {
           address: onboardingResult.completedProfile.address
         });
         session.onboardingStep = 'ONBOARDING_COMPLETED';
+        session.activeAddress = userProfile.address;
       }
 
       await this.saveSession(waId, session);
       return onboardingResult.screen;
     }
 
+    // Dynamic Address Switcher Step
+    if (session.step === 'AWAITING_NEW_ADDRESS') {
+      session.activeAddress = text;
+      session.step = 'STATE_AWAITING_APPROVAL';
+      await this.saveSession(waId, session);
+
+      const explicitItem = session.cart[0];
+      const quotes = await this.transport.getQuotes({ distanceKm: 5, items: session.cart });
+      const config = await getPricingConfig(this.db);
+      const pricing = calculatePricing({
+        intentMode: 'BUY_PLUS_DELIVER',
+        goodsSubtotalCents: explicitItem.priceCents,
+        rawTransportQuoteCents: quotes.cheapestQuote.rawQuoteCents,
+        config
+      });
+
+      return this.uiBuilder.renderOneTapCheckoutScreen({
+        storeName: explicitItem.storeName || 'Partner Store',
+        itemName: explicitItem.name,
+        itemPriceCents: explicitItem.priceCents,
+        vehicleClass: quotes.requiredVehicleClass,
+        providerName: quotes.cheapestQuote.providerName,
+        transportCostCents: quotes.cheapestQuote.rawQuoteCents,
+        totalCustomerPaysCents: pricing.totalCustomerPaysCents,
+        deliveryAddress: session.activeAddress,
+        transactionId: session.transactionId
+      });
+    }
+
     // 4. Check for interactive button tap payloads
     if (buttonPayload) {
+      if (buttonPayload === 'change_location') {
+        session.step = 'AWAITING_NEW_ADDRESS';
+        await this.saveSession(waId, session);
+        return this.uiBuilder.renderLocationPromptScreen();
+      }
+
       if (buttonPayload.startsWith('dispute_')) {
         const orderId = buttonPayload.replace('dispute_', '');
         const dispute = await this.disputeEngine.fileDispute({ orderId, customerPhone: waId, issueType: 'PARCEL_NOT_DELIVERED' });
@@ -259,12 +296,10 @@ export class WhatsAppSessionEngine {
     }
 
     // APPLE-LEVEL 1-TAP CHECKOUT FAST-PATH:
-    // If the user specifies an explicit item (e.g., "Streetwise Two" or "Zinger"), do ALL background calculations instantly and show 1-Tap Checkout!
     const items = await this.commerce.searchCatalog(maskedText);
     if (items.length > 0) {
       const explicitItem = items.find(i => maskedText.toLowerCase().includes(i.name.toLowerCase().substring(0, 5))) || items[0];
 
-      // Perform all background heavy lifting instantly!
       const quotes = await this.transport.getQuotes({ distanceKm: 5, items: [explicitItem] });
       const config = await getPricingConfig(this.db);
 
@@ -280,6 +315,7 @@ export class WhatsAppSessionEngine {
       session.deliveryQuote = quotes.cheapestQuote;
       session.pricing = pricing;
       session.transactionId = txId;
+      session.activeAddress = session.activeAddress || userProfile.address || 'Saved Location';
       session.step = 'STATE_AWAITING_APPROVAL';
       await this.saveSession(waId, session);
 
@@ -291,7 +327,7 @@ export class WhatsAppSessionEngine {
         providerName: quotes.cheapestQuote.providerName,
         transportCostCents: quotes.cheapestQuote.rawQuoteCents,
         totalCustomerPaysCents: pricing.totalCustomerPaysCents,
-        deliveryAddress: userProfile.address,
+        deliveryAddress: session.activeAddress,
         transactionId: txId
       });
     }
