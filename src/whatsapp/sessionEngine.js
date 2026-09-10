@@ -6,6 +6,7 @@ import { WhatsAppUIBuilder } from './uiBuilder.js';
 import { ScamPreventionEngine } from '../trust/scamPrevention.js';
 import { UserOnboardingEngine } from './onboarding.js';
 import { DisputeResolutionEngine } from '../trust/disputes.js';
+import { AntiAbuseGuardEngine } from '../trust/antiAbuse.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, db) {
@@ -18,6 +19,7 @@ export class WhatsAppSessionEngine {
     this.scamEngine = new ScamPreventionEngine();
     this.onboardingEngine = new UserOnboardingEngine(kvUsers);
     this.disputeEngine = new DisputeResolutionEngine(db);
+    this.antiAbuse = new AntiAbuseGuardEngine();
     this.inMemorySessions = new Map();
   }
 
@@ -50,10 +52,17 @@ export class WhatsAppSessionEngine {
   }
 
   async handleIncomingMessage(waId, incomingText, buttonPayload = null, locationObj = null) {
-    let session = await this.getSession(waId);
     const text = (incomingText || '').trim();
 
-    // 0. GPS Location Pin Handler
+    // 0. Anti-Abuse, Anti-Trolling & Rate Limiting Check
+    const abuseCheck = this.antiAbuse.screenInboundMessage(waId, text);
+    if (abuseCheck.isBlocked) {
+      return { text: abuseCheck.message };
+    }
+
+    let session = await this.getSession(waId);
+
+    // 1. GPS Location Pin Handler
     if (locationObj && locationObj.latitude && locationObj.longitude) {
       session.gpsLocation = {
         lat: locationObj.latitude,
@@ -69,7 +78,7 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 1. Check for Dispute / Complaint Triggers
+    // 2. Check for Dispute / Complaint Triggers
     if (text.toLowerCase().includes('parcel not delivered') || text.toLowerCase().includes('not delivered') || text.toLowerCase().includes('wrong item') || text.toLowerCase().includes('dispute')) {
       const dispute = await this.disputeEngine.fileDispute({
         orderId: session.transactionId || 'ord_recent',
@@ -88,7 +97,7 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // 2. New User Onboarding Check
+    // 3. New User Onboarding Check
     let userProfile = await this.onboardingEngine.getUserProfile(waId);
     if (!userProfile) {
       if (!session.onboardingStep) {
@@ -114,7 +123,7 @@ export class WhatsAppSessionEngine {
       return onboardingResult.screen;
     }
 
-    // 3. Check for interactive button tap payloads
+    // 4. Check for interactive button tap payloads
     if (buttonPayload) {
       if (buttonPayload.startsWith('dispute_')) {
         const orderId = buttonPayload.replace('dispute_', '');
@@ -229,13 +238,20 @@ export class WhatsAppSessionEngine {
       }
     }
 
-    // 4. Text Message NLU Intent Processing
+    // 5. Text Message NLU Intent Processing
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 
     if (intentMode === INTENT_MODES.A2A_SELL) {
       session.step = 'STATE_IDLE';
       await this.saveSession(waId, session);
+
+      // Check listing velocity anti-gaming
+      const velocityCheck = this.antiAbuse.validateListingVelocity(waId);
+      if (!velocityCheck.allowed) {
+        return { text: velocityCheck.message };
+      }
+
       return {
         text: `🏷️ *Create Listing*\n\n` +
           `What item are you selling? Please reply with:\n` +

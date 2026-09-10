@@ -24,6 +24,7 @@ import { UserOnboardingEngine } from '../src/whatsapp/onboarding.js';
 import { CommerceAggregator } from '../src/commerce/aggregator.js';
 import { DisputeResolutionEngine } from '../src/trust/disputes.js';
 import { OneCartAggregatorAdapter } from '../src/commerce/adapters/onecart.js';
+import { AntiAbuseGuardEngine } from '../src/trust/antiAbuse.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -351,4 +352,22 @@ test('16. Fleet Fault Rider Theft Claim', async () => {
   assert.equal(result.fleetClaimRecord.storePayoutCharged, false, 'Store must NOT be charged');
   assert.ok(result.customerMessage.includes('zero extra cost'));
   assert.ok(result.ownerNotice.includes('Rider rider_pingo_99 on Pingo stole order'));
+});
+
+test('17. Anti-Abuse, Profanity & Anti-Gaming Rate Limiting', () => {
+  const antiAbuse = new AntiAbuseGuardEngine();
+
+  // Test profanity check
+  const profanityCheck = antiAbuse.screenInboundMessage('usr_troll_1', 'You are a poes');
+  assert.equal(profanityCheck.isBlocked, true);
+  assert.ok(profanityCheck.message.includes('keep our conversation friendly'));
+
+  // Test spam rate limiting (11 messages in < 30 seconds)
+  for (let i = 0; i < 10; i++) {
+    antiAbuse.screenInboundMessage('usr_spam_1', 'hello');
+  }
+
+  const rateCheck = antiAbuse.screenInboundMessage('usr_spam_1', 'hello 11th time');
+  assert.equal(rateCheck.isBlocked, true);
+  assert.ok(rateCheck.message.includes('break'));
 });
