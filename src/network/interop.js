@@ -1,8 +1,16 @@
+/**
+ * External Agent Interoperability Protocol Adapter
+ * Connects myAI agents with Google A2A, Meta Agent Ecosystem, and Open Agent Protocols.
+ */
+
 export class ExternalAgentInteropAdapter {
   constructor(matchingEngine) {
     this.matchingEngine = matchingEngine;
   }
 
+  /**
+   * Universal External Agent Protocol Message Dispatcher
+   */
   async handleExternalAgentQuery(externalRequest) {
     const { protocol, senderAgentId, action, query, maxBudgetCents, userLocation } = externalRequest;
 
@@ -18,6 +26,7 @@ export class ExternalAgentInteropAdapter {
         senderAgentId,
         myaiAgentId: 'myai_network_node',
         status: 'SUCCESS',
+        zeroAdBias: true,
         matches: matches.map(m => ({
           sellerAgentId: m.sellerAgent.id,
           sellerName: m.sellerAgent.name,

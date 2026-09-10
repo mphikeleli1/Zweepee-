@@ -14,6 +14,9 @@ import { WhatsAppTransportAdapter } from './whatsapp/transport.js';
 import { WhatsAppUIBuilder } from './whatsapp/uiBuilder.js';
 import { WhatsAppSessionEngine } from './whatsapp/sessionEngine.js';
 import { SentinelSelfHealingMonitor } from './sentinel/sentinel.js';
+import { ExternalAgentInteropAdapter } from './network/interop.js';
+import { AgentMatchingEngine } from './network/matching.js';
+import { NetworkDiscovery } from './network/discovery.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -25,6 +28,23 @@ export default {
       return new Response(JSON.stringify({ status: 'ok', service: 'myAI v25 Network Node' }), {
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // Route: External Agent Interoperability Protocol (Google A2A / Meta / Open Protocols)
+    if (path === '/api/v25/a2a/interop' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const discovery = new NetworkDiscovery();
+        const matching = new AgentMatchingEngine(discovery);
+        const interop = new ExternalAgentInteropAdapter(matching);
+
+        const response = await interop.handleExternalAgentQuery(body);
+        return new Response(JSON.stringify(response), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+      }
     }
 
     if (path === '/api/v25/sentinel/health' && method === 'GET') {
@@ -51,7 +71,7 @@ export default {
     if (path === '/api/v25/webhook/whatsapp' && method === 'POST') {
       try {
         const body = await request.json();
-        const sessionEngine = new WhatsAppSessionEngine(env?.SESSIONS_KV, env?.USERS_KV, env?.DB);
+        const sessionEngine = new WhatsAppSessionEngine(env?.SESSIONS_KV, env?.USERS_KV, env?.CATALOG_CACHE_KV, env?.DB);
 
         const messageText = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || '';
         const buttonPayload = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive?.button_reply?.id || null;
@@ -68,7 +88,6 @@ export default {
     }
 
     if (path === '/api/v25/webhook/paystack' && method === 'POST') {
-      // Pass real Paystack Secret Key from environment settings if configured
       const paystack = new PaystackPaymentGateway(env?.PAYSTACK_SECRET_KEY);
       const rawBody = await request.text();
       const sig = request.headers.get('x-paystack-signature');
