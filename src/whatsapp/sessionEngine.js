@@ -57,7 +57,7 @@ export class WhatsAppSessionEngine {
   async handleIncomingMessage(waId, incomingText, buttonPayload = null, locationObj = null) {
     const text = (incomingText || '').trim();
 
-    // 0. Anti-Abuse, Anti-Trolling & Rate Limiting Check
+    // 0. Anti-Abuse Check
     const abuseCheck = this.antiAbuse.screenInboundMessage(waId, text);
     if (abuseCheck.isBlocked) {
       return { text: abuseCheck.message };
@@ -65,7 +65,7 @@ export class WhatsAppSessionEngine {
 
     let session = await this.getSession(waId);
 
-    // 1. GPS Location Pin Handler (Fast-path 0% AI cost)
+    // 1. GPS Location Pin Handler
     if (locationObj && locationObj.latitude && locationObj.longitude) {
       session.gpsLocation = {
         lat: locationObj.latitude,
@@ -82,7 +82,7 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 2. Check for Dispute / Complaint Triggers (Fast-path 0% AI cost)
+    // 2. Dispute Handler
     if (text.toLowerCase().includes('parcel not delivered') || text.toLowerCase().includes('not delivered') || text.toLowerCase().includes('wrong item') || text.toLowerCase().includes('dispute')) {
       const dispute = await this.disputeEngine.fileDispute({
         orderId: session.transactionId || 'ord_recent',
@@ -101,7 +101,7 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // 3. New User Onboarding Check (Fast-path 0% AI cost)
+    // 3. New User Onboarding Check
     let userProfile = await this.onboardingEngine.getUserProfile(waId);
     if (!userProfile) {
       if (!session.onboardingStep) {
@@ -134,8 +134,8 @@ export class WhatsAppSessionEngine {
       session.step = 'STATE_AWAITING_APPROVAL';
       await this.saveSession(waId, session);
 
-      const explicitItem = session.cart[0];
-      const quotes = await this.transport.getQuotes({ distanceKm: 5, items: session.cart });
+      const explicitItem = session.cart[0] || (await this.commerce.searchCatalog('kfc'))[0];
+      const quotes = await this.transport.getQuotes({ distanceKm: 5, items: [explicitItem] });
       const config = await getPricingConfig(this.db);
       const pricing = calculatePricing({
         intentMode: 'BUY_PLUS_DELIVER',
@@ -157,8 +157,14 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 4. Check for interactive button tap payloads (Fast-path 0% AI cost)
+    // 4. Interactive Button Tap Handlers
     if (buttonPayload) {
+      if (buttonPayload === 'swap_item') {
+        const storeName = session.cart[0]?.storeName || 'KFC';
+        const items = await this.commerce.searchCatalog(storeName);
+        return this.uiBuilder.renderItemSwapperScreen({ storeName, items });
+      }
+
       if (buttonPayload === 'change_location') {
         session.step = 'AWAITING_NEW_ADDRESS';
         await this.saveSession(waId, session);
@@ -222,72 +228,44 @@ export class WhatsAppSessionEngine {
         const items = await this.commerce.searchCatalog('');
         const item = items.find(i => i.id === itemId);
         if (item) {
-          session.cart.push(item);
-          session.step = 'STATE_CART';
+          // Fast-Path: Swap or set single item in cart and refresh checkout instantly!
+          session.cart = [item];
+
+          const quotes = await this.transport.getQuotes({ distanceKm: 5, items: [item] });
+          const config = await getPricingConfig(this.db);
+          const pricing = calculatePricing({
+            intentMode: 'BUY_PLUS_DELIVER',
+            goodsSubtotalCents: item.priceCents,
+            rawTransportQuoteCents: quotes.cheapestQuote.rawQuoteCents,
+            config
+          });
+
+          const txId = `tx_fast_${Date.now()}`;
+          session.deliveryQuote = quotes.cheapestQuote;
+          session.pricing = pricing;
+          session.transactionId = txId;
+          session.activeAddress = session.activeAddress || userProfile.address || 'Saved Location';
+          session.step = 'STATE_AWAITING_APPROVAL';
           await this.saveSession(waId, session);
 
-          const goodsSubtotal = session.cart.reduce((acc, i) => acc + i.priceCents, 0);
-          return this.uiBuilder.renderCartScreen({
-            items: session.cart,
-            goodsSubtotalCents: goodsSubtotal
+          return this.uiBuilder.renderOneTapCheckoutScreen({
+            storeName: item.storeName || 'Partner Store',
+            itemName: item.name,
+            itemPriceCents: item.priceCents,
+            vehicleClass: quotes.requiredVehicleClass,
+            providerName: quotes.cheapestQuote.providerName,
+            transportCostCents: quotes.cheapestQuote.rawQuoteCents,
+            totalCustomerPaysCents: pricing.totalCustomerPaysCents,
+            deliveryAddress: session.activeAddress,
+            transactionId: txId
           });
         }
       }
-
-      if (buttonPayload === 'proceed_delivery') {
-        const goodsSubtotal = session.cart.reduce((acc, i) => acc + i.priceCents, 0);
-        const quotes = await this.transport.getQuotes({
-          distanceKm: 5,
-          items: session.cart
-        });
-
-        session.deliveryQuote = quotes.cheapestQuote;
-        session.step = 'STATE_DELIVERY';
-        await this.saveSession(waId, session);
-
-        return this.uiBuilder.renderDeliveryScreen({
-          vehicleClass: quotes.requiredVehicleClass,
-          providerName: quotes.cheapestQuote.providerName,
-          transportCostCents: quotes.cheapestQuote.rawQuoteCents,
-          etaMinutes: quotes.cheapestQuote.etaMinutes
-        });
-      }
-
-      if (buttonPayload === 'confirm_transport') {
-        const goodsSubtotal = session.cart.reduce((acc, i) => acc + i.priceCents, 0);
-        const config = await getPricingConfig(this.db);
-
-        const pricing = calculatePricing({
-          intentMode: 'BUY_PLUS_DELIVER',
-          goodsSubtotalCents: goodsSubtotal,
-          rawTransportQuoteCents: session.deliveryQuote.rawQuoteCents,
-          config
-        });
-
-        session.pricing = pricing;
-        session.step = 'STATE_AWAITING_APPROVAL';
-        const txId = `tx_${Date.now()}`;
-        session.transactionId = txId;
-        await this.saveSession(waId, session);
-
-        return this.uiBuilder.renderConfirmScreen({
-          transactionId: txId,
-          totalCustomerPaysCents: pricing.totalCustomerPaysCents,
-          isP2P: false
-        });
-      }
     }
 
-    // 5. Text Message Intent & Semantic KV Cache Check
+    // 5. Text Message NLU Intent & Frictionless Swapping
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
-
-    // Check Cloudflare KV Semantic Cache
-    const cached = await this.aiOptimizer.getCachedIntent(maskedText);
-    let intentMode = cached.isCached ? cached.intentData.intentMode : classifyIntent(maskedText);
-
-    if (!cached.isCached) {
-      await this.aiOptimizer.cacheParsedIntent(maskedText, { intentMode });
-    }
+    const intentMode = classifyIntent(maskedText);
 
     if (intentMode === INTENT_MODES.A2A_SELL) {
       session.step = 'STATE_IDLE';
@@ -305,10 +283,10 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // APPLE-LEVEL 1-TAP CHECKOUT FAST-PATH:
+    // APPLE-LEVEL 1-TAP CHECKOUT FAST-PATH & FRICTIONLESS SWAPPING:
     const items = await this.commerce.searchCatalog(maskedText);
     if (items.length > 0) {
-      const explicitItem = items.find(i => maskedText.toLowerCase().includes(i.name.toLowerCase().substring(0, 5))) || items[0];
+      const explicitItem = items.find(i => maskedText.toLowerCase().includes(i.name.toLowerCase().substring(0, 4))) || items[0];
 
       const quotes = await this.transport.getQuotes({ distanceKm: 5, items: [explicitItem] });
       const config = await getPricingConfig(this.db);

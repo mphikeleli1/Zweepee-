@@ -2,8 +2,7 @@ import { centsToRandsFormatted } from '../lib/money.js';
 
 export class WhatsAppUIBuilder {
   /**
-   * APPLE-LEVEL 1-TAP INSTANT CHECKOUT SCREEN WITH LOCATION SWITCHER
-   * Allows 1-tap switching between Home, Work, or sending a new GPS pin!
+   * APPLE-LEVEL 1-TAP INSTANT CHECKOUT SCREEN WITH LOCATION & ITEM SWAPPER
    */
   renderOneTapCheckoutScreen({ storeName, itemName, itemPriceCents, vehicleClass, providerName, transportCostCents, totalCustomerPaysCents, deliveryAddress, transactionId }) {
     const vehicleIcon = vehicleClass === 'BIKE' ? '🏍️' : '🚛';
@@ -11,21 +10,56 @@ export class WhatsAppUIBuilder {
     const text = `✨ *myAI™ Instant Checkout* ✨\n` +
       `───────────────\n\n` +
       `🏬 *Merchant:* ${storeName}\n` +
-      `🛍️ *Item:* ${itemName} (${centsToRandsFormatted(itemPriceCents)})\n` +
-      `${vehicleIcon} *Delivery:* ${providerName} (${centsToRandsFormatted(transportCostCents)})\n` +
+      `🛍️ *Item Selected:* *${itemName}* (${centsToRandsFormatted(itemPriceCents)})\n` +
+      `${vehicleIcon} *Courier:* ${providerName} (${centsToRandsFormatted(transportCostCents)})\n` +
       `📍 *Deliver To:* *${deliveryAddress || 'Saved GPS Location'}*\n\n` +
       `───────────────\n` +
       `💳 *ONE TOTAL:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n` +
-      `💡 *0% Store Markup Guarantee*`;
+      `🏷️ *0% Store Price Markup Guarantee*`;
 
     return {
       type: 'ONE_TAP_CHECKOUT_SCREEN',
       text,
       buttons: [
         { type: 'reply', reply: { id: `tap_approve_${transactionId}`, title: `💳 Pay ${centsToRandsFormatted(totalCustomerPaysCents)}` } },
-        { type: 'reply', reply: { id: 'change_location', title: '📍 Change Address / Work' } },
-        { type: 'reply', reply: { id: `tap_cancel_${transactionId}`, title: '❌ Cancel' } }
+        { type: 'reply', reply: { id: 'swap_item', title: '🔄 Swap Item / Menu' } },
+        { type: 'reply', reply: { id: 'change_location', title: '📍 Change Address' } }
       ]
+    };
+  }
+
+  /**
+   * Item Swapper Menu Screen
+   */
+  renderItemSwapperScreen({ storeName, items = [] }) {
+    let text = `🏬 *${storeName.toUpperCase()}* — Select Replacement Item\n` +
+      `───────────────\n\n`;
+
+    const itemButtons = [];
+
+    items.forEach((item, idx) => {
+      text += `${idx + 1}️⃣ *${item.name}*\n` +
+        `   💵 *Price:* ${centsToRandsFormatted(item.priceCents)} *(In-Store Price)*\n`;
+
+      if (item.image) {
+        text += `   🖼️ *Photo Preview:* ${item.image}\n`;
+      }
+
+      text += `\n`;
+
+      itemButtons.push({
+        type: 'reply',
+        reply: { id: `add_${item.id}`, title: `🔄 Select ${item.name.substring(0, 15)}` }
+      });
+    });
+
+    text += `───────────────\n` +
+      `💬 *Tap below to swap your item instantly!*`;
+
+    return {
+      type: 'ITEM_SWAPPER_SCREEN',
+      text,
+      buttons: itemButtons.slice(0, 3)
     };
   }
 
@@ -91,7 +125,7 @@ export class WhatsAppUIBuilder {
    * SCREEN 2: ELITE STOREFRONT / PRODUCT CATALOG
    */
   renderProductScreen({ storeName, items = [] }) {
-    let text = `🏬 *${storeName.toUpperCase()}* — Live Click & Collect Catalog\n` +
+    let text = `🏬 *${storeName.toUpperCase()}* — Live Catalog\n` +
       `───────────────\n\n`;
 
     const itemButtons = [];
@@ -101,7 +135,7 @@ export class WhatsAppUIBuilder {
         `   💵 *Price:* ${centsToRandsFormatted(item.priceCents)} *(In-Store Price)*\n`;
 
       if (item.image) {
-        text += `   🖼️ *Photo:* ${item.image}\n`;
+        text += `   🖼️ *Photo Preview:* ${item.image}\n`;
       }
 
       text += `\n`;
@@ -113,7 +147,7 @@ export class WhatsAppUIBuilder {
     });
 
     text += `───────────────\n` +
-      `💬 *Tap any button below to add to your cart!*`;
+      `💬 *Tap any button below to order instantly!*`;
 
     return {
       type: 'PRODUCT_SCREEN',

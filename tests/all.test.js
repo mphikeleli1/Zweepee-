@@ -426,14 +426,33 @@ test('20. Dynamic Location Switcher (Work vs Home Address)', async () => {
 test('21. AI Cost Curtailment Engine (Fast-Path Bypass & KV Semantic Caching)', async () => {
   const aiOptimizer = new AICostCurtailmentEngine();
 
-  // Fast path checks (0% AI cost)
   assert.equal(aiOptimizer.isFastPathBypass('kfc', null, null), true);
   assert.equal(aiOptimizer.isFastPathBypass('', 'action_food', null), true);
   assert.equal(aiOptimizer.isFastPathBypass('', null, { latitude: -26.2, longitude: 28.0 }), true);
 
-  // Semantic KV Caching
   await aiOptimizer.cacheParsedIntent('Get me KFC Streetwise 2', { intentMode: 'BUY_PLUS_DELIVER' });
   const cached = await aiOptimizer.getCachedIntent('Get me KFC Streetwise 2');
   assert.equal(cached.isCached, true);
   assert.equal(cached.intentData.intentMode, 'BUY_PLUS_DELIVER');
+});
+
+test('22. Frictionless Item Swapping (Zinger Burger to Streetwise 2)', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  await sessionEngine.handleIncomingMessage('27866666666', 'hi');
+  await sessionEngine.handleIncomingMessage('27866666666', 'Sipho');
+  await sessionEngine.handleIncomingMessage('27866666666', 'Sandton');
+
+  // Order Zinger Burger Meal
+  const checkout1 = await sessionEngine.handleIncomingMessage('27866666666', 'Zinger Burger Meal');
+  assert.ok(checkout1.text.includes('Zinger Burger Meal'));
+
+  // User taps [ 🔄 Swap Item ]
+  const swapperScreen = await sessionEngine.handleIncomingMessage('27866666666', '', 'swap_item');
+  assert.equal(swapperScreen.type, 'ITEM_SWAPPER_SCREEN');
+
+  // User types or selects replacement item "Streetwise Two"
+  const checkout2 = await sessionEngine.handleIncomingMessage('27866666666', 'Streetwise Two');
+  assert.equal(checkout2.type, 'ONE_TAP_CHECKOUT_SCREEN');
+  assert.ok(checkout2.text.includes('Streetwise Two'));
 });
