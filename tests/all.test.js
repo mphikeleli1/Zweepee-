@@ -231,9 +231,6 @@ test('10. Stateful WhatsApp Session Engine & Payment Webhooks', async () => {
   const addressScreen = await sessionEngine.handleIncomingMessage('27820000000', 'Sandton');
   assert.ok(addressScreen.text.includes('You\'re All Set'));
 
-  const productScreen = await sessionEngine.handleIncomingMessage('27820000000', 'kfc');
-  assert.equal(productScreen.type, 'PRODUCT_SCREEN');
-
   const paystack = new PaystackPaymentGateway('sk_test_mock_paystack_key');
   const paystackValid = await paystack.verifyWebhookSignature('{"event":"charge.success"}', 'mock_sig');
   assert.equal(paystackValid, true);
@@ -374,7 +371,6 @@ test('17. Anti-Abuse, Profanity & Anti-Gaming Rate Limiting', () => {
 test('18. P2P Strategic Features (Trust Score & 24h Inspection Escrow)', () => {
   const p2pEngine = new P2PCommerceEngine();
 
-  // Escrow Hold check
   const escrowHold = p2pEngine.createP2PEscrowHold({
     transactionId: 'tx_p2p_99',
     buyerId: 'buyer_1',
@@ -386,7 +382,6 @@ test('18. P2P Strategic Features (Trust Score & 24h Inspection Escrow)', () => {
   assert.equal(escrowHold.inspectionWindowHours, 24);
   assert.ok(escrowHold.noticeText.includes('24-hour inspection window'));
 
-  // Trust Score boost check
   for (let i = 0; i < 5; i++) {
     p2pEngine.recordCompletedDeal('seller_trusted_1');
   }
@@ -394,4 +389,17 @@ test('18. P2P Strategic Features (Trust Score & 24h Inspection Escrow)', () => {
   const profile = p2pEngine.getSellerTrustProfile('seller_trusted_1');
   assert.equal(profile.isVerifiedSeller, true);
   assert.ok(profile.badgeText.includes('VERIFIED TRUSTED SELLER'));
+});
+
+test('19. Apple-Level 1-Tap Instant Checkout', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  await sessionEngine.handleIncomingMessage('27844444444', 'hi');
+  await sessionEngine.handleIncomingMessage('27844444444', 'Kagiso');
+  await sessionEngine.handleIncomingMessage('27844444444', 'Sandton');
+
+  const screen = await sessionEngine.handleIncomingMessage('27844444444', 'Get me KFC Streetwise 2');
+  assert.equal(screen.type, 'ONE_TAP_CHECKOUT_SCREEN');
+  assert.ok(screen.text.includes('Instant Checkout'));
+  assert.ok(screen.buttons[0].reply.title.includes('Pay R'));
 });

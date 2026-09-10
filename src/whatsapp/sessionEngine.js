@@ -246,7 +246,6 @@ export class WhatsAppSessionEngine {
       session.step = 'STATE_IDLE';
       await this.saveSession(waId, session);
 
-      // Check listing velocity anti-gaming
       const velocityCheck = this.antiAbuse.validateListingVelocity(waId);
       if (!velocityCheck.allowed) {
         return { text: velocityCheck.message };
@@ -259,15 +258,41 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // Default: Search catalog across all Click & Collect stores
+    // APPLE-LEVEL 1-TAP CHECKOUT FAST-PATH:
+    // If the user specifies an explicit item (e.g., "Streetwise Two" or "Zinger"), do ALL background calculations instantly and show 1-Tap Checkout!
     const items = await this.commerce.searchCatalog(maskedText);
     if (items.length > 0) {
-      session.step = 'STATE_STORE_CATALOG';
+      const explicitItem = items.find(i => maskedText.toLowerCase().includes(i.name.toLowerCase().substring(0, 5))) || items[0];
+
+      // Perform all background heavy lifting instantly!
+      const quotes = await this.transport.getQuotes({ distanceKm: 5, items: [explicitItem] });
+      const config = await getPricingConfig(this.db);
+
+      const pricing = calculatePricing({
+        intentMode: 'BUY_PLUS_DELIVER',
+        goodsSubtotalCents: explicitItem.priceCents,
+        rawTransportQuoteCents: quotes.cheapestQuote.rawQuoteCents,
+        config
+      });
+
+      const txId = `tx_fast_${Date.now()}`;
+      session.cart = [explicitItem];
+      session.deliveryQuote = quotes.cheapestQuote;
+      session.pricing = pricing;
+      session.transactionId = txId;
+      session.step = 'STATE_AWAITING_APPROVAL';
       await this.saveSession(waId, session);
 
-      return this.uiBuilder.renderProductScreen({
-        storeName: items[0].storeName || 'Store Catalog',
-        items: items.slice(0, 5)
+      return this.uiBuilder.renderOneTapCheckoutScreen({
+        storeName: explicitItem.storeName || 'Partner Store',
+        itemName: explicitItem.name,
+        itemPriceCents: explicitItem.priceCents,
+        vehicleClass: quotes.requiredVehicleClass,
+        providerName: quotes.cheapestQuote.providerName,
+        transportCostCents: quotes.cheapestQuote.rawQuoteCents,
+        totalCustomerPaysCents: pricing.totalCustomerPaysCents,
+        deliveryAddress: userProfile.address,
+        transactionId: txId
       });
     }
 

@@ -2,6 +2,33 @@ import { centsToRandsFormatted } from '../lib/money.js';
 
 export class WhatsAppUIBuilder {
   /**
+   * APPLE-LEVEL 1-TAP INSTANT CHECKOUT SCREEN
+   * Replaces 8 screens with 1 single elegant display!
+   */
+  renderOneTapCheckoutScreen({ storeName, itemName, itemPriceCents, vehicleClass, providerName, transportCostCents, totalCustomerPaysCents, deliveryAddress, transactionId }) {
+    const vehicleIcon = vehicleClass === 'BIKE' ? '🏍️' : '🚛';
+
+    const text = `✨ *myAI™ Instant Checkout* ✨\n` +
+      `───────────────\n\n` +
+      `🏬 *Merchant:* ${storeName}\n` +
+      `🛍️ *Item:* ${itemName} (${centsToRandsFormatted(itemPriceCents)})\n` +
+      `${vehicleIcon} *Delivery:* ${providerName} (${centsToRandsFormatted(transportCostCents)})\n` +
+      `📍 *Deliver To:* ${deliveryAddress || 'Saved GPS Pin'}\n\n` +
+      `───────────────\n` +
+      `💳 *ONE TOTAL:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n` +
+      `💡 *0% Store Markup Guarantee*`;
+
+    return {
+      type: 'ONE_TAP_CHECKOUT_SCREEN',
+      text,
+      buttons: [
+        { type: 'reply', reply: { id: `tap_approve_${transactionId}`, title: `💳 Pay ${centsToRandsFormatted(totalCustomerPaysCents)}` } },
+        { type: 'reply', reply: { id: `tap_cancel_${transactionId}`, title: '❌ Cancel' } }
+      ]
+    };
+  }
+
+  /**
    * GPS Location Pin Confirmation Display
    */
   renderLocationPinCaptured({ lat, lng, addressName }) {
