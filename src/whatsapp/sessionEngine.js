@@ -7,11 +7,13 @@ import { ScamPreventionEngine } from '../trust/scamPrevention.js';
 import { UserOnboardingEngine } from './onboarding.js';
 import { DisputeResolutionEngine } from '../trust/disputes.js';
 import { AntiAbuseGuardEngine } from '../trust/antiAbuse.js';
+import { AICostCurtailmentEngine } from '../lib/aiOptimizer.js';
 
 export class WhatsAppSessionEngine {
-  constructor(kvSessions, kvUsers, db) {
+  constructor(kvSessions, kvUsers, kvCatalog, db) {
     this.kvSessions = kvSessions;
     this.kvUsers = kvUsers;
+    this.kvCatalog = kvCatalog;
     this.db = db;
     this.commerce = new CommerceAggregator();
     this.transport = new TransportAggregator();
@@ -20,6 +22,7 @@ export class WhatsAppSessionEngine {
     this.onboardingEngine = new UserOnboardingEngine(kvUsers);
     this.disputeEngine = new DisputeResolutionEngine(db);
     this.antiAbuse = new AntiAbuseGuardEngine();
+    this.aiOptimizer = new AICostCurtailmentEngine(kvCatalog);
     this.inMemorySessions = new Map();
   }
 
@@ -62,7 +65,7 @@ export class WhatsAppSessionEngine {
 
     let session = await this.getSession(waId);
 
-    // 1. GPS Location Pin Handler
+    // 1. GPS Location Pin Handler (Fast-path 0% AI cost)
     if (locationObj && locationObj.latitude && locationObj.longitude) {
       session.gpsLocation = {
         lat: locationObj.latitude,
@@ -79,7 +82,7 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 2. Check for Dispute / Complaint Triggers
+    // 2. Check for Dispute / Complaint Triggers (Fast-path 0% AI cost)
     if (text.toLowerCase().includes('parcel not delivered') || text.toLowerCase().includes('not delivered') || text.toLowerCase().includes('wrong item') || text.toLowerCase().includes('dispute')) {
       const dispute = await this.disputeEngine.fileDispute({
         orderId: session.transactionId || 'ord_recent',
@@ -98,7 +101,7 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // 3. New User Onboarding Check
+    // 3. New User Onboarding Check (Fast-path 0% AI cost)
     let userProfile = await this.onboardingEngine.getUserProfile(waId);
     if (!userProfile) {
       if (!session.onboardingStep) {
@@ -154,7 +157,7 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 4. Check for interactive button tap payloads
+    // 4. Check for interactive button tap payloads (Fast-path 0% AI cost)
     if (buttonPayload) {
       if (buttonPayload === 'change_location') {
         session.step = 'AWAITING_NEW_ADDRESS';
@@ -275,9 +278,16 @@ export class WhatsAppSessionEngine {
       }
     }
 
-    // 5. Text Message NLU Intent Processing
+    // 5. Text Message Intent & Semantic KV Cache Check
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
-    const intentMode = classifyIntent(maskedText);
+
+    // Check Cloudflare KV Semantic Cache
+    const cached = await this.aiOptimizer.getCachedIntent(maskedText);
+    let intentMode = cached.isCached ? cached.intentData.intentMode : classifyIntent(maskedText);
+
+    if (!cached.isCached) {
+      await this.aiOptimizer.cacheParsedIntent(maskedText, { intentMode });
+    }
 
     if (intentMode === INTENT_MODES.A2A_SELL) {
       session.step = 'STATE_IDLE';

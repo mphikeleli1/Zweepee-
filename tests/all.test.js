@@ -26,6 +26,7 @@ import { DisputeResolutionEngine } from '../src/trust/disputes.js';
 import { OneCartAggregatorAdapter } from '../src/commerce/adapters/onecart.js';
 import { AntiAbuseGuardEngine } from '../src/trust/antiAbuse.js';
 import { P2PCommerceEngine } from '../src/trust/p2pFeatures.js';
+import { AICostCurtailmentEngine } from '../src/lib/aiOptimizer.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -411,16 +412,28 @@ test('20. Dynamic Location Switcher (Work vs Home Address)', async () => {
   await sessionEngine.handleIncomingMessage('27855555555', 'Lindiwe');
   await sessionEngine.handleIncomingMessage('27855555555', 'Home: Sandton');
 
-  // Request order -> Initially assigned Home: Sandton
   const screen1 = await sessionEngine.handleIncomingMessage('27855555555', 'Get me KFC Streetwise 2');
   assert.ok(screen1.text.includes('Home: Sandton'));
 
-  // User taps [ Change Address / Work ]
   const promptScreen = await sessionEngine.handleIncomingMessage('27855555555', '', 'change_location');
   assert.equal(promptScreen.type, 'LOCATION_PROMPT_SCREEN');
 
-  // User types new Work address
   const screen2 = await sessionEngine.handleIncomingMessage('27855555555', 'Work: Rosebank Office Park');
   assert.equal(screen2.type, 'ONE_TAP_CHECKOUT_SCREEN');
   assert.ok(screen2.text.includes('Work: Rosebank Office Park'));
+});
+
+test('21. AI Cost Curtailment Engine (Fast-Path Bypass & KV Semantic Caching)', async () => {
+  const aiOptimizer = new AICostCurtailmentEngine();
+
+  // Fast path checks (0% AI cost)
+  assert.equal(aiOptimizer.isFastPathBypass('kfc', null, null), true);
+  assert.equal(aiOptimizer.isFastPathBypass('', 'action_food', null), true);
+  assert.equal(aiOptimizer.isFastPathBypass('', null, { latitude: -26.2, longitude: 28.0 }), true);
+
+  // Semantic KV Caching
+  await aiOptimizer.cacheParsedIntent('Get me KFC Streetwise 2', { intentMode: 'BUY_PLUS_DELIVER' });
+  const cached = await aiOptimizer.getCachedIntent('Get me KFC Streetwise 2');
+  assert.equal(cached.isCached, true);
+  assert.equal(cached.intentData.intentMode, 'BUY_PLUS_DELIVER');
 });
