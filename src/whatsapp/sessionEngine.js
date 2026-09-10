@@ -1,19 +1,21 @@
 import { classifyIntent, INTENT_MODES } from '../lib/router.js';
 import { calculatePricing, getPricingConfig } from '../lib/pricing.js';
-import { TransactionStateMachine, TRANSACTION_STATES } from '../lib/stateMachine.js';
 import { CommerceAggregator } from '../commerce/aggregator.js';
 import { TransportAggregator } from '../transport/aggregator.js';
 import { WhatsAppUIBuilder } from './uiBuilder.js';
 import { ScamPreventionEngine } from '../trust/scamPrevention.js';
+import { UserOnboardingEngine } from './onboarding.js';
 
 export class WhatsAppSessionEngine {
-  constructor(kvSessions, db) {
+  constructor(kvSessions, kvUsers, db) {
     this.kvSessions = kvSessions;
+    this.kvUsers = kvUsers;
     this.db = db;
     this.commerce = new CommerceAggregator();
     this.transport = new TransportAggregator();
     this.uiBuilder = new WhatsAppUIBuilder();
     this.scamEngine = new ScamPreventionEngine();
+    this.onboardingEngine = new UserOnboardingEngine(kvUsers);
     this.inMemorySessions = new Map();
   }
 
@@ -52,8 +54,52 @@ export class WhatsAppSessionEngine {
     let session = await this.getSession(waId);
     const text = (incomingText || '').trim();
 
-    // 1. Check for interactive button tap payloads
+    // 1. New User Onboarding Check
+    let userProfile = await this.onboardingEngine.getUserProfile(waId);
+    if (!userProfile) {
+      if (!session.onboardingStep) {
+        session.onboardingStep = 'ONBOARDING_START';
+      }
+
+      const onboardingResult = await this.onboardingEngine.handleOnboarding(waId, text, session.onboardingStep);
+      session.onboardingStep = onboardingResult.nextStep;
+
+      if (onboardingResult.draftProfile) {
+        session.draftName = onboardingResult.draftProfile.name;
+      }
+
+      if (onboardingResult.completedProfile) {
+        userProfile = await this.onboardingEngine.saveUserProfile(waId, {
+          name: session.draftName || 'User',
+          address: onboardingResult.completedProfile.address
+        });
+        session.onboardingStep = 'ONBOARDING_COMPLETED';
+      }
+
+      await this.saveSession(waId, session);
+      return onboardingResult.screen;
+    }
+
+    // 2. Check for interactive button tap payloads
     if (buttonPayload) {
+      if (buttonPayload === 'action_food') {
+        const items = await this.commerce.searchCatalog('kfc');
+        return this.uiBuilder.renderProductScreen({ storeName: 'KFC', items });
+      }
+
+      if (buttonPayload === 'action_groceries') {
+        const items = await this.commerce.searchCatalog('pnp');
+        return this.uiBuilder.renderProductScreen({ storeName: 'Pick n Pay', items });
+      }
+
+      if (buttonPayload === 'action_moving') {
+        return { text: `🚚 *Moving & Furniture Delivery*\n\nTell me what item you need to move or pick up (e.g. *Move an L-Shape couch from Sandton to Randburg*).` };
+      }
+
+      if (buttonPayload === 'action_sell') {
+        return { text: `🏷️ *Sell an Item*\n\nReply with what you are selling, your price, and category (e.g. *iPhone 15, R12000, Electronics*).` };
+      }
+
       if (buttonPayload.startsWith('tap_approve_')) {
         const txId = buttonPayload.replace('tap_approve_', '');
         session.step = 'STATE_LIVE_ORDER';
@@ -135,7 +181,7 @@ export class WhatsAppSessionEngine {
       }
     }
 
-    // 2. Text Message NLU intent parsing
+    // 3. Text Message NLU Intent Processing
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 
@@ -149,7 +195,7 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // Default: Search catalog and render Screen 1/2
+    // Default: Search catalog and render Storefront
     const items = await this.commerce.searchCatalog(maskedText);
     if (items.length > 0) {
       session.step = 'STATE_STORE_CATALOG';
@@ -162,7 +208,7 @@ export class WhatsAppSessionEngine {
     }
 
     return {
-      text: `Hello! 👋 How can I help you today? You can order food (KFC, Steers), groceries, furniture, or sell an item!`
+      text: `Hello ${userProfile.name}! 👋 How can I help you today? You can order food (KFC, Steers), groceries, furniture, or sell an item!`
     };
   }
 }

@@ -20,6 +20,7 @@ import { ExternalAgentInteropAdapter } from '../src/network/interop.js';
 import { AgentMatchingEngine } from '../src/network/matching.js';
 import { NetworkDiscovery } from '../src/network/discovery.js';
 import { CatalogExtractor } from '../src/agents/catalogExtractor.js';
+import { UserOnboardingEngine } from '../src/whatsapp/onboarding.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000; // R50.00 transport quote
@@ -227,9 +228,21 @@ test('9. Scam Prevention, IMEI Luhn Check & Contact Masking', () => {
 
 test('10. Stateful WhatsApp Session Engine & Payment Webhooks', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
-  const screen = await sessionEngine.handleIncomingMessage('27820000000', 'kfc');
+  // New user gets onboarding screen first
+  const onboardingScreen = await sessionEngine.handleIncomingMessage('27820000000', 'hello');
+  assert.ok(onboardingScreen.text.includes('Welcome to myAI'));
 
-  assert.equal(screen.type, 'PRODUCT_SCREEN');
+  // Submit name
+  const nameScreen = await sessionEngine.handleIncomingMessage('27820000000', 'John Doe');
+  assert.ok(nameScreen.text.includes('Nice to meet you'));
+
+  // Submit address
+  const addressScreen = await sessionEngine.handleIncomingMessage('27820000000', 'Sandton');
+  assert.ok(addressScreen.text.includes('You\'re All Set'));
+
+  // Now user can search catalog
+  const productScreen = await sessionEngine.handleIncomingMessage('27820000000', 'kfc');
+  assert.equal(productScreen.type, 'PRODUCT_SCREEN');
 
   const paystack = new PaystackPaymentGateway('sk_test_mock_paystack_key');
   const paystackValid = await paystack.verifyWebhookSignature('{"event":"charge.success"}', 'mock_sig');
@@ -275,4 +288,17 @@ test('12. External Agent Interoperability & Catalog Ingestion Extractor', async 
   assert.equal(catalog[0].name, 'Pizza Margherita');
   assert.equal(catalog[0].priceCents, 12000);
   assert.equal(catalog[1].priceCents, 8550);
+});
+
+test('13. New User Onboarding Engine', async () => {
+  const onboarding = new UserOnboardingEngine();
+  const res1 = await onboarding.handleOnboarding('27811111111', 'hi', 'ONBOARDING_START');
+  assert.equal(res1.nextStep, 'ONBOARDING_AWAITING_NAME');
+
+  const res2 = await onboarding.handleOnboarding('27811111111', 'Sipho', 'ONBOARDING_AWAITING_NAME');
+  assert.equal(res2.nextStep, 'ONBOARDING_AWAITING_ADDRESS');
+  assert.equal(res2.draftProfile.name, 'Sipho');
+
+  const res3 = await onboarding.handleOnboarding('27811111111', 'Rosebank', 'ONBOARDING_AWAITING_ADDRESS');
+  assert.equal(res3.nextStep, 'ONBOARDING_COMPLETED');
 });

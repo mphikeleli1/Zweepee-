@@ -2,21 +2,28 @@ import { centsToRandsFormatted } from '../lib/money.js';
 
 export class WhatsAppUIBuilder {
   /**
-   * SCREEN 1: DISCOVER
+   * SCREEN 1: DISCOVER STORES & MERCHANTS
    */
   renderDiscoverScreen({ stores = [] }) {
-    let text = `📍 *Near You*\n\n`;
+    let text = `✨ *myAI™ Live Storefront* ✨\n` +
+      `───────────────\n\n` +
+      `📍 *Nearby Partner Stores*\n\n`;
+
     const storeButtons = [];
 
     stores.forEach((store, idx) => {
-      text += `${idx + 1}. *${store.name}* (${store.category})\n`;
-      if (store.image) text += `🖼️ ${store.image}\n`;
+      text += `${idx + 1}️⃣ *${store.name}* • ${store.category}\n`;
+      if (store.image) text += `🖼️ *Preview:* ${store.image}\n`;
       text += `\n`;
+
       storeButtons.push({
         type: 'reply',
-        reply: { id: `store_${store.id}`, title: store.name }
+        reply: { id: `store_${store.id}`, title: `🏬 ${store.name}` }
       });
     });
+
+    text += `───────────────\n` +
+      `💡 *0% Markup Guarantee:* You pay the exact same price as in-store!`;
 
     return {
       type: 'DISCOVER_SCREEN',
@@ -26,27 +33,37 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * SCREEN 2: PRODUCT / STOREFRONT
+   * SCREEN 2: ELITE STOREFRONT / PRODUCT CATALOG
    */
   renderProductScreen({ storeName, items = [] }) {
-    let text = `🏪 *${storeName} Catalog*\n\n`;
+    let text = `🏬 *${storeName.toUpperCase()}* — Live Catalog\n` +
+      `───────────────\n\n`;
+
     const itemButtons = [];
 
-    items.forEach((item) => {
-      text += `• *${item.name}* - ${centsToRandsFormatted(item.priceCents)}\n`;
-      if (item.image) text += `🖼️ Image: ${item.image}\n`;
+    items.forEach((item, idx) => {
+      text += `${idx + 1}️⃣ *${item.name}*\n` +
+        `   💵 *Price:* ${centsToRandsFormatted(item.priceCents)} *(In-Store Price)*\n`;
+
+      if (item.image) {
+        text += `   🖼️ *Photo:* ${item.image}\n`;
+      }
+
       text += `\n`;
 
       itemButtons.push({
         type: 'reply',
-        reply: { id: `add_${item.id}`, title: `Add ${item.name}` }
+        reply: { id: `add_${item.id}`, title: `➕ Add ${item.name.substring(0, 15)}` }
       });
     });
+
+    text += `───────────────\n` +
+      `💬 *Tap any button below to add to your cart!*`;
 
     return {
       type: 'PRODUCT_SCREEN',
       text,
-      buttons: itemButtons
+      buttons: itemButtons.slice(0, 3) // Max 3 interactive WhatsApp buttons per message
     };
   }
 
@@ -54,63 +71,65 @@ export class WhatsAppUIBuilder {
    * SCREEN 3: UNIFIED CART
    */
   renderCartScreen({ items = [], goodsSubtotalCents }) {
-    let text = `🛒 *Unified Cart*\n\n`;
+    let text = `🛒 *Your Unified Shopping Cart*\n` +
+      `───────────────\n\n`;
 
-    items.forEach((item) => {
-      text += `• ${item.qty || 1}x ${item.name} (${centsToRandsFormatted(item.priceCents)})\n`;
+    items.forEach((item, idx) => {
+      text += `• *${item.name}*\n` +
+        `  Qty: 1 × ${centsToRandsFormatted(item.priceCents)}\n`;
     });
 
-    text += `\n*Goods Subtotal:* ${centsToRandsFormatted(goodsSubtotalCents)} (0% Markup)\n`;
+    text += `\n───────────────\n` +
+      `🏷️ *Goods Subtotal:* ${centsToRandsFormatted(goodsSubtotalCents)} *(0% Markup)*\n\n` +
+      `Ready to arrange fast courier delivery?`;
 
     return {
       type: 'CART_SCREEN',
       text,
-      buttons: [{ type: 'reply', reply: { id: 'proceed_delivery', title: 'Arrange Delivery' } }]
+      buttons: [
+        { type: 'reply', reply: { id: 'proceed_delivery', title: '🚚 Select Courier' } }
+      ]
     };
   }
 
   /**
-   * SCREEN 4: DELIVERY
+   * SCREEN 4: COURIER DELIVERY SELECTION
    */
   renderDeliveryScreen({ vehicleClass, providerName, transportCostCents, etaMinutes }) {
-    const text = `🚚 *Courier Selection*\n\n` +
-      `• *Vehicle Class:* ${vehicleClass}\n` +
-      `• *Courier Provider:* ${providerName}\n` +
-      `• *Transport Quote:* ${centsToRandsFormatted(transportCostCents)}\n` +
-      `• *Estimated Delivery:* ~${etaMinutes} mins\n`;
+    const vehicleIcon = vehicleClass === 'BIKE' ? '🏍️' : '🚛';
+
+    const text = `🚚 *Delivery & Transport Quote*\n` +
+      `───────────────\n\n` +
+      `${vehicleIcon} *Vehicle Assigned:* ${vehicleClass}\n` +
+      `🏢 *Courier Provider:* ${providerName}\n` +
+      `💵 *Transport Cost:* ${centsToRandsFormatted(transportCostCents)}\n` +
+      `⏱️ *Estimated Delivery:* ~${etaMinutes} mins\n\n` +
+      `───────────────\n` +
+      `Tap below to lock in your delivery quote!`;
 
     return {
       type: 'DELIVERY_SCREEN',
       text,
-      buttons: [{ type: 'reply', reply: { id: 'confirm_transport', title: 'Accept Delivery' } }]
+      buttons: [
+        { type: 'reply', reply: { id: 'confirm_transport', title: '✅ Accept Delivery' } }
+      ]
     };
   }
 
   /**
-   * SCREEN 5: FINAL PRICE
-   */
-  renderFinalPriceScreen({ pricing }) {
-    const text = `🧾 *Order Price Breakdown*\n\n` +
-      `• *Goods Total:* ${centsToRandsFormatted(pricing.goodsSubtotalCents)}\n` +
-      `• *Transport Fee:* ${centsToRandsFormatted(pricing.finalTransportCents)}\n` +
-      `• *Payment Processing Fee:* ${centsToRandsFormatted(pricing.paymentFeeCents)}\n` +
-      `--------------------------------\n` +
-      `💰 *ONE TOTAL:* ${centsToRandsFormatted(pricing.totalCustomerPaysCents)}\n`;
-
-    return {
-      type: 'FINAL_PRICE_SCREEN',
-      text,
-      pricing
-    };
-  }
-
-  /**
-   * SCREEN 6: CONFIRM & PAY
+   * SCREEN 5 & 6: CONFIRM & PAY (ALL-IN TRANSPARENT TOTAL)
    */
   renderConfirmScreen({ transactionId, totalCustomerPaysCents, isP2P = false }) {
-    const text = `✅ *Confirm & Pay*\n\n` +
-      `Total Payable: *${centsToRandsFormatted(totalCustomerPaysCents)}*\n\n` +
-      (isP2P ? `⚠️ *P2P Deal:* Both buyer and seller must tap Approve below to authorize payment.\n` : `Tap Approve to complete payment.\n`);
+    let text = `🧾 *Final Order Confirmation*\n` +
+      `───────────────\n\n` +
+      `💳 *Total All-In Payable:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n\n`;
+
+    if (isP2P) {
+      text += `🛡️ *Agent-to-Agent Protection:* Money is safely held in escrow until you inspect and accept the item on delivery.\n\n` +
+        `⚠️ Both buyer and seller must tap Approve below to authorize.`;
+    } else {
+      text += `🔒 *Secure Paystack Checkout:* Instant automated order processing with zero manual hassle.`;
+    }
 
     return {
       type: 'CONFIRM_SCREEN',
@@ -123,14 +142,17 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * SCREEN 7: LIVE ORDER
+   * SCREEN 7: LIVE ORDER TRACKING
    */
   renderLiveOrderScreen({ orderId, status, courierName, etaMinutes }) {
-    const text = `📦 *Live Order Tracking*\n\n` +
-      `Order ID: *${orderId}*\n` +
-      `Status: *${status}*\n` +
-      `Assigned Courier: *${courierName}*\n` +
-      `ETA: *${etaMinutes} mins*\n`;
+    const text = `📦 *Live Order Status*\n` +
+      `───────────────\n\n` +
+      `🆔 *Order Reference:* ${orderId}\n` +
+      `🚦 *Current Status:* *${status}*\n` +
+      `🚚 *Assigned Courier:* ${courierName}\n` +
+      `⏱️ *ETA:* ~${etaMinutes} mins\n\n` +
+      `───────────────\n` +
+      `Your courier is en route! You will receive a door photo proof upon arrival.`;
 
     return {
       type: 'LIVE_ORDER_SCREEN',
@@ -139,24 +161,25 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * SCREEN 8: DELIVERED
+   * SCREEN 8: DELIVERED & RATING
    */
   renderDeliveredScreen({ orderId, deliveryPhotoUrl }) {
-    let text = `🎉 *Delivered!*\n\n` +
-      `Order ${orderId} has been successfully delivered to your door.\n`;
+    let text = `🎉 *Order Delivered!*\n` +
+      `───────────────\n\n` +
+      `Order *${orderId}* has been successfully delivered to your door.\n\n`;
 
     if (deliveryPhotoUrl) {
-      text += `📷 *Door Photo Proof:* ${deliveryPhotoUrl}\n`;
+      text += `📷 *Door Delivery Photo Proof:* ${deliveryPhotoUrl}\n\n`;
     }
 
-    text += `\nHow was your service today?`;
+    text += `How was your myAI™ experience today?`;
 
     return {
       type: 'DELIVERED_SCREEN',
       text,
       buttons: [
-        { type: 'reply', reply: { id: `rate_5`, title: '⭐⭐⭐⭐⭐ Excellent' } },
-        { type: 'reply', reply: { id: `rate_3`, title: '⭐⭐⭐ Good' } }
+        { type: 'reply', reply: { id: 'rate_5', title: '⭐⭐⭐⭐⭐ Excellent' } },
+        { type: 'reply', reply: { id: 'rate_3', title: '⭐⭐⭐ Good' } }
       ]
     };
   }
