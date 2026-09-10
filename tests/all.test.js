@@ -25,6 +25,7 @@ import { CommerceAggregator } from '../src/commerce/aggregator.js';
 import { DisputeResolutionEngine } from '../src/trust/disputes.js';
 import { OneCartAggregatorAdapter } from '../src/commerce/adapters/onecart.js';
 import { AntiAbuseGuardEngine } from '../src/trust/antiAbuse.js';
+import { P2PCommerceEngine } from '../src/trust/p2pFeatures.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -357,12 +358,10 @@ test('16. Fleet Fault Rider Theft Claim', async () => {
 test('17. Anti-Abuse, Profanity & Anti-Gaming Rate Limiting', () => {
   const antiAbuse = new AntiAbuseGuardEngine();
 
-  // Test profanity check
   const profanityCheck = antiAbuse.screenInboundMessage('usr_troll_1', 'You are a poes');
   assert.equal(profanityCheck.isBlocked, true);
   assert.ok(profanityCheck.message.includes('keep our conversation friendly'));
 
-  // Test spam rate limiting (11 messages in < 30 seconds)
   for (let i = 0; i < 10; i++) {
     antiAbuse.screenInboundMessage('usr_spam_1', 'hello');
   }
@@ -370,4 +369,29 @@ test('17. Anti-Abuse, Profanity & Anti-Gaming Rate Limiting', () => {
   const rateCheck = antiAbuse.screenInboundMessage('usr_spam_1', 'hello 11th time');
   assert.equal(rateCheck.isBlocked, true);
   assert.ok(rateCheck.message.includes('break'));
+});
+
+test('18. P2P Strategic Features (Trust Score & 24h Inspection Escrow)', () => {
+  const p2pEngine = new P2PCommerceEngine();
+
+  // Escrow Hold check
+  const escrowHold = p2pEngine.createP2PEscrowHold({
+    transactionId: 'tx_p2p_99',
+    buyerId: 'buyer_1',
+    sellerId: 'seller_1',
+    amountCents: 350000
+  });
+
+  assert.equal(escrowHold.status, 'ESCROW_HELD');
+  assert.equal(escrowHold.inspectionWindowHours, 24);
+  assert.ok(escrowHold.noticeText.includes('24-hour inspection window'));
+
+  // Trust Score boost check
+  for (let i = 0; i < 5; i++) {
+    p2pEngine.recordCompletedDeal('seller_trusted_1');
+  }
+
+  const profile = p2pEngine.getSellerTrustProfile('seller_trusted_1');
+  assert.equal(profile.isVerifiedSeller, true);
+  assert.ok(profile.badgeText.includes('VERIFIED TRUSTED SELLER'));
 });

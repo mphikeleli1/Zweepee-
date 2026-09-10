@@ -132,15 +132,16 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * SCREEN 5 & 6: CONFIRM & PAY
+   * SCREEN 5 & 6: CONFIRM & PAY WITH P2P ESCROW PROTECTION & TRUST BADGING
    */
-  renderConfirmScreen({ transactionId, totalCustomerPaysCents, isP2P = false }) {
+  renderConfirmScreen({ transactionId, totalCustomerPaysCents, isP2P = false, sellerBadge = '🛡️ VERIFIED TRUSTED SELLER' }) {
     let text = `🧾 *Final Order Confirmation*\n` +
       `───────────────\n\n` +
       `💳 *Total All-In Payable:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n\n`;
 
     if (isP2P) {
-      text += `🛡️ *Agent-to-Agent Protection:* Money is safely held in escrow until you inspect and accept the item on delivery.\n\n` +
+      text += `👤 *Seller Rating:* ${sellerBadge}\n\n` +
+        `🛡️ *Paystack 24-Hour Escrow Protection:* Money is safely held in escrow. You get a 24-hour inspection window after delivery before money is released to the seller.\n\n` +
         `⚠️ Both buyer and seller must tap Approve below to authorize.`;
     } else {
       text += `🔒 *Secure Paystack Checkout:* Instant automated Click & Collect order processing with zero manual hassle.`;
@@ -157,7 +158,7 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * SCREEN 7: LIVE ORDER TRACKING WITH REAL-TIME DRIVER ETA
+   * SCREEN 7: LIVE ORDER TRACKING
    */
   renderLiveOrderScreen({ orderId, status, courierName, driverName = 'Sipho', etaMinutes = 3 }) {
     const text = `📦 *Live Order Tracking*\n` +
