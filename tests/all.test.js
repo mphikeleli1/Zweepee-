@@ -27,6 +27,7 @@ import { OneCartAggregatorAdapter } from '../src/commerce/adapters/onecart.js';
 import { AntiAbuseGuardEngine } from '../src/trust/antiAbuse.js';
 import { P2PCommerceEngine } from '../src/trust/p2pFeatures.js';
 import { AICostCurtailmentEngine } from '../src/lib/aiOptimizer.js';
+import { A2ACommerceEngine } from '../src/trust/a2aCommerce.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -443,16 +444,26 @@ test('22. Frictionless Item Swapping (Zinger Burger to Streetwise 2)', async () 
   await sessionEngine.handleIncomingMessage('27866666666', 'Sipho');
   await sessionEngine.handleIncomingMessage('27866666666', 'Sandton');
 
-  // Order Zinger Burger Meal
   const checkout1 = await sessionEngine.handleIncomingMessage('27866666666', 'Zinger Burger Meal');
   assert.ok(checkout1.text.includes('Zinger Burger Meal'));
 
-  // User taps [ 🔄 Swap Item ]
   const swapperScreen = await sessionEngine.handleIncomingMessage('27866666666', '', 'swap_item');
   assert.equal(swapperScreen.type, 'ITEM_SWAPPER_SCREEN');
 
-  // User types or selects replacement item "Streetwise Two"
   const checkout2 = await sessionEngine.handleIncomingMessage('27866666666', 'Streetwise Two');
   assert.equal(checkout2.type, 'ONE_TAP_CHECKOUT_SCREEN');
   assert.ok(checkout2.text.includes('Streetwise Two'));
+});
+
+test('23. A2A Commerce Autonomous Price Negotiation', () => {
+  const a2aEngine = new A2ACommerceEngine();
+
+  const result = a2aEngine.negotiatePrice({
+    buyerMaxCents: 330000, // R3,300
+    askingPriceCents: 350000, // R3,500
+    sellerMinCents: 320000 // R3,200
+  });
+
+  assert.equal(result.agreed, true);
+  assert.equal(result.agreedPriceCents, 325000); // R3,250 midpoint!
 });

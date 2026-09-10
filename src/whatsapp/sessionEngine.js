@@ -8,6 +8,7 @@ import { UserOnboardingEngine } from './onboarding.js';
 import { DisputeResolutionEngine } from '../trust/disputes.js';
 import { AntiAbuseGuardEngine } from '../trust/antiAbuse.js';
 import { AICostCurtailmentEngine } from '../lib/aiOptimizer.js';
+import { A2ACommerceEngine } from '../trust/a2aCommerce.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -23,6 +24,7 @@ export class WhatsAppSessionEngine {
     this.disputeEngine = new DisputeResolutionEngine(db);
     this.antiAbuse = new AntiAbuseGuardEngine();
     this.aiOptimizer = new AICostCurtailmentEngine(kvCatalog);
+    this.a2aEngine = new A2ACommerceEngine();
     this.inMemorySessions = new Map();
   }
 
@@ -159,6 +161,26 @@ export class WhatsAppSessionEngine {
 
     // 4. Interactive Button Tap Handlers
     if (buttonPayload) {
+      if (buttonPayload.startsWith('accept_counter_')) {
+        const txId = buttonPayload.replace('accept_counter_', '');
+        session.step = 'STATE_LIVE_ORDER';
+        await this.saveSession(waId, session);
+
+        return this.uiBuilder.renderLiveOrderScreen({
+          orderId: `ord_${txId.substring(0, 6)}`,
+          status: 'A2A DEAL ACCEPTED - COURIER DISPATCHED',
+          courierName: 'PicUp Courier',
+          driverName: 'Sipho',
+          etaMinutes: 20
+        });
+      }
+
+      if (buttonPayload.startsWith('decline_counter_')) {
+        session.step = 'STATE_IDLE';
+        await this.saveSession(waId, session);
+        return { text: '❌ A2A counter offer declined. Let me know if you would like to search for other items!' };
+      }
+
       if (buttonPayload === 'swap_item') {
         const storeName = session.cart[0]?.storeName || 'KFC';
         const items = await this.commerce.searchCatalog(storeName);
@@ -228,7 +250,6 @@ export class WhatsAppSessionEngine {
         const items = await this.commerce.searchCatalog('');
         const item = items.find(i => i.id === itemId);
         if (item) {
-          // Fast-Path: Swap or set single item in cart and refresh checkout instantly!
           session.cart = [item];
 
           const quotes = await this.transport.getQuotes({ distanceKm: 5, items: [item] });
@@ -263,7 +284,7 @@ export class WhatsAppSessionEngine {
       }
     }
 
-    // 5. Text Message NLU Intent & Frictionless Swapping
+    // 5. Text Message NLU Intent Processing
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 
@@ -283,7 +304,7 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // APPLE-LEVEL 1-TAP CHECKOUT FAST-PATH & FRICTIONLESS SWAPPING:
+    // Default: Search catalog
     const items = await this.commerce.searchCatalog(maskedText);
     if (items.length > 0) {
       const explicitItem = items.find(i => maskedText.toLowerCase().includes(i.name.toLowerCase().substring(0, 4))) || items[0];
