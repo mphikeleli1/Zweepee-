@@ -15,6 +15,7 @@ import { ScamPreventionEngine } from '../src/trust/scamPrevention.js';
 import { WhatsAppSessionEngine } from '../src/whatsapp/sessionEngine.js';
 import { PaystackPaymentGateway } from '../src/payments/paystack.js';
 import { PayFastPaymentGateway } from '../src/payments/payfast.js';
+import { SentinelSelfHealingMonitor } from '../src/sentinel/sentinel.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000; // R50.00 transport quote
@@ -232,4 +233,15 @@ test('10. Stateful WhatsApp Session Engine & Payment Webhooks', async () => {
 
   const payfast = new PayFastPaymentGateway('10000100');
   assert.equal(payfast.verifyWebhookSignature({ merchant_id: '10000100' }), true);
+});
+
+test('11. Sentinel Self-Healing & Jargon-Free Owner Notification', async () => {
+  const sentinel = new SentinelSelfHealingMonitor();
+  const report = await sentinel.runHealthCheckAndSelfHeal();
+
+  assert.equal(report.status, 'HEALTHY');
+  assert.ok(report.ownerAlertMessage.includes('Everything is running smoothly!'));
+  assert.ok(!report.ownerAlertMessage.includes('database'));
+  assert.ok(!report.ownerAlertMessage.includes('SQL'));
+  assert.ok(!report.ownerAlertMessage.includes('HTTP'));
 });

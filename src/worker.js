@@ -12,6 +12,8 @@ import { PayFastPaymentGateway } from './payments/payfast.js';
 import { ScamPreventionEngine } from './trust/scamPrevention.js';
 import { WhatsAppTransportAdapter } from './whatsapp/transport.js';
 import { WhatsAppUIBuilder } from './whatsapp/uiBuilder.js';
+import { WhatsAppSessionEngine } from './whatsapp/sessionEngine.js';
+import { SentinelSelfHealingMonitor } from './sentinel/sentinel.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -22,6 +24,15 @@ export default {
     // Route: GET / (Health Check)
     if (path === '/' || path === '/health') {
       return new Response(JSON.stringify({ status: 'ok', service: 'myAI v25 Network Node' }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Route: GET /api/v25/sentinel/health (Plain English Owner Diagnostic & Self-Healing Update)
+    if (path === '/api/v25/sentinel/health' && method === 'GET') {
+      const sentinel = new SentinelSelfHealingMonitor(env?.DB, env?.SESSIONS_KV, env?.CATALOG_CACHE_KV);
+      const report = await sentinel.runHealthCheckAndSelfHeal();
+      return new Response(JSON.stringify(report), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -44,42 +55,15 @@ export default {
     if (path === '/api/v25/webhook/whatsapp' && method === 'POST') {
       try {
         const body = await request.json();
-        const whatsappTransport = new WhatsAppTransportAdapter();
-        const uiBuilder = new WhatsAppUIBuilder();
-        const commerce = new CommerceAggregator();
-        const transport = new TransportAggregator();
+        const sessionEngine = new WhatsAppSessionEngine(env?.SESSIONS_KV, env?.DB);
 
-        const messageText = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || 'hello';
+        const messageText = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || '';
+        const buttonPayload = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive?.button_reply?.id || null;
         const sender = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from || '27820000000';
 
-        // 1. Personal Agent Memory & Greeting
-        const pa = new PersonalAgent({ phoneNumber: sender, name: 'User' });
-        const greeting = pa.getGreeting();
+        const screenResponse = await sessionEngine.handleIncomingMessage(sender, messageText, buttonPayload);
 
-        // 2. Intent Classification
-        const intentMode = classifyIntent(messageText);
-
-        // 3. Catalog & Transport Calculation
-        const items = await commerce.searchCatalog(messageText);
-        const transportQuotes = await transport.getQuotes({ distanceKm: 5, items });
-
-        // 4. Configurable Pricing Calculation
-        const pricingConfig = await getPricingConfig(env?.DB);
-        const pricing = calculatePricing({
-          intentMode,
-          goodsSubtotalCents: items[0]?.priceCents || 5000,
-          rawTransportQuoteCents: transportQuotes.cheapestQuote.rawQuoteCents,
-          config: pricingConfig
-        });
-
-        // Render WhatsApp UI Screen 5 & 6
-        const screen = uiBuilder.renderConfirmScreen({
-          transactionId: `tx_${Date.now()}`,
-          totalCustomerPaysCents: pricing.totalCustomerPaysCents,
-          isP2P: intentMode.startsWith('A2A')
-        });
-
-        return new Response(JSON.stringify({ success: true, greeting, intentMode, pricing, screen }), {
+        return new Response(JSON.stringify({ success: true, screenResponse }), {
           headers: { 'Content-Type': 'application/json' }
         });
       } catch (err) {
@@ -93,7 +77,7 @@ export default {
       const rawBody = await request.text();
       const sig = request.headers.get('x-paystack-signature');
 
-      if (!paystack.verifyWebhookSignature(rawBody, sig)) {
+      if (!await paystack.verifyWebhookSignature(rawBody, sig)) {
         return new Response('Invalid signature', { status: 400 });
       }
 
@@ -120,10 +104,14 @@ export default {
     return new Response('Not Found', { status: 404 });
   },
 
-  // Cron Trigger for 48h Draft Cleanup
+  // Cron Trigger for Autonomous Sentinel Self-Healing & Draft Cleanup
   async scheduled(event, env, ctx) {
     const factory = new AgentFactory(env?.DB);
-    const result = await factory.cleanupExpiredDrafts();
-    console.log(`Cron cleanup complete: Removed ${result.cleanedCount} expired agent drafts.`);
+    const draftResult = await factory.cleanupExpiredDrafts();
+
+    const sentinel = new SentinelSelfHealingMonitor(env?.DB, env?.SESSIONS_KV, env?.CATALOG_CACHE_KV);
+    const healthReport = await sentinel.runHealthCheckAndSelfHeal();
+
+    console.log(`Sentinel Scheduled Job: Cleaned ${draftResult.cleanedCount} drafts. Report: ${healthReport.ownerAlertMessage}`);
   }
 };
