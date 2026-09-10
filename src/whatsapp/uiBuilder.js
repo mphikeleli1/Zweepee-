@@ -1,10 +1,28 @@
 import { centsToRandsFormatted } from '../lib/money.js';
 
 export class WhatsAppUIBuilder {
+  /**
+   * GPS Location Pin Confirmation Display
+   */
+  renderLocationPinCaptured({ lat, lng, addressName }) {
+    return {
+      type: 'LOCATION_PIN_SCREEN',
+      text: `📍 *GPS Delivery Pin Captured!*\n` +
+        `───────────────\n\n` +
+        `Latitude: *${lat.toFixed(4)}*\n` +
+        `Longitude: *${lng.toFixed(4)}*\n` +
+        `Address: *${addressName || 'Saved GPS Pin'}*\n\n` +
+        `✅ Your myAI™ courier will deliver directly to this exact GPS location!`
+    };
+  }
+
+  /**
+   * SCREEN 1: DISCOVER STORES & MERCHANTS
+   */
   renderDiscoverScreen({ stores = [] }) {
     let text = `✨ *myAI™ Live Storefront* ✨\n` +
       `───────────────\n\n` +
-      `📍 *Nearby Partner Stores*\n\n`;
+      `📍 *Nearby Partner Stores & Universal Click & Collect*\n\n`;
 
     const storeButtons = [];
 
@@ -20,7 +38,7 @@ export class WhatsAppUIBuilder {
     });
 
     text += `───────────────\n` +
-      `💡 *0% Markup Guarantee:* You pay the exact same price as in-store!`;
+      `💡 *0% Markup Guarantee:* You pay the exact same price as in-store across Makro, Dischem, Specsavers, Vets, and any local shop!`;
 
     return {
       type: 'DISCOVER_SCREEN',
@@ -29,8 +47,11 @@ export class WhatsAppUIBuilder {
     };
   }
 
+  /**
+   * SCREEN 2: ELITE STOREFRONT / PRODUCT CATALOG
+   */
   renderProductScreen({ storeName, items = [] }) {
-    let text = `🏬 *${storeName.toUpperCase()}* — Live Catalog\n` +
+    let text = `🏬 *${storeName.toUpperCase()}* — Live Click & Collect Catalog\n` +
       `───────────────\n\n`;
 
     const itemButtons = [];
@@ -61,18 +82,21 @@ export class WhatsAppUIBuilder {
     };
   }
 
+  /**
+   * SCREEN 3: UNIFIED CART
+   */
   renderCartScreen({ items = [], goodsSubtotalCents }) {
     let text = `🛒 *Your Unified Shopping Cart*\n` +
       `───────────────\n\n`;
 
-    items.forEach((item, idx) => {
+    items.forEach((item) => {
       text += `• *${item.name}*\n` +
         `  Qty: 1 × ${centsToRandsFormatted(item.priceCents)}\n`;
     });
 
     text += `\n───────────────\n` +
       `🏷️ *Goods Subtotal:* ${centsToRandsFormatted(goodsSubtotalCents)} *(0% Markup)*\n\n` +
-      `Ready to arrange fast courier delivery?`;
+      `Ready to arrange fast courier delivery to your GPS location?`;
 
     return {
       type: 'CART_SCREEN',
@@ -83,6 +107,9 @@ export class WhatsAppUIBuilder {
     };
   }
 
+  /**
+   * SCREEN 4: COURIER DELIVERY SELECTION
+   */
   renderDeliveryScreen({ vehicleClass, providerName, transportCostCents, etaMinutes }) {
     const vehicleIcon = vehicleClass === 'BIKE' ? '🏍️' : '🚛';
 
@@ -104,6 +131,9 @@ export class WhatsAppUIBuilder {
     };
   }
 
+  /**
+   * SCREEN 5 & 6: CONFIRM & PAY
+   */
   renderConfirmScreen({ transactionId, totalCustomerPaysCents, isP2P = false }) {
     let text = `🧾 *Final Order Confirmation*\n` +
       `───────────────\n\n` +
@@ -113,7 +143,7 @@ export class WhatsAppUIBuilder {
       text += `🛡️ *Agent-to-Agent Protection:* Money is safely held in escrow until you inspect and accept the item on delivery.\n\n` +
         `⚠️ Both buyer and seller must tap Approve below to authorize.`;
     } else {
-      text += `🔒 *Secure Paystack Checkout:* Instant automated order processing with zero manual hassle.`;
+      text += `🔒 *Secure Paystack Checkout:* Instant automated Click & Collect order processing with zero manual hassle.`;
     }
 
     return {
@@ -126,6 +156,9 @@ export class WhatsAppUIBuilder {
     };
   }
 
+  /**
+   * SCREEN 7: LIVE ORDER TRACKING
+   */
   renderLiveOrderScreen({ orderId, status, courierName, etaMinutes }) {
     const text = `📦 *Live Order Status*\n` +
       `───────────────\n\n` +
@@ -134,7 +167,7 @@ export class WhatsAppUIBuilder {
       `🚚 *Assigned Courier:* ${courierName}\n` +
       `⏱️ *ETA:* ~${etaMinutes} mins\n\n` +
       `───────────────\n` +
-      `Your courier is en route! You will receive a door photo proof upon arrival.`;
+      `Your courier is en route to your exact GPS pin! You will receive a door photo proof upon arrival.`;
 
     return {
       type: 'LIVE_ORDER_SCREEN',
@@ -142,6 +175,9 @@ export class WhatsAppUIBuilder {
     };
   }
 
+  /**
+   * SCREEN 8: DELIVERED & RATING
+   */
   renderDeliveredScreen({ orderId, deliveryPhotoUrl }) {
     let text = `🎉 *Order Delivered!*\n` +
       `───────────────\n\n` +

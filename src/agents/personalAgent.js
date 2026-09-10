@@ -1,16 +1,30 @@
 export class PersonalAgent {
-  constructor({ id, userId, phoneNumber, name, memory = {} }) {
+  constructor({ id, userId, phoneNumber, name, location = null, memory = {} }) {
     this.id = id || `pa_${phoneNumber.replace(/[^0-9]/g, '')}`;
     this.userId = userId || `usr_${phoneNumber.replace(/[^0-9]/g, '')}`;
     this.phoneNumber = phoneNumber;
     this.name = name || 'User';
+    this.location = location || { lat: -26.2041, lng: 28.0473, address: 'Johannesburg' };
     this.memory = {
       addresses: memory.addresses || [],
+      gpsLocations: memory.gpsLocations || [],
       favoriteStores: memory.favoriteStores || [],
       orderHistory: memory.orderHistory || [],
       preferences: memory.preferences || {},
       trustedCounterparties: memory.trustedCounterparties || []
     };
+  }
+
+  setGpsLocation(lat, lng, addressName = '') {
+    this.location = {
+      lat,
+      lng,
+      address: addressName || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+    };
+    this.memory.gpsLocations.push(this.location);
+    if (addressName && !this.memory.addresses.includes(addressName)) {
+      this.memory.addresses.push(addressName);
+    }
   }
 
   getGreeting() {
@@ -58,6 +72,7 @@ export class PersonalAgent {
       userId: this.userId,
       phoneNumber: this.phoneNumber,
       name: this.name,
+      location: this.location,
       memory: this.memory
     };
   }

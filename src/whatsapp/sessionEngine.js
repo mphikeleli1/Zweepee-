@@ -47,10 +47,27 @@ export class WhatsAppSessionEngine {
     }
   }
 
-  async handleIncomingMessage(waId, incomingText, buttonPayload = null) {
+  async handleIncomingMessage(waId, incomingText, buttonPayload = null, locationObj = null) {
     let session = await this.getSession(waId);
     const text = (incomingText || '').trim();
 
+    // 0. GPS Location Pin Handler
+    if (locationObj && locationObj.latitude && locationObj.longitude) {
+      session.gpsLocation = {
+        lat: locationObj.latitude,
+        lng: locationObj.longitude,
+        address: locationObj.address || locationObj.name || `${locationObj.latitude.toFixed(4)}, ${locationObj.longitude.toFixed(4)}`
+      };
+      await this.saveSession(waId, session);
+
+      return this.uiBuilder.renderLocationPinCaptured({
+        lat: locationObj.latitude,
+        lng: locationObj.longitude,
+        addressName: session.gpsLocation.address
+      });
+    }
+
+    // 1. New User Onboarding Check
     let userProfile = await this.onboardingEngine.getUserProfile(waId);
     if (!userProfile) {
       if (!session.onboardingStep) {
@@ -76,6 +93,7 @@ export class WhatsAppSessionEngine {
       return onboardingResult.screen;
     }
 
+    // 2. Check for interactive button tap payloads
     if (buttonPayload) {
       if (buttonPayload === 'action_food') {
         const items = await this.commerce.searchCatalog('kfc');
@@ -176,6 +194,7 @@ export class WhatsAppSessionEngine {
       }
     }
 
+    // 3. Text Message NLU Intent Processing
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 
@@ -189,6 +208,7 @@ export class WhatsAppSessionEngine {
       };
     }
 
+    // Default: Search catalog across all Click & Collect stores
     const items = await this.commerce.searchCatalog(maskedText);
     if (items.length > 0) {
       session.step = 'STATE_STORE_CATALOG';
@@ -201,7 +221,7 @@ export class WhatsAppSessionEngine {
     }
 
     return {
-      text: `Hello ${userProfile.name}! 👋 How can I help you today? You can order food (KFC, Steers), groceries, furniture, or sell an item!`
+      text: `Hello ${userProfile.name}! 👋 How can I help you today? You can order from Makro, Dischem, Specsavers, Vets, Game, KFC, or send me a GPS location pin!`
     };
   }
 }

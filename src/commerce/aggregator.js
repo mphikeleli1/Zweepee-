@@ -1,4 +1,5 @@
 import { CommerceAdapterInterface } from './adapters/interface.js';
+import { UniversalClickCollectAdapter } from './adapters/universal.js';
 
 export class MockStoreAdapter extends CommerceAdapterInterface {
   constructor(storeId, storeName) {
@@ -45,14 +46,30 @@ export class CommerceAggregator {
     this.adapters.set(storeId, adapter);
   }
 
+  /**
+   * Search catalog across fixed store adapters AND universal Click & Collect stores
+   * (Makro, Dischem, Specsavers, Game, Vets, Builders, etc.)
+   */
   async searchCatalog(query) {
     const results = [];
-    const q = (query || '').toLowerCase();
+    const q = (query || '').toLowerCase().trim();
 
+    // 1. Check fixed store adapters
     for (const [storeId, adapter] of this.adapters.entries()) {
       const catalog = await adapter.fetchCatalog();
       for (const item of catalog) {
         if (!q || item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q) || adapter.storeName.toLowerCase().includes(q)) {
+          results.push(item);
+        }
+      }
+    }
+
+    // 2. Query Universal Click & Collect Adapter for broad store coverage
+    if (q) {
+      const universalAdapter = new UniversalClickCollectAdapter(q, 'Click & Collect Store');
+      const universalItems = await universalAdapter.fetchCatalog(q);
+      for (const item of universalItems) {
+        if (!results.some(r => r.name === item.name)) {
           results.push(item);
         }
       }

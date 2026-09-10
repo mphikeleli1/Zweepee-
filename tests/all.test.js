@@ -21,6 +21,7 @@ import { AgentMatchingEngine } from '../src/network/matching.js';
 import { NetworkDiscovery } from '../src/network/discovery.js';
 import { CatalogExtractor } from '../src/agents/catalogExtractor.js';
 import { UserOnboardingEngine } from '../src/whatsapp/onboarding.js';
+import { CommerceAggregator } from '../src/commerce/aggregator.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -285,4 +286,33 @@ test('13. New User Onboarding Engine', async () => {
 
   const res3 = await onboarding.handleOnboarding('27811111111', 'Rosebank', 'ONBOARDING_AWAITING_ADDRESS');
   assert.equal(res3.nextStep, 'ONBOARDING_COMPLETED');
+});
+
+test('14. GPS Location Pin Capturing & Universal Click & Collect Stores', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  // Test GPS Location Pin message
+  const gpsPinScreen = await sessionEngine.handleIncomingMessage(
+    '27822222222',
+    '',
+    null,
+    { latitude: -26.1076, longitude: 28.0567, address: 'Sandton City, Johannesburg' }
+  );
+
+  assert.equal(gpsPinScreen.type, 'LOCATION_PIN_SCREEN');
+  assert.ok(gpsPinScreen.text.includes('-26.1076'));
+
+  // Test Universal Click & Collect stores (Makro, Dischem, Specsavers, Vets)
+  const commerce = new CommerceAggregator();
+  const makroItems = await commerce.searchCatalog('makro');
+  assert.ok(makroItems.some(i => i.storeName === 'Makro'));
+
+  const dischemItems = await commerce.searchCatalog('dischem');
+  assert.ok(dischemItems.some(i => i.storeName === 'Dis-Chem Pharmacy'));
+
+  const specsaversItems = await commerce.searchCatalog('specsavers');
+  assert.ok(specsaversItems.some(i => i.storeName === 'Specsavers'));
+
+  const vetItems = await commerce.searchCatalog('vet');
+  assert.ok(vetItems.some(i => i.storeName === 'Vet Clinic & Pet Shop'));
 });
