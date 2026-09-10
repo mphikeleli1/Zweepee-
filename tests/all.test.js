@@ -337,3 +337,18 @@ test('15. Dispute Resolution Engine & OneCart Aggregator', async () => {
   const items = await onecart.fetchCatalog('woolworths');
   assert.ok(items.length > 0);
 });
+
+test('16. Fleet Fault Rider Theft Claim', async () => {
+  const disputeEngine = new DisputeResolutionEngine();
+  const result = await disputeEngine.claimFleetRiderTheft({
+    orderId: 'ord_kfc_441',
+    courierProvider: 'Pingo',
+    riderId: 'rider_pingo_99'
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.fleetClaimRecord.faultType, 'FLEET_FAULT');
+  assert.equal(result.fleetClaimRecord.storePayoutCharged, false, 'Store must NOT be charged');
+  assert.ok(result.customerMessage.includes('zero extra cost'));
+  assert.ok(result.ownerNotice.includes('Rider rider_pingo_99 on Pingo stole order'));
+});
