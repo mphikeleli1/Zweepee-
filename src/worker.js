@@ -68,7 +68,8 @@ export default {
     }
 
     if (path === '/api/v25/webhook/paystack' && method === 'POST') {
-      const paystack = new PaystackPaymentGateway();
+      // Pass real Paystack Secret Key from environment settings if configured
+      const paystack = new PaystackPaymentGateway(env?.PAYSTACK_SECRET_KEY);
       const rawBody = await request.text();
       const sig = request.headers.get('x-paystack-signature');
 
