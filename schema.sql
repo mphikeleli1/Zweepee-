@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS quotes (
   created_at INTEGER NOT NULL
 );
 
--- Seed pricing parameters
+-- Seed pricing parameters for ALL intent modes
 INSERT OR REPLACE INTO pricing_config (key, value, description, updated_at) VALUES
 ('STORE_GOODS_MARKUP_PERCENT', '0', 'Markup on goods for all stores (0%)', 1700000000000),
 ('STORE_TRANSPORT_MARGIN_LOW_PERCENT', '10', 'Transport margin percentage when cart < threshold (10%)', 1700000000000),
@@ -103,4 +103,6 @@ INSERT OR REPLACE INTO pricing_config (key, value, description, updated_at) VALU
 ('P2P_GOODS_COMMISSION_PERCENT', '5', 'Commission percentage on goods value for P2P/A2A sales (5%)', 1700000000000),
 ('P2P_TRANSPORT_MARGIN_PERCENT', '20', 'Transport margin percentage for P2P/A2A sales (20%)', 1700000000000),
 ('TRANSPORT_ONLY_MARGIN_PERCENT', '20', 'Transport margin percentage for transport-only mode (20%)', 1700000000000),
+('JOB_MATCHING_FLAT_FEE_CENTS', '50000', 'Configurable flat fee for job matching placement (R500.00)', 1700000000000),
+('SERVICE_REFERRAL_COMMISSION_PERCENT', '5', 'Affiliate referral commission for medical, financial, legal service referrals (5%)', 1700000000000),
 ('PAYMENT_PROCESSING_FEE_CENTS', '250', 'Flat payment processing fee in minor units (R2.50)', 1700000000000);

@@ -8,6 +8,8 @@ export const DEFAULT_PRICING_CONFIG = {
   P2P_GOODS_COMMISSION_PERCENT: 5,
   P2P_TRANSPORT_MARGIN_PERCENT: 20,
   TRANSPORT_ONLY_MARGIN_PERCENT: 20,
+  JOB_MATCHING_FLAT_FEE_CENTS: 50000, // R500.00 configurable flat rate
+  SERVICE_REFERRAL_COMMISSION_PERCENT: 5, // 5% affiliate referral commission
   PAYMENT_PROCESSING_FEE_CENTS: 250
 };
 
@@ -32,12 +34,17 @@ export async function getPricingConfig(dbOrKv) {
   return { ...DEFAULT_PRICING_CONFIG };
 }
 
+/**
+ * Calculates pricing & monetization deterministically for ALL intent modes.
+ */
 export function calculatePricing({ intentMode, goodsSubtotalCents = 0, rawTransportQuoteCents = 0, config = DEFAULT_PRICING_CONFIG }) {
   const cfg = { ...DEFAULT_PRICING_CONFIG, ...config };
 
   let goodsMarkupCents = 0;
   let p2pCommissionCents = 0;
   let transportMarginCents = 0;
+  let jobMatchingFeeCents = 0;
+  let referralCommissionCents = 0;
 
   const mode = (intentMode || '').toUpperCase();
 
@@ -54,6 +61,12 @@ export function calculatePricing({ intentMode, goodsSubtotalCents = 0, rawTransp
     transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.P2P_TRANSPORT_MARGIN_PERCENT);
   } else if (mode === 'TRANSPORT_ONLY') {
     transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.TRANSPORT_ONLY_MARGIN_PERCENT);
+  } else if (mode === 'JOB_MATCHING') {
+    // Flat R500.00 job placement matching fee
+    jobMatchingFeeCents = cfg.JOB_MATCHING_FLAT_FEE_CENTS;
+  } else if (mode === 'SERVICE_REFERRAL') {
+    // Affiliate referral commission
+    referralCommissionCents = calculatePercentageCents(goodsSubtotalCents, cfg.SERVICE_REFERRAL_COMMISSION_PERCENT);
   } else {
     if (goodsSubtotalCents < cfg.STORE_CART_THRESHOLD_CENTS) {
       transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.STORE_TRANSPORT_MARGIN_LOW_PERCENT);
@@ -64,10 +77,10 @@ export function calculatePricing({ intentMode, goodsSubtotalCents = 0, rawTransp
 
   const finalGoodsCents = addCents(goodsSubtotalCents, goodsMarkupCents);
   const finalTransportCents = addCents(rawTransportQuoteCents, transportMarginCents);
-  const platformFeeCents = addCents(goodsMarkupCents, p2pCommissionCents, transportMarginCents);
+  const platformFeeCents = addCents(goodsMarkupCents, p2pCommissionCents, transportMarginCents, jobMatchingFeeCents, referralCommissionCents);
   const paymentFeeCents = cfg.PAYMENT_PROCESSING_FEE_CENTS;
 
-  const totalCustomerPaysCents = addCents(finalGoodsCents, finalTransportCents, p2pCommissionCents, paymentFeeCents);
+  const totalCustomerPaysCents = addCents(finalGoodsCents, finalTransportCents, p2pCommissionCents, jobMatchingFeeCents, paymentFeeCents);
 
   return {
     intentMode: mode,
@@ -78,6 +91,8 @@ export function calculatePricing({ intentMode, goodsSubtotalCents = 0, rawTransp
     transportMarginCents,
     finalTransportCents,
     p2pCommissionCents,
+    jobMatchingFeeCents,
+    referralCommissionCents,
     platformFeeCents,
     paymentFeeCents,
     totalCustomerPaysCents

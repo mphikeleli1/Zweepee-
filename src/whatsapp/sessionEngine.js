@@ -284,9 +284,19 @@ export class WhatsAppSessionEngine {
       }
     }
 
-    // 5. Text Message NLU Intent Processing
+    // 5. Text Message NLU Intent & Advice Prohibition Intercept
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
+
+    // ADVICE PROHIBITION RULE INTERCEPT:
+    if (intentMode === INTENT_MODES.SERVICE_REFERRAL) {
+      return {
+        text: `🏥 *Professional Service Referral Conduit*\n` +
+          `───────────────\n\n` +
+          `As your myAI™ Personal Agent, I do *not* provide direct medical, financial, or legal advice.\n\n` +
+          `Instead, I can connect you directly with licensed, verified healthcare providers, registered financial advisors, or legal experts for a consultation!`
+      };
+    }
 
     if (intentMode === INTENT_MODES.A2A_SELL) {
       session.step = 'STATE_IDLE';

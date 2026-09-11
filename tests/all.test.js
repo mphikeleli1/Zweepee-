@@ -490,7 +490,6 @@ test('25. Multi-Dimensional Matching Engine (Jobs, Property, Travel Bundles)', (
   const discovery = new NetworkDiscovery();
   const matchingEngine = new AgentMatchingEngine(discovery);
 
-  // 1. Hiring Cashiers in Midrand
   const jobsMatch = matchingEngine.matchMultiDimensional({
     queryText: '11 cashiers with matric around Midrand salary R5k',
     filters: { vertical: 'JOBS', quantity: 11, maxSalaryCents: 500000, qualification: 'Matric' }
@@ -499,7 +498,6 @@ test('25. Multi-Dimensional Matching Engine (Jobs, Property, Travel Bundles)', (
   assert.equal(jobsMatch.matched[0].quantityAvailable, 15);
   assert.equal(jobsMatch.matched[0].salaryCents, 500000);
 
-  // 2. 2-bed flat in JHB CBD
   const propMatch = matchingEngine.matchMultiDimensional({
     queryText: '2 bed flat around jhb CBD end Sep kid friendly',
     filters: { vertical: 'PROPERTY', bedrooms: 2, kidFriendly: true }
@@ -508,11 +506,31 @@ test('25. Multi-Dimensional Matching Engine (Jobs, Property, Travel Bundles)', (
   assert.equal(propMatch.matched[0].bedrooms, 2);
   assert.equal(propMatch.matched[0].isKidFriendly, true);
 
-  // 3. Travel & Insurance Bundle
   const bundleMatch = matchingEngine.matchMultiDimensional({
     queryText: 'CPT beachfront hotel loan insurance car hire',
     filters: { vertical: 'BUNDLE' }
   });
   assert.equal(bundleMatch.vertical, 'BUNDLE');
   assert.equal(bundleMatch.components.length, 3);
+});
+
+test('26. Advice Prohibition Rule & Job Matching Monetization', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  await sessionEngine.handleIncomingMessage('27888888888', 'hi');
+  await sessionEngine.handleIncomingMessage('27888888888', 'Mpho');
+  await sessionEngine.handleIncomingMessage('27888888888', 'Sandton');
+
+  const medicalQuery = await sessionEngine.handleIncomingMessage('27888888888', 'Which medicine should I take for fever?');
+  assert.ok(medicalQuery.text.includes('Professional Service Referral Conduit'));
+  assert.ok(medicalQuery.text.includes('I do *not* provide direct medical, financial, or legal advice'));
+
+  const jobPricing = calculatePricing({
+    intentMode: 'JOB_MATCHING',
+    goodsSubtotalCents: 0,
+    rawTransportQuoteCents: 0
+  });
+
+  assert.equal(jobPricing.jobMatchingFeeCents, 50000, 'Job matching fee must be R500.00 flat rate (50,000 cents)');
+  assert.equal(jobPricing.platformFeeCents, 50000);
 });

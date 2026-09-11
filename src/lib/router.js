@@ -2,7 +2,9 @@ export const INTENT_MODES = {
   A2A_SELL: 'A2A_SELL',
   A2A_BUY: 'A2A_BUY',
   BUY_PLUS_DELIVER: 'BUY_PLUS_DELIVER',
-  TRANSPORT_ONLY: 'TRANSPORT_ONLY'
+  TRANSPORT_ONLY: 'TRANSPORT_ONLY',
+  JOB_MATCHING: 'JOB_MATCHING',
+  SERVICE_REFERRAL: 'SERVICE_REFERRAL'
 };
 
 export function classifyIntent(messageText, metadata = {}) {
@@ -12,6 +14,30 @@ export function classifyIntent(messageText, metadata = {}) {
 
   const text = (messageText || '').toLowerCase().trim();
 
+  // ADVICE PROHIBITION RULE: Intercept direct financial, medical, or legal queries
+  if (
+    text.includes('doctor') ||
+    text.includes('medicine') ||
+    text.includes('pills') ||
+    text.includes('diagnosis') ||
+    text.includes('legal advice') ||
+    text.includes('lawyer') ||
+    text.includes('sue') ||
+    text.includes('invest in') ||
+    text.includes('financial advice') ||
+    text.includes('loan') ||
+    text.includes('insurance') ||
+    text.includes('medical aid')
+  ) {
+    return INTENT_MODES.SERVICE_REFERRAL;
+  }
+
+  // Job matching intents
+  if (text.includes('hire') || text.includes('recruitment') || text.includes('cashiers') || text.includes('staff')) {
+    return INTENT_MODES.JOB_MATCHING;
+  }
+
+  // P2P Selling intent
   if (
     text.startsWith('sell') ||
     text.includes('selling my') ||
@@ -24,6 +50,7 @@ export function classifyIntent(messageText, metadata = {}) {
     return INTENT_MODES.A2A_SELL;
   }
 
+  // Transport Only intent
   if (
     text.includes('transport only') ||
     text.includes('deliver my parcel') ||
@@ -41,6 +68,7 @@ export function classifyIntent(messageText, metadata = {}) {
     return INTENT_MODES.TRANSPORT_ONLY;
   }
 
+  // P2P buying vs Store buying
   if (
     text.includes('used iphone') ||
     text.includes('second hand') ||
