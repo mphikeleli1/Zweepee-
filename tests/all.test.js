@@ -459,11 +459,31 @@ test('23. A2A Commerce Autonomous Price Negotiation', () => {
   const a2aEngine = new A2ACommerceEngine();
 
   const result = a2aEngine.negotiatePrice({
-    buyerMaxCents: 330000, // R3,300
-    askingPriceCents: 350000, // R3,500
-    sellerMinCents: 320000 // R3,200
+    buyerMaxCents: 330000,
+    askingPriceCents: 350000,
+    sellerMinCents: 320000
   });
 
   assert.equal(result.agreed, true);
-  assert.equal(result.agreedPriceCents, 325000); // R3,250 midpoint!
+  assert.equal(result.agreedPriceCents, 325000);
+});
+
+test('24. PersonalAgent Multi-BA Ownership & Transport Failover Escalation', async () => {
+  const pa = new PersonalAgent({ phoneNumber: '27877777777', name: 'John Doe' });
+
+  // Section 3: Single PA owns multiple Business Agents
+  const taxiBa = pa.createOrLinkBusinessAgent({ name: "John's Taxi Business", category: 'Transport' });
+  const restoBa = pa.createOrLinkBusinessAgent({ name: "John's Restaurant", category: 'Food' });
+  const hardwareBa = pa.createOrLinkBusinessAgent({ name: "John's Hardware Store", category: 'Hardware' });
+
+  assert.equal(pa.getOwnedBusinessAgents().length, 3);
+  assert.equal(restoBa.ownerUserId, pa.userId);
+
+  // Section 16: Transport Aggregator Failover Escalation
+  const emptyAggregator = new TransportAggregator([]);
+  emptyAggregator.providers = []; // Simulate zero available primary providers
+
+  const failoverQuotes = await emptyAggregator.getQuotes({ distanceKm: 5, totalWeightKg: 1 });
+  assert.equal(failoverQuotes.cheapestQuote.providerId, 'local_network_failover');
+  assert.ok(failoverQuotes.failoverNotice.includes('Sentinel auto-escalation'));
 });

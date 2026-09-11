@@ -1,3 +1,5 @@
+import { BusinessAgent } from './businessAgent.js';
+
 export class PersonalAgent {
   constructor({ id, userId, phoneNumber, name, location = null, memory = {} }) {
     this.id = id || `pa_${phoneNumber.replace(/[^0-9]/g, '')}`;
@@ -5,6 +7,7 @@ export class PersonalAgent {
     this.phoneNumber = phoneNumber;
     this.name = name || 'User';
     this.location = location || { lat: -26.2041, lng: 28.0473, address: 'Johannesburg' };
+    this.businessAgents = new Map(); // Personal Agent owns/controls multiple Business Agents
     this.memory = {
       addresses: memory.addresses || [],
       gpsLocations: memory.gpsLocations || [],
@@ -13,6 +16,24 @@ export class PersonalAgent {
       preferences: memory.preferences || {},
       trustedCounterparties: memory.trustedCounterparties || []
     };
+  }
+
+  /**
+   * Section 3: ONE PERSON = ONE PERSONAL AGENT
+   * Single Personal Agent owns and controls multiple Business Agents
+   * Example: John -> Personal Agent -> Taxi BA, Restaurant BA, Hardware BA
+   */
+  createOrLinkBusinessAgent(config = {}) {
+    const ba = new BusinessAgent({
+      ownerUserId: this.userId,
+      ...config
+    });
+    this.businessAgents.set(ba.id, ba);
+    return ba;
+  }
+
+  getOwnedBusinessAgents() {
+    return Array.from(this.businessAgents.values());
   }
 
   setGpsLocation(lat, lng, addressName = '') {
@@ -73,6 +94,7 @@ export class PersonalAgent {
       phoneNumber: this.phoneNumber,
       name: this.name,
       location: this.location,
+      businessAgentsCount: this.businessAgents.size,
       memory: this.memory
     };
   }
