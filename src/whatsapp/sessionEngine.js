@@ -123,13 +123,14 @@ export class WhatsAppSessionEngine {
       session.onboardingStep = onboardingResult.nextStep;
 
       if (onboardingResult.draftProfile) {
-        session.draftName = onboardingResult.draftProfile.name;
+        if (onboardingResult.draftProfile.address) session.draftAddress = onboardingResult.draftProfile.address;
+        if (onboardingResult.draftProfile.name) session.draftName = onboardingResult.draftProfile.name;
       }
 
       if (onboardingResult.completedProfile) {
         userProfile = await this.onboardingEngine.saveUserProfile(waId, {
-          name: session.draftName || 'User',
-          address: onboardingResult.completedProfile.address
+          name: onboardingResult.completedProfile.name || session.draftName || 'User',
+          address: onboardingResult.completedProfile.address || session.draftAddress || 'Default Address'
         });
         session.onboardingStep = 'ONBOARDING_COMPLETED';
         session.activeAddress = userProfile.address;

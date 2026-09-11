@@ -228,11 +228,11 @@ test('10. Stateful WhatsApp Session Engine & Payment Webhooks', async () => {
   const onboardingScreen = await sessionEngine.handleIncomingMessage('27820000000', 'hello');
   assert.ok(onboardingScreen.text.includes('Welcome to myAI'));
 
-  const nameScreen = await sessionEngine.handleIncomingMessage('27820000000', 'John Doe');
-  assert.ok(nameScreen.text.includes('Nice to meet you'));
-
   const addressScreen = await sessionEngine.handleIncomingMessage('27820000000', 'Sandton');
-  assert.ok(addressScreen.text.includes('You\'re All Set'));
+  assert.ok(addressScreen.text.includes('Location Saved'));
+
+  const nameScreen = await sessionEngine.handleIncomingMessage('27820000000', 'John Doe');
+  assert.ok(nameScreen.text.includes('Personal Agent is Active'));
 
   const paystack = new PaystackPaymentGateway('sk_test_mock_paystack_key');
   const paystackValid = await paystack.verifyWebhookSignature('{"event":"charge.success"}', 'mock_sig');
@@ -282,13 +282,13 @@ test('12. External Agent Interoperability & Catalog Ingestion Extractor', async 
 test('13. New User Onboarding Engine', async () => {
   const onboarding = new UserOnboardingEngine();
   const res1 = await onboarding.handleOnboarding('27811111111', 'hi', 'ONBOARDING_START');
-  assert.equal(res1.nextStep, 'ONBOARDING_AWAITING_NAME');
+  assert.equal(res1.nextStep, 'ONBOARDING_AWAITING_LOCATION');
 
-  const res2 = await onboarding.handleOnboarding('27811111111', 'Sipho', 'ONBOARDING_AWAITING_NAME');
-  assert.equal(res2.nextStep, 'ONBOARDING_AWAITING_ADDRESS');
-  assert.equal(res2.draftProfile.name, 'Sipho');
+  const res2 = await onboarding.handleOnboarding('27811111111', 'Rosebank', 'ONBOARDING_AWAITING_LOCATION');
+  assert.equal(res2.nextStep, 'ONBOARDING_AWAITING_NAME');
+  assert.equal(res2.draftProfile.address, 'Rosebank');
 
-  const res3 = await onboarding.handleOnboarding('27811111111', 'Rosebank', 'ONBOARDING_AWAITING_ADDRESS');
+  const res3 = await onboarding.handleOnboarding('27811111111', 'Sipho', 'ONBOARDING_AWAITING_NAME');
   assert.equal(res3.nextStep, 'ONBOARDING_COMPLETED');
 });
 
@@ -398,8 +398,8 @@ test('19. Apple-Level 1-Tap Instant Checkout', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
 
   await sessionEngine.handleIncomingMessage('27844444444', 'hi');
-  await sessionEngine.handleIncomingMessage('27844444444', 'Kagiso');
   await sessionEngine.handleIncomingMessage('27844444444', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27844444444', 'Kagiso');
 
   const screen = await sessionEngine.handleIncomingMessage('27844444444', 'Get me KFC Streetwise 2');
   assert.equal(screen.type, 'ONE_TAP_CHECKOUT_SCREEN');
@@ -411,8 +411,8 @@ test('20. Dynamic Location Switcher (Work vs Home Address)', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
 
   await sessionEngine.handleIncomingMessage('27855555555', 'hi');
-  await sessionEngine.handleIncomingMessage('27855555555', 'Lindiwe');
   await sessionEngine.handleIncomingMessage('27855555555', 'Home: Sandton');
+  await sessionEngine.handleIncomingMessage('27855555555', 'Lindiwe');
 
   const screen1 = await sessionEngine.handleIncomingMessage('27855555555', 'Get me KFC Streetwise 2');
   assert.ok(screen1.text.includes('Home: Sandton'));
@@ -442,8 +442,8 @@ test('22. Frictionless Item Swapping (Zinger Burger to Streetwise 2)', async () 
   const sessionEngine = new WhatsAppSessionEngine();
 
   await sessionEngine.handleIncomingMessage('27866666666', 'hi');
-  await sessionEngine.handleIncomingMessage('27866666666', 'Sipho');
   await sessionEngine.handleIncomingMessage('27866666666', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27866666666', 'Sipho');
 
   const checkout1 = await sessionEngine.handleIncomingMessage('27866666666', 'Zinger Burger Meal');
   assert.ok(checkout1.text.includes('Zinger Burger Meal'));
@@ -519,8 +519,8 @@ test('26. Advice Prohibition Rule & Job Matching Monetization', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
 
   await sessionEngine.handleIncomingMessage('27888888888', 'hi');
-  await sessionEngine.handleIncomingMessage('27888888888', 'Mpho');
   await sessionEngine.handleIncomingMessage('27888888888', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27888888888', 'Mpho');
 
   const medicalQuery = await sessionEngine.handleIncomingMessage('27888888888', 'Which medicine should I take for fever?');
   assert.ok(medicalQuery.text.includes('Professional Service Referral Conduit'));
@@ -554,8 +554,8 @@ test('27. Dynamic Affiliate Referral Commissions & Buyer Early Escrow Release Ov
   // 2. Buyer Early Escrow Release Override
   const sessionEngine = new WhatsAppSessionEngine();
   await sessionEngine.handleIncomingMessage('buyer_john', 'hi');
-  await sessionEngine.handleIncomingMessage('buyer_john', 'John');
   await sessionEngine.handleIncomingMessage('buyer_john', 'Sandton');
+  await sessionEngine.handleIncomingMessage('buyer_john', 'John');
 
   sessionEngine.p2pEngine.createP2PEscrowHold({
     transactionId: 'tx_escrow_101',
