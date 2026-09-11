@@ -9,6 +9,7 @@ import { DisputeResolutionEngine } from '../trust/disputes.js';
 import { AntiAbuseGuardEngine } from '../trust/antiAbuse.js';
 import { AICostCurtailmentEngine } from '../lib/aiOptimizer.js';
 import { A2ACommerceEngine } from '../trust/a2aCommerce.js';
+import { P2PCommerceEngine } from '../trust/p2pFeatures.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -25,6 +26,7 @@ export class WhatsAppSessionEngine {
     this.antiAbuse = new AntiAbuseGuardEngine();
     this.aiOptimizer = new AICostCurtailmentEngine(kvCatalog);
     this.a2aEngine = new A2ACommerceEngine();
+    this.p2pEngine = new P2PCommerceEngine(db);
     this.inMemorySessions = new Map();
   }
 
@@ -103,7 +105,14 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // 3. New User Onboarding Check
+    // 3. Early Buyer Escrow Release Handler
+    if (text.toLowerCase().includes('release escrow') || text.toLowerCase().includes('release funds') || text.toLowerCase().includes('approve goods')) {
+      const txId = session.transactionId || 'tx_p2p_recent';
+      const releaseResult = this.p2pEngine.buyerReleaseEscrowEarly(txId, waId);
+      return { text: releaseResult.message };
+    }
+
+    // 4. New User Onboarding Check
     let userProfile = await this.onboardingEngine.getUserProfile(waId);
     if (!userProfile) {
       if (!session.onboardingStep) {
@@ -159,8 +168,14 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 4. Interactive Button Tap Handlers
+    // 5. Interactive Button Tap Handlers
     if (buttonPayload) {
+      if (buttonPayload.startsWith('release_escrow_')) {
+        const txId = buttonPayload.replace('release_escrow_', '');
+        const releaseResult = this.p2pEngine.buyerReleaseEscrowEarly(txId, waId);
+        return { text: releaseResult.message };
+      }
+
       if (buttonPayload.startsWith('accept_counter_')) {
         const txId = buttonPayload.replace('accept_counter_', '');
         session.step = 'STATE_LIVE_ORDER';
@@ -284,7 +299,7 @@ export class WhatsAppSessionEngine {
       }
     }
 
-    // 5. Text Message NLU Intent & Advice Prohibition Intercept
+    // 6. Text Message NLU Intent & Advice Prohibition Intercept
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 

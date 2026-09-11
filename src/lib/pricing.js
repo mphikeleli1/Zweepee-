@@ -9,7 +9,7 @@ export const DEFAULT_PRICING_CONFIG = {
   P2P_TRANSPORT_MARGIN_PERCENT: 20,
   TRANSPORT_ONLY_MARGIN_PERCENT: 20,
   JOB_MATCHING_FLAT_FEE_CENTS: 50000, // R500.00 configurable flat rate
-  SERVICE_REFERRAL_COMMISSION_PERCENT: 5, // 5% affiliate referral commission
+  SERVICE_REFERRAL_COMMISSION_PERCENT: 5, // Default 5% affiliate referral commission
   PAYMENT_PROCESSING_FEE_CENTS: 250
 };
 
@@ -36,8 +36,15 @@ export async function getPricingConfig(dbOrKv) {
 
 /**
  * Calculates pricing & monetization deterministically for ALL intent modes.
+ * Supports custom dynamic referral commissions per affiliate deal (e.g. 10%, 15%, 20%+).
  */
-export function calculatePricing({ intentMode, goodsSubtotalCents = 0, rawTransportQuoteCents = 0, config = DEFAULT_PRICING_CONFIG }) {
+export function calculatePricing({
+  intentMode,
+  goodsSubtotalCents = 0,
+  rawTransportQuoteCents = 0,
+  customReferralCommissionPercent = null,
+  config = DEFAULT_PRICING_CONFIG
+}) {
   const cfg = { ...DEFAULT_PRICING_CONFIG, ...config };
 
   let goodsMarkupCents = 0;
@@ -65,8 +72,12 @@ export function calculatePricing({ intentMode, goodsSubtotalCents = 0, rawTransp
     // Flat R500.00 job placement matching fee
     jobMatchingFeeCents = cfg.JOB_MATCHING_FLAT_FEE_CENTS;
   } else if (mode === 'SERVICE_REFERRAL') {
-    // Affiliate referral commission
-    referralCommissionCents = calculatePercentageCents(goodsSubtotalCents, cfg.SERVICE_REFERRAL_COMMISSION_PERCENT);
+    // Dynamic or contract-specific affiliate referral commission (e.g., 5%, 10%, 15%, 20%+)
+    const effectiveReferralRate = (customReferralCommissionPercent !== null && customReferralCommissionPercent !== undefined)
+      ? Number(customReferralCommissionPercent)
+      : cfg.SERVICE_REFERRAL_COMMISSION_PERCENT;
+
+    referralCommissionCents = calculatePercentageCents(goodsSubtotalCents, effectiveReferralRate);
   } else {
     if (goodsSubtotalCents < cfg.STORE_CART_THRESHOLD_CENTS) {
       transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.STORE_TRANSPORT_MARGIN_LOW_PERCENT);

@@ -534,3 +534,55 @@ test('26. Advice Prohibition Rule & Job Matching Monetization', async () => {
   assert.equal(jobPricing.jobMatchingFeeCents, 50000, 'Job matching fee must be R500.00 flat rate (50,000 cents)');
   assert.equal(jobPricing.platformFeeCents, 50000);
 });
+
+test('27. Dynamic Affiliate Referral Commissions & Buyer Early Escrow Release Override', async () => {
+  // 1. Dynamic Per-Affiliate Referral Commission
+  const defaultRef = calculatePricing({
+    intentMode: 'SERVICE_REFERRAL',
+    goodsSubtotalCents: 100000 // R1,000
+  });
+  assert.equal(defaultRef.referralCommissionCents, 5000, 'Default affiliate referral must be 5% = R50 (5000 cents)');
+
+  const customRef15 = calculatePricing({
+    intentMode: 'SERVICE_REFERRAL',
+    goodsSubtotalCents: 100000,
+    customReferralCommissionPercent: 15
+  });
+  assert.equal(customRef15.referralCommissionCents, 15000, 'Custom 15% affiliate deal must yield R150 (15000 cents)');
+
+  // 2. Buyer Early Escrow Release Override
+  const sessionEngine = new WhatsAppSessionEngine();
+  await sessionEngine.handleIncomingMessage('buyer_john', 'hi');
+  await sessionEngine.handleIncomingMessage('buyer_john', 'John');
+  await sessionEngine.handleIncomingMessage('buyer_john', 'Sandton');
+
+  sessionEngine.p2pEngine.createP2PEscrowHold({
+    transactionId: 'tx_escrow_101',
+    buyerId: 'buyer_john',
+    sellerId: 'seller_mary',
+    amountCents: 200000
+  });
+
+  const unauthorizedRelease = sessionEngine.p2pEngine.buyerReleaseEscrowEarly('tx_escrow_101', 'buyer_fake');
+  assert.equal(unauthorizedRelease.success, false);
+
+  const authorizedRelease = sessionEngine.p2pEngine.buyerReleaseEscrowEarly('tx_escrow_101', 'buyer_john');
+  assert.equal(authorizedRelease.success, true);
+  assert.equal(authorizedRelease.status, 'ESCROW_RELEASED_EARLY_BY_BUYER');
+
+  // Re-create hold for session engine test
+  sessionEngine.p2pEngine.createP2PEscrowHold({
+    transactionId: 'tx_escrow_102',
+    buyerId: 'buyer_john',
+    sellerId: 'seller_mary',
+    amountCents: 200000
+  });
+
+  // Seed session with tx
+  const session = await sessionEngine.getSession('buyer_john');
+  session.transactionId = 'tx_escrow_102';
+  await sessionEngine.saveSession('buyer_john', session);
+
+  const response = await sessionEngine.handleIncomingMessage('buyer_john', 'Release escrow now');
+  assert.ok(response.text.includes('Escrow Funds Released'));
+});

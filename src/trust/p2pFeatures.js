@@ -7,6 +7,7 @@ export class P2PCommerceEngine {
   constructor(db) {
     this.db = db;
     this.sellerTrustScores = new Map();
+    this.escrowHolds = new Map();
   }
 
   /**
@@ -54,7 +55,7 @@ export class P2PCommerceEngine {
     const holdHours = 24;
     const releaseTimestamp = Date.now() + (holdHours * 60 * 60 * 1000);
 
-    return {
+    const hold = {
       transactionId,
       buyerId,
       sellerId,
@@ -63,6 +64,40 @@ export class P2PCommerceEngine {
       releaseTimestamp,
       inspectionWindowHours: holdHours,
       noticeText: `🛡️ *Paystack Escrow Protection Active:* Your payment of R${(amountCents / 100).toFixed(2)} is held safely in escrow. You have a 24-hour inspection window after delivery to inspect the item before money is released to the seller.`
+    };
+
+    this.escrowHolds.set(transactionId, hold);
+    return hold;
+  }
+
+  /**
+   * Allows buyer to override the 24-hour inspection hold immediately if satisfied with goods.
+   */
+  buyerReleaseEscrowEarly(transactionId, buyerId) {
+    const hold = this.escrowHolds.get(transactionId);
+    if (!hold) {
+      return {
+        success: false,
+        message: 'Escrow transaction record not found.'
+      };
+    }
+
+    if (hold.buyerId !== buyerId) {
+      return {
+        success: false,
+        message: 'Unauthorized: Only the buyer can release escrow funds early.'
+      };
+    }
+
+    hold.status = 'ESCROW_RELEASED_EARLY_BY_BUYER';
+    hold.releasedAt = Date.now();
+    this.recordCompletedDeal(hold.sellerId);
+
+    return {
+      success: true,
+      transactionId,
+      status: hold.status,
+      message: `🎉 *Escrow Funds Released!* You have approved early release of R${(hold.amountCents / 100).toFixed(2)} to seller (${hold.sellerId}). Thank you for confirming!`
     };
   }
 }
