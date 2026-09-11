@@ -17,6 +17,9 @@ import { SentinelSelfHealingMonitor } from './sentinel/sentinel.js';
 import { ExternalAgentInteropAdapter } from './network/interop.js';
 import { AgentMatchingEngine } from './network/matching.js';
 import { NetworkDiscovery } from './network/discovery.js';
+import { MCPServerAdapter } from './network/mcpServer.js';
+import { P2PCommerceEngine } from './trust/p2pFeatures.js';
+import { A2ACommerceEngine } from './trust/a2aCommerce.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -28,6 +31,25 @@ export default {
       return new Response(JSON.stringify({ status: 'ok', service: 'myAI v25 Network Node' }), {
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // Route: Model Context Protocol (MCP) JSON-RPC 2.0 Endpoint
+    if ((path === '/api/v25/mcp/rpc' || path === '/api/v25/mcp/tools') && method === 'POST') {
+      try {
+        const body = await request.json();
+        const discovery = new NetworkDiscovery();
+        const matching = new AgentMatchingEngine(discovery);
+        const p2p = new P2PCommerceEngine(env?.DB);
+        const a2a = new A2ACommerceEngine();
+        const mcpServer = new MCPServerAdapter(matching, p2p, a2a);
+
+        const rpcResponse = await mcpServer.handleJSONRPCRequest(body);
+        return new Response(JSON.stringify(rpcResponse), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32603, message: err.message } }), { status: 500 });
+      }
     }
 
     // Route: External Agent Interoperability Protocol (Google A2A / Meta / Open Protocols)

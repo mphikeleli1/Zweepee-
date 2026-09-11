@@ -28,6 +28,7 @@ import { AntiAbuseGuardEngine } from '../src/trust/antiAbuse.js';
 import { P2PCommerceEngine } from '../src/trust/p2pFeatures.js';
 import { AICostCurtailmentEngine } from '../src/lib/aiOptimizer.js';
 import { A2ACommerceEngine } from '../src/trust/a2aCommerce.js';
+import { MCPServerAdapter } from '../src/network/mcpServer.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -620,4 +621,58 @@ test('28. Multi-Stop Tour Splitting (>3 Pickups) & Partial Fulfillment Refunds',
   assert.equal(partialRefund.refundRecord.refundAmountCents, 15000);
   assert.ok(partialRefund.customerMessage.includes('Dis-Chem Pharmacy was out of stock'));
   assert.ok(partialRefund.customerMessage.includes('refund of R150.00'));
+});
+
+test('29. Model Context Protocol (MCP) Server Adapter & JSON-RPC 2.0 Interop', async () => {
+  const discovery = new NetworkDiscovery();
+  const matching = new AgentMatchingEngine(discovery);
+  const p2p = new P2PCommerceEngine();
+  const a2a = new A2ACommerceEngine();
+  const mcp = new MCPServerAdapter(matching, p2p, a2a);
+
+  // 1. Tool listing request (tools/list)
+  const toolsResponse = await mcp.handleJSONRPCRequest({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/list'
+  });
+
+  assert.equal(toolsResponse.jsonrpc, '2.0');
+  assert.equal(toolsResponse.id, 1);
+  assert.ok(toolsResponse.result.tools.some(t => t.name === 'discover_supply_demand'));
+  assert.ok(toolsResponse.result.tools.some(t => t.name === 'post_supply_offer'));
+  assert.ok(toolsResponse.result.tools.some(t => t.name === 'negotiate_a2a_deal'));
+  assert.ok(toolsResponse.result.tools.some(t => t.name === 'request_transaction_checkout'));
+
+  // 2. Tool execution (tools/call: discover_supply_demand)
+  const discoverCall = await mcp.handleJSONRPCRequest({
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'tools/call',
+    params: {
+      name: 'discover_supply_demand',
+      arguments: { query: '11 cashiers Midrand', vertical: 'JOBS' }
+    }
+  });
+
+  assert.equal(discoverCall.id, 2);
+  const contentObj = JSON.parse(discoverCall.result.content[0].text);
+  assert.equal(contentObj.status, 'SUCCESS');
+  assert.equal(contentObj.zeroAdBias, true);
+  assert.equal(contentObj.vertical, 'JOBS');
+
+  // 3. Tool execution (tools/call: negotiate_a2a_deal)
+  const negCall = await mcp.handleJSONRPCRequest({
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'tools/call',
+    params: {
+      name: 'negotiate_a2a_deal',
+      arguments: { buyerMaxCents: 330000, askingPriceCents: 350000, sellerMinCents: 320000 }
+    }
+  });
+
+  const negObj = JSON.parse(negCall.result.content[0].text);
+  assert.equal(negObj.agreed, true);
+  assert.equal(negObj.agreedPriceCents, 325000);
 });
