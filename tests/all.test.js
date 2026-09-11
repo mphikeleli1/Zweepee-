@@ -471,7 +471,6 @@ test('23. A2A Commerce Autonomous Price Negotiation', () => {
 test('24. PersonalAgent Multi-BA Ownership & Transport Failover Escalation', async () => {
   const pa = new PersonalAgent({ phoneNumber: '27877777777', name: 'John Doe' });
 
-  // Section 3: Single PA owns multiple Business Agents
   const taxiBa = pa.createOrLinkBusinessAgent({ name: "John's Taxi Business", category: 'Transport' });
   const restoBa = pa.createOrLinkBusinessAgent({ name: "John's Restaurant", category: 'Food' });
   const hardwareBa = pa.createOrLinkBusinessAgent({ name: "John's Hardware Store", category: 'Hardware' });
@@ -479,11 +478,41 @@ test('24. PersonalAgent Multi-BA Ownership & Transport Failover Escalation', asy
   assert.equal(pa.getOwnedBusinessAgents().length, 3);
   assert.equal(restoBa.ownerUserId, pa.userId);
 
-  // Section 16: Transport Aggregator Failover Escalation
   const emptyAggregator = new TransportAggregator([]);
-  emptyAggregator.providers = []; // Simulate zero available primary providers
+  emptyAggregator.providers = [];
 
   const failoverQuotes = await emptyAggregator.getQuotes({ distanceKm: 5, totalWeightKg: 1 });
   assert.equal(failoverQuotes.cheapestQuote.providerId, 'local_network_failover');
   assert.ok(failoverQuotes.failoverNotice.includes('Sentinel auto-escalation'));
+});
+
+test('25. Multi-Dimensional Matching Engine (Jobs, Property, Travel Bundles)', () => {
+  const discovery = new NetworkDiscovery();
+  const matchingEngine = new AgentMatchingEngine(discovery);
+
+  // 1. Hiring Cashiers in Midrand
+  const jobsMatch = matchingEngine.matchMultiDimensional({
+    queryText: '11 cashiers with matric around Midrand salary R5k',
+    filters: { vertical: 'JOBS', quantity: 11, maxSalaryCents: 500000, qualification: 'Matric' }
+  });
+  assert.equal(jobsMatch.vertical, 'JOBS');
+  assert.equal(jobsMatch.matched[0].quantityAvailable, 15);
+  assert.equal(jobsMatch.matched[0].salaryCents, 500000);
+
+  // 2. 2-bed flat in JHB CBD
+  const propMatch = matchingEngine.matchMultiDimensional({
+    queryText: '2 bed flat around jhb CBD end Sep kid friendly',
+    filters: { vertical: 'PROPERTY', bedrooms: 2, kidFriendly: true }
+  });
+  assert.equal(propMatch.vertical, 'PROPERTY');
+  assert.equal(propMatch.matched[0].bedrooms, 2);
+  assert.equal(propMatch.matched[0].isKidFriendly, true);
+
+  // 3. Travel & Insurance Bundle
+  const bundleMatch = matchingEngine.matchMultiDimensional({
+    queryText: 'CPT beachfront hotel loan insurance car hire',
+    filters: { vertical: 'BUNDLE' }
+  });
+  assert.equal(bundleMatch.vertical, 'BUNDLE');
+  assert.equal(bundleMatch.components.length, 3);
 });

@@ -2,6 +2,75 @@ import { centsToRandsFormatted } from '../lib/money.js';
 
 export class WhatsAppUIBuilder {
   /**
+   * JOBS / RECRUITMENT MATCH SCREEN
+   */
+  renderJobsMatchScreen({ jobTitle, location, quantity, salaryCents, agentName }) {
+    return {
+      type: 'JOBS_MATCH_SCREEN',
+      text: `👔 *Recruitment Matching Result*\n` +
+        `───────────────\n\n` +
+        `💼 *Role:* ${jobTitle}\n` +
+        `📍 *Location:* ${location}\n` +
+        `👥 *Quantity Available:* ${quantity} Candidates\n` +
+        `💵 *Salary Offered:* ${centsToRandsFormatted(salaryCents)}/month\n` +
+        `🏢 *Matched Agent:* ${agentName}\n\n` +
+        `───────────────\n` +
+        `Tap below to connect agents and initiate candidate interview scheduling!`,
+      buttons: [
+        { type: 'reply', reply: { id: 'connect_job_agent', title: '🤝 Connect Agents' } }
+      ]
+    };
+  }
+
+  /**
+   * PROPERTY / RENTALS MATCH SCREEN
+   */
+  renderPropertyMatchScreen({ title, location, rentCents, bedrooms, availableFrom, agentName }) {
+    return {
+      type: 'PROPERTY_MATCH_SCREEN',
+      text: `🏡 *Property Rental Matching Result*\n` +
+        `───────────────\n\n` +
+        `🏠 *Property:* ${title}\n` +
+        `📍 *Location:* ${location}\n` +
+        `🛏️ *Bedrooms:* ${bedrooms}\n` +
+        `💵 *Monthly Rent:* ${centsToRandsFormatted(rentCents)}\n` +
+        `📅 *Move-in Date:* ${availableFrom}\n` +
+        `🏢 *Listing Agent:* ${agentName}\n\n` +
+        `───────────────\n` +
+        `Tap below to request a viewing or lock in Paystack lease deposit escrow!`,
+      buttons: [
+        { type: 'reply', reply: { id: 'connect_prop_agent', title: '🤝 Connect Agent' } }
+      ]
+    };
+  }
+
+  /**
+   * TRAVEL & INSURANCE BUNDLE MATCH SCREEN
+   */
+  renderTravelBundleScreen({ title, components = [], totalBundleCents }) {
+    let text = `✈️ *Travel & Holiday Bundle Result*\n` +
+      `───────────────\n\n` +
+      `🌴 *Bundle Title:* ${title}\n\n` +
+      `*Included Service Components:*\n`;
+
+    components.forEach((c, idx) => {
+      text += `${idx + 1}️⃣ *${c.name}* — ${centsToRandsFormatted(c.priceCents)}\n`;
+    });
+
+    text += `\n───────────────\n` +
+      `💳 *PACKAGE TOTAL:* *${centsToRandsFormatted(totalBundleCents)}*\n` +
+      `💡 *Single Instant 1-Tap Booking!*`;
+
+    return {
+      type: 'BUNDLE_MATCH_SCREEN',
+      text,
+      buttons: [
+        { type: 'reply', reply: { id: 'book_travel_bundle', title: `💳 Book Bundle (${centsToRandsFormatted(totalBundleCents)})` } }
+      ]
+    };
+  }
+
+  /**
    * APPLE-LEVEL 1-TAP INSTANT CHECKOUT SCREEN WITH LOCATION & ITEM SWAPPER
    */
   renderOneTapCheckoutScreen({ storeName, itemName, itemPriceCents, vehicleClass, providerName, transportCostCents, totalCustomerPaysCents, deliveryAddress, transactionId }) {
@@ -206,7 +275,7 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * SCREEN 5 & 6: CONFIRM & PAY WITH P2P ESCROW PROTECTION & TRUST BADGING
+   * SCREEN 5 & 6: CONFIRM & PAY
    */
   renderConfirmScreen({ transactionId, totalCustomerPaysCents, isP2P = false, sellerBadge = '🛡️ VERIFIED TRUSTED SELLER' }) {
     let text = `🧾 *Final Order Confirmation*\n` +
