@@ -1,21 +1,43 @@
 export class MultiStopRouteOptimizer {
+  /**
+   * Optimises multi-stop tour sequences.
+   * Automatically enforces max 3 pickups per tour to keep food hot and ETAs fast.
+   */
   optimiseRoute(stops = []) {
     if (stops.length <= 2) {
       return {
         stops,
-        totalDistanceKm: this.calculateTotalDistance(stops)
+        totalDistanceKm: this.calculateTotalDistance(stops),
+        clusters: [stops]
       };
     }
 
     const pickups = stops.filter(s => s.type === 'PICKUP');
     const dropoffs = stops.filter(s => s.type === 'DROPOFF');
 
+    // Multi-stop tour clustering (max 3 pickups per tour cluster)
+    const MAX_PICKUPS_PER_TOUR = 3;
+    const tourClusters = [];
+
+    for (let i = 0; i < pickups.length; i += MAX_PICKUPS_PER_TOUR) {
+      const pickupCluster = pickups.slice(i, i + MAX_PICKUPS_PER_TOUR);
+      const clusterStops = [...pickupCluster, ...dropoffs];
+      tourClusters.push({
+        clusterIndex: Math.floor(i / MAX_PICKUPS_PER_TOUR) + 1,
+        stops: clusterStops,
+        pickupCount: pickupCluster.length,
+        totalDistanceKm: this.calculateTotalDistance(clusterStops)
+      });
+    }
+
     const sortedPickups = [...pickups];
     const orderedStops = [...sortedPickups, ...dropoffs];
 
     return {
       stops: orderedStops,
-      totalDistanceKm: this.calculateTotalDistance(orderedStops)
+      totalDistanceKm: this.calculateTotalDistance(orderedStops),
+      isMultiTourSplit: pickups.length > MAX_PICKUPS_PER_TOUR,
+      tourClusters
     };
   }
 

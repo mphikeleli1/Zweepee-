@@ -586,3 +586,38 @@ test('27. Dynamic Affiliate Referral Commissions & Buyer Early Escrow Release Ov
   const response = await sessionEngine.handleIncomingMessage('buyer_john', 'Release escrow now');
   assert.ok(response.text.includes('Escrow Funds Released'));
 });
+
+test('28. Multi-Stop Tour Splitting (>3 Pickups) & Partial Fulfillment Refunds', async () => {
+  const optimizer = new MultiStopRouteOptimizer();
+  const stops8 = [
+    { id: 'kfc', lat: -26.20, lng: 28.04, type: 'PICKUP', name: 'KFC' },
+    { id: 'pnp', lat: -26.21, lng: 28.05, type: 'PICKUP', name: 'Pick n Pay' },
+    { id: 'makro', lat: -26.22, lng: 28.06, type: 'PICKUP', name: 'Makro' },
+    { id: 'spar', lat: -26.23, lng: 28.07, type: 'PICKUP', name: 'Spar' },
+    { id: 'steers', lat: -26.24, lng: 28.08, type: 'PICKUP', name: 'Steers' },
+    { id: 'rocomamas', lat: -26.25, lng: 28.09, type: 'PICKUP', name: 'Rocomamas' },
+    { id: 'pharmacy', lat: -26.26, lng: 28.10, type: 'PICKUP', name: 'Dis-Chem Pharmacy' },
+    { id: 'nandos', lat: -26.27, lng: 28.11, type: 'PICKUP', name: 'Nando\'s' },
+    { id: 'customer', lat: -26.28, lng: 28.12, type: 'DROPOFF', name: 'Customer' }
+  ];
+
+  const result = optimizer.optimiseRoute(stops8);
+  assert.equal(result.isMultiTourSplit, true);
+  assert.equal(result.tourClusters.length, 3); // 8 pickups split into 3-3-2 = 3 parallel courier tours
+  assert.equal(result.tourClusters[0].pickupCount, 3);
+  assert.equal(result.tourClusters[1].pickupCount, 3);
+  assert.equal(result.tourClusters[2].pickupCount, 2);
+
+  const disputeEngine = new DisputeResolutionEngine();
+  const partialRefund = await disputeEngine.processPartialFulfillmentRefund({
+    transactionId: 'tx_multi_8',
+    failedStoreId: 'pharmacy_1',
+    failedStoreName: 'Dis-Chem Pharmacy',
+    failedItemCents: 15000 // R150.00
+  });
+
+  assert.equal(partialRefund.success, true);
+  assert.equal(partialRefund.refundRecord.refundAmountCents, 15000);
+  assert.ok(partialRefund.customerMessage.includes('Dis-Chem Pharmacy was out of stock'));
+  assert.ok(partialRefund.customerMessage.includes('refund of R150.00'));
+});

@@ -39,6 +39,28 @@ export class DisputeResolutionEngine {
   }
 
   /**
+   * Handles Partial Fulfillment when a specific store fails or is out of stock (e.g. Pharmacy fails)
+   */
+  async processPartialFulfillmentRefund({ transactionId, failedStoreId, failedStoreName, failedItemCents }) {
+    const refundRecord = {
+      transactionId,
+      failedStoreId: failedStoreId || 'pharmacy_store',
+      failedStoreName: failedStoreName || 'Pharmacy',
+      refundAmountCents: failedItemCents,
+      status: 'PARTIAL_REFUND_PROCESSED',
+      timestamp: Date.now()
+    };
+
+    const customerMessage = `🛍️ *Partial Fulfillment Update:* ${refundRecord.failedStoreName} was out of stock for part of your order. We have automatically processed an instant refund of R${(failedItemCents / 100).toFixed(2)} directly back to your account.\n\nThe rest of your items from your other stores are on their way!`;
+
+    return {
+      success: true,
+      refundRecord,
+      customerMessage
+    };
+  }
+
+  /**
    * Action: [Rider Stole - Claim Fleet]
    * Fleet Fault Rider Theft Claim Logic:
    * - Rider theft after store pickup = Fleet Fault (Not shop fault, Not customer fault).
