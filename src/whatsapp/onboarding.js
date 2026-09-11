@@ -18,7 +18,8 @@ export class UserOnboardingEngine {
 
   async saveUserProfile(waId, profile) {
     const key = `users:${waId}`;
-    const record = { ...profile, updatedAt: Date.now() };
+    const existing = await this.getUserProfile(waId) || {};
+    const record = { ...existing, ...profile, updatedAt: Date.now() };
     if (this.kvUsers) {
       await this.kvUsers.put(key, JSON.stringify(record));
     } else {
@@ -58,10 +59,29 @@ export class UserOnboardingEngine {
     if (onboardingStep === 'ONBOARDING_AWAITING_NAME') {
       const name = text.trim();
       return {
-        nextStep: 'ONBOARDING_COMPLETED',
+        nextStep: 'ONBOARDING_OPTIONAL_PREFS',
         completedProfile: { name },
         screen: {
           text: `🎉 *Your Personal Agent is Active, ${name}!*\n\n` +
+            `🔒 *POPIA Privacy Guarantee:* Your personal data is 100% encrypted & protected under South African law. We never collect sensitive financial or invasive info.\n\n` +
+            `To give you an even richer, personalized experience, feel free to share any preferences you like (e.g., *Halal food, Woolies shopper, prefer weekend deliveries*)—only what you choose to share!`,
+          buttons: [
+            { type: 'reply', reply: { id: 'prompt_prefs', title: '🎨 Add Preferences' } },
+            { type: 'reply', reply: { id: 'skip_prefs', title: '⏱️ Do This Later' } }
+          ]
+        }
+      };
+    }
+
+    if (onboardingStep === 'ONBOARDING_OPTIONAL_PREFS') {
+      const prefs = text.trim();
+      const isSkip = prefs.toLowerCase().includes('skip') || prefs.toLowerCase().includes('later') || text === 'skip_prefs';
+
+      return {
+        nextStep: 'ONBOARDING_COMPLETED',
+        completedProfile: isSkip ? {} : { preferences: prefs },
+        screen: {
+          text: `🎉 *You're All Set!*\n\n` +
             `I am ready to assist you anytime. How may I help you today?`,
           buttons: [
             { type: 'reply', reply: { id: 'action_food', title: '🍔 Order Food / Groceries' } },

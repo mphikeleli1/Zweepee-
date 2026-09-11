@@ -289,7 +289,11 @@ test('13. New User Onboarding Engine', async () => {
   assert.equal(res2.draftProfile.address, 'Rosebank');
 
   const res3 = await onboarding.handleOnboarding('27811111111', 'Sipho', 'ONBOARDING_AWAITING_NAME');
-  assert.equal(res3.nextStep, 'ONBOARDING_COMPLETED');
+  assert.equal(res3.nextStep, 'ONBOARDING_OPTIONAL_PREFS');
+  assert.ok(res3.screen.text.includes('POPIA Privacy Guarantee'));
+
+  const res4 = await onboarding.handleOnboarding('27811111111', 'skip_prefs', 'ONBOARDING_OPTIONAL_PREFS');
+  assert.equal(res4.nextStep, 'ONBOARDING_COMPLETED');
 });
 
 test('14. GPS Location Pin Capturing & Universal Click & Collect Stores', async () => {
