@@ -77,6 +77,19 @@ export class WhatsAppSessionEngine {
         address: locationObj.address || locationObj.name || `${locationObj.latitude.toFixed(4)}, ${locationObj.longitude.toFixed(4)}`
       };
       session.activeAddress = session.gpsLocation.address;
+
+      let userProfile = await this.onboardingEngine.getUserProfile(waId);
+      if (!userProfile && session.onboardingStep === 'ONBOARDING_AWAITING_LOCATION') {
+        session.draftAddress = session.gpsLocation.address;
+        session.onboardingStep = 'ONBOARDING_AWAITING_NAME';
+        await this.saveSession(waId, session);
+
+        return {
+          text: `📍 *Location Saved:* ${session.gpsLocation.address}\n\n` +
+            `Awesome! What is your *name* so I can build, personalize, and activate your Personal Agent?`
+        };
+      }
+
       await this.saveSession(waId, session);
 
       return this.uiBuilder.renderLocationPinCaptured({
