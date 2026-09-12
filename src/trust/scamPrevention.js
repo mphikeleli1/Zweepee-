@@ -32,13 +32,17 @@ export class ScamPreventionEngine {
     return sum % 10 === 0;
   }
 
-  validateListingProtection({ item, photoUrl, serialOrImei, sellerId, isNewSeller }) {
+  validateListingProtection({ item = {}, photoUrl, serialOrImei, sellerId, isNewSeller } = {}) {
     const errors = [];
 
-    const isHighRisk = item.category === 'Electronics' ||
-      item.name.toLowerCase().includes('iphone') ||
-      item.name.toLowerCase().includes('samsung') ||
-      item.priceCents > 100000;
+    const itemName = (item.name || '').toLowerCase();
+    const itemCategory = item.category || 'General';
+    const priceCents = item.priceCents || 0;
+
+    const isHighRisk = itemCategory === 'Electronics' ||
+      itemName.includes('iphone') ||
+      itemName.includes('samsung') ||
+      priceCents > 100000;
 
     if (isHighRisk) {
       if (!photoUrl) {
@@ -61,11 +65,17 @@ export class ScamPreventionEngine {
 
     const requiresEscrowHold = isNewSeller || item.priceCents > 150000;
 
+    const escrowHoldDays = requiresEscrowHold ? 3 : 0;
+    const escrowHoldNotice = requiresEscrowHold
+      ? `3-Day Escrow Security Hold Active for seller ${sellerId || 'P2P'}`
+      : 'Standard Instant P2P Escrow';
+
     return {
       approved: errors.length === 0,
       errors,
       requiresEscrowHold,
-      escrowHoldDays: requiresEscrowHold ? 3 : 0
+      escrowHoldDays,
+      escrowHoldNotice
     };
   }
 

@@ -1,3 +1,5 @@
+import { detectLanguage, translate } from '../lib/i18n.js';
+
 export class UserOnboardingEngine {
   constructor(kvUsers) {
     this.kvUsers = kvUsers;
@@ -29,11 +31,15 @@ export class UserOnboardingEngine {
   }
 
   async handleOnboarding(waId, text, onboardingStep) {
+    const detectedLang = detectLanguage(text);
+
     if (!onboardingStep || onboardingStep === 'ONBOARDING_START') {
+      const welcomeHeader = translate('welcome', detectedLang);
       return {
         nextStep: 'ONBOARDING_AWAITING_LOCATION',
+        draftProfile: { preferredLanguage: detectedLang },
         screen: {
-          text: `🌟 *Welcome to myAI™!*\n\n` +
+          text: `${welcomeHeader}\n\n` +
             `I am your 24/7 personal helper. I can assist you with almost *anything* in South Africa:\n` +
             `• 🍔 Order food & groceries (KFC, Woolies, Pick n Pay, Makro, Dis-Chem, Specsavers) at exact store prices\n` +
             `• 🏷️ Buy or sell used items safely with delivery to your door\n` +

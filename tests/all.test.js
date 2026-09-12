@@ -30,6 +30,7 @@ import { AICostCurtailmentEngine } from '../src/lib/aiOptimizer.js';
 import { A2ACommerceEngine } from '../src/trust/a2aCommerce.js';
 import { MCPServerAdapter } from '../src/network/mcpServer.js';
 import { SAApiStackManager } from '../src/commerce/saApiStack.js';
+import { detectLanguage, translate, SUPPORTED_LANGUAGES } from '../src/lib/i18n.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -909,4 +910,23 @@ test('33. Universal Multi-Vertical Dispute Resolution Mechanisms', async () => {
   const disputeResponse = await sessionEngine.handleIncomingMessage('27826666666', 'Meter token failed to generate');
   assert.equal(disputeResponse.type, 'DISPUTE_RESOLUTION_SCREEN');
   assert.ok(disputeResponse.text.includes('Prepaid Electricity Token Refresh'));
+});
+
+test('34. Multilingual Language Detection & Localized UI Templates', () => {
+  // 1. Language Detection
+  assert.equal(detectLanguage('Sawubona, ngicela ukuta ukudla'), SUPPORTED_LANGUAGES.ZU);
+  assert.equal(detectLanguage('Molo, unjani namhlanje'), SUPPORTED_LANGUAGES.XH);
+  assert.equal(detectLanguage('Goeiedag, ek wil graag kos bestel'), SUPPORTED_LANGUAGES.AF);
+  assert.equal(detectLanguage('Dumela, re a leboga'), SUPPORTED_LANGUAGES.NSO);
+  assert.equal(detectLanguage('Hello, I would like to order food'), SUPPORTED_LANGUAGES.EN);
+
+  // 2. Localization Translations
+  const zuWelcome = translate('welcome', SUPPORTED_LANGUAGES.ZU);
+  assert.ok(zuWelcome.includes('Siyakwamukela'));
+
+  const afPayNow = translate('pay_now', SUPPORTED_LANGUAGES.AF, { total: 'R150.00' });
+  assert.equal(afPayNow, '💳 Betaal R150.00');
+
+  const xhCheckoutHeader = translate('checkout_title', SUPPORTED_LANGUAGES.XH);
+  assert.ok(xhCheckoutHeader.includes('Ukuhlawula Kwangoko'));
 });

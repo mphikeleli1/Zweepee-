@@ -1,4 +1,5 @@
 import { centsToRandsFormatted } from '../lib/money.js';
+import { translate } from '../lib/i18n.js';
 
 export class WhatsAppUIBuilder {
   /**
@@ -90,10 +91,12 @@ export class WhatsAppUIBuilder {
   /**
    * APPLE-LEVEL 1-TAP INSTANT CHECKOUT SCREEN WITH LOCATION & ITEM SWAPPER
    */
-  renderOneTapCheckoutScreen({ storeName, itemName, itemPriceCents, vehicleClass, providerName, transportCostCents, totalCustomerPaysCents, deliveryAddress, transactionId }) {
+  renderOneTapCheckoutScreen({ storeName, itemName, itemPriceCents, vehicleClass, providerName, transportCostCents, totalCustomerPaysCents, deliveryAddress, transactionId, lang = 'en' }) {
     const vehicleIcon = vehicleClass === 'BIKE' ? '🏍️' : '🚛';
+    const header = translate('checkout_title', lang);
+    const payTitle = translate('pay_now', lang, { total: centsToRandsFormatted(totalCustomerPaysCents) });
 
-    const text = `✨ *myAI™ Instant Checkout* ✨\n` +
+    const text = `${header}\n` +
       `───────────────\n\n` +
       `🏬 *Merchant:* ${storeName}\n` +
       `🛍️ *Item Selected:* *${itemName}* (${centsToRandsFormatted(itemPriceCents)})\n` +
@@ -107,7 +110,7 @@ export class WhatsAppUIBuilder {
       type: 'ONE_TAP_CHECKOUT_SCREEN',
       text,
       buttons: [
-        { type: 'reply', reply: { id: `tap_approve_${transactionId}`, title: `💳 Pay ${centsToRandsFormatted(totalCustomerPaysCents)}` } },
+        { type: 'reply', reply: { id: `tap_approve_${transactionId}`, title: payTitle } },
         { type: 'reply', reply: { id: 'swap_item', title: '🔄 Swap Item / Menu' } },
         { type: 'reply', reply: { id: 'change_location', title: '📍 Change Address' } }
       ]

@@ -14,6 +14,7 @@ import { AgentFactory } from '../agents/factory.js';
 import { AgentMatchingEngine } from '../network/matching.js';
 import { NetworkDiscovery } from '../network/discovery.js';
 import { SAApiStackManager } from '../commerce/saApiStack.js';
+import { detectLanguage, translate } from '../lib/i18n.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -162,6 +163,12 @@ export class WhatsAppSessionEngine {
       return { text: releaseResult.message };
     }
 
+    // 3b. Multilingual Preference Detection
+    const detectedLang = detectLanguage(text);
+    if (detectedLang && detectedLang !== 'en') {
+      session.preferredLanguage = detectedLang;
+    }
+
     // 4. New User Onboarding Check
     let userProfile = await this.onboardingEngine.getUserProfile(waId);
     if (!userProfile) {
@@ -231,9 +238,8 @@ export class WhatsAppSessionEngine {
       const priceCents = Math.round(parseFloat(priceRandStr) * 100) || 100000;
 
       const protection = this.scamEngine.validateListingProtection({
-        sellerPhone: waId,
-        itemName,
-        askingPriceCents: priceCents
+        sellerId: waId,
+        item: { name: itemName, priceCents, category: 'General' }
       });
 
       return {
