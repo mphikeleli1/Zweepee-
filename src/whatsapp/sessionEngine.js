@@ -107,23 +107,52 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 2. Dispute Handler
-    if (text.toLowerCase().includes('parcel not delivered') || text.toLowerCase().includes('not delivered') || text.toLowerCase().includes('wrong item') || text.toLowerCase().includes('dispute')) {
-      const dispute = await this.disputeEngine.fileDispute({
-        orderId: session.transactionId || 'ord_recent',
+    // 2. Multi-Vertical Dispute Handler
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes('dispute') || lowerText.includes('meter token failed') || lowerText.includes('hotel denied checkin') || lowerText.includes('rental deposit hold') || lowerText.includes('locker pin expired') || lowerText.includes('ticket barcode invalid') || lowerText.includes('esim not working') || lowerText.includes('double debited') || lowerText.includes('parcel not delivered')) {
+      let vertical = 'FLEET_FAULT_DELIVERY';
+      let issueCode = 'DELIVERY_FAILURE';
+
+      if (lowerText.includes('meter') || lowerText.includes('electricity') || lowerText.includes('token')) {
+        vertical = 'AIRTIME_DATA_ELECTRICITY';
+        issueCode = 'TOKEN_NOT_RECEIVED';
+      } else if (lowerText.includes('hotel') || lowerText.includes('checkin') || lowerText.includes('flight')) {
+        vertical = 'TRAVEL_HOTEL_FLIGHT';
+        issueCode = 'CHECKIN_REFUSED';
+      } else if (lowerText.includes('deposit') || lowerText.includes('rental')) {
+        vertical = 'CAR_RENTAL';
+        issueCode = 'DEPOSIT_HOLD_DISPUTE';
+      } else if (lowerText.includes('ticket') || lowerText.includes('barcode') || lowerText.includes('quicket')) {
+        vertical = 'EVENT_TICKETS';
+        issueCode = 'INVALID_BARCODE';
+      } else if (lowerText.includes('esim') || lowerText.includes('airalo')) {
+        vertical = 'ESIM_DATA';
+        issueCode = 'PROFILE_ACTIVATION_FAILED';
+      } else if (lowerText.includes('locker') || lowerText.includes('pudo') || lowerText.includes('pin expired')) {
+        vertical = 'COURIER_LOCKER';
+        issueCode = 'LOCKER_PIN_EXPIRED';
+      } else if (lowerText.includes('double debited') || lowerText.includes('duplicate payment') || lowerText.includes('stitch')) {
+        vertical = 'INSTANT_EFT_BANK';
+        issueCode = 'DUPLICATE_DEBIT';
+      } else if (lowerText.includes('rates') || lowerText.includes('tshwane') || lowerText.includes('joburg')) {
+        vertical = 'MUNICIPAL_RATES';
+        issueCode = 'PAYMENT_CLEARANCE_QUERY';
+      }
+
+      const dispute = await this.disputeEngine.fileMultiVerticalDispute({
+        orderId: session.transactionId || 'tx_recent_order',
         customerPhone: waId,
-        issueType: 'PARCEL_NOT_DELIVERED',
-        comments: text
+        vertical,
+        issueCode,
+        details: text
       });
 
-      const resolution = await this.disputeEngine.resolveDispute(dispute.disputeId, 'FREE_REMAKE');
+      const autoRes = await this.disputeEngine.autoResolveVerticalDispute(dispute.disputeId);
 
-      return {
-        text: `🤝 *Dispute Support Center*\n` +
-          `───────────────\n\n` +
-          `We have registered your report (*Reference:* ${dispute.disputeId}). Payment to the courier has been *PAUSED* immediately for your protection.\n\n` +
-          `${resolution.customerMessage}`
-      };
+      return this.uiBuilder.renderDisputeResolutionScreen({
+        disputeId: dispute.disputeId,
+        resolutionMessage: autoRes.customerMessage
+      });
     }
 
     // 3. Early Buyer Escrow Release Handler

@@ -362,4 +362,39 @@ export class WhatsAppUIBuilder {
       ]
     };
   }
+
+  /**
+   * MULTI-VERTICAL DISPUTE OPTIONS SCREEN
+   */
+  renderDisputeOptionsScreen({ disputeId, vertical, issueTitle }) {
+    return {
+      type: 'DISPUTE_OPTIONS_SCREEN',
+      text: `🤝 *Universal Dispute Resolution Center*\n` +
+        `───────────────\n\n` +
+        `🆔 *Dispute Reference:* ${disputeId}\n` +
+        `🏷️ *Category:* ${vertical}\n` +
+        `⚠️ *Issue:* ${issueTitle}\n\n` +
+        `🔒 Payment to supplier/merchant has been *PAUSED* immediately for your protection.\n\n` +
+        `How would you like your Personal Agent to resolve this issue right now?`,
+      buttons: [
+        { type: 'reply', reply: { id: `autoresolve_${disputeId}`, title: '⚡ Auto-Resolve Now' } },
+        { type: 'reply', reply: { id: `refund_${disputeId}`, title: '💵 100% Full Refund' } }
+      ]
+    };
+  }
+
+  /**
+   * MULTI-VERTICAL DISPUTE RESOLUTION SCREEN
+   */
+  renderDisputeResolutionScreen({ disputeId, resolutionMessage }) {
+    return {
+      type: 'DISPUTE_RESOLUTION_SCREEN',
+      text: `🌸 *Dispute Resolution Summary*\n` +
+        `───────────────\n\n` +
+        `🆔 *Reference:* ${disputeId}\n\n` +
+        `${resolutionMessage}\n\n` +
+        `───────────────\n` +
+        `Thank you for using myAI™! Is there anything else I can help you with today?`
+    };
+  }
 }

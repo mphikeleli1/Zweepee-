@@ -831,3 +831,82 @@ test('32. PayFast Instant EFT Zero Fee Waiver Threshold (<= R3,000.00)', async (
   assert.equal(pricingStandard.isZeroFeeInstantEFT, false);
   assert.equal(pricingStandard.paymentFeeCents, 250, 'PayFast Instant EFT for order over R3000 must charge R2.50 standard payment fee');
 });
+
+test('33. Universal Multi-Vertical Dispute Resolution Mechanisms', async () => {
+  const disputeEngine = new DisputeResolutionEngine();
+
+  // 1. Electricity / Flash Meter Token Dispute
+  const elecDispute = await disputeEngine.fileMultiVerticalDispute({
+    orderId: 'tx_elec_101',
+    customerPhone: '27821111111',
+    vertical: 'AIRTIME_DATA_ELECTRICITY',
+    issueCode: 'TOKEN_NOT_RECEIVED',
+    details: 'Meter token failed to arrive'
+  });
+  const elecRes = await disputeEngine.autoResolveVerticalDispute(elecDispute.disputeId);
+  assert.equal(elecRes.success, true);
+  assert.equal(elecRes.record.resolutionAction, 'FLASH_API_REQUERY_AND_RESEND');
+  assert.ok(elecRes.customerMessage.includes('Prepaid Electricity Token Refresh'));
+
+  // 2. Travel & Hotel Check-in Dispute
+  const hotelDispute = await disputeEngine.fileMultiVerticalDispute({
+    orderId: 'tx_hotel_202',
+    customerPhone: '27822222222',
+    vertical: 'TRAVEL_HOTEL_FLIGHT',
+    issueCode: 'CHECKIN_REFUSED',
+    details: 'Hotel desk denied checkin'
+  });
+  const hotelRes = await disputeEngine.autoResolveVerticalDispute(hotelDispute.disputeId);
+  assert.equal(hotelRes.success, true);
+  assert.equal(hotelRes.record.resolutionAction, 'AMADEUS_ROOM_UPGRADE_OR_RELOCATION');
+  assert.ok(hotelRes.customerMessage.includes('Free Executive Suite Upgrade'));
+
+  // 3. Car Rental Deposit Hold Dispute
+  const rentalDispute = await disputeEngine.fileMultiVerticalDispute({
+    orderId: 'tx_car_303',
+    customerPhone: '27823333333',
+    vertical: 'CAR_RENTAL',
+    issueCode: 'DEPOSIT_HOLD_DISPUTE',
+    details: 'Rental deposit hold not released'
+  });
+  const rentalRes = await disputeEngine.autoResolveVerticalDispute(rentalDispute.disputeId);
+  assert.equal(rentalRes.success, true);
+  assert.equal(rentalRes.record.resolutionAction, 'DEPOSIT_HOLD_RELEASE_ESCALATION');
+  assert.ok(rentalRes.customerMessage.includes('RELEASED'));
+
+  // 4. PUDO Smart Locker PIN Expired Dispute
+  const lockerDispute = await disputeEngine.fileMultiVerticalDispute({
+    orderId: 'tx_locker_404',
+    customerPhone: '27824444444',
+    vertical: 'COURIER_LOCKER',
+    issueCode: 'LOCKER_PIN_EXPIRED',
+    details: 'Locker door PIN expired'
+  });
+  const lockerRes = await disputeEngine.autoResolveVerticalDispute(lockerDispute.disputeId);
+  assert.equal(lockerRes.success, true);
+  assert.equal(lockerRes.record.resolutionAction, 'PUDO_PIN_OVERRIDE_TRIGGER');
+  assert.ok(lockerRes.customerMessage.includes('881-209'));
+
+  // 5. Instant EFT Duplicate Bank Debit Dispute
+  const eftDispute = await disputeEngine.fileMultiVerticalDispute({
+    orderId: 'tx_eft_505',
+    customerPhone: '27825555555',
+    vertical: 'INSTANT_EFT_BANK',
+    issueCode: 'DUPLICATE_DEBIT',
+    details: 'Double debited on Stitch'
+  });
+  const eftRes = await disputeEngine.autoResolveVerticalDispute(eftDispute.disputeId);
+  assert.equal(eftRes.success, true);
+  assert.equal(eftRes.record.resolutionAction, 'STITCH_DUPLICATE_DEBIT_REVERSAL');
+  assert.ok(eftRes.customerMessage.includes('100% full refund of R350.00'));
+
+  // 6. Test Session Engine Dispute Intercept
+  const sessionEngine = new WhatsAppSessionEngine();
+  await sessionEngine.handleIncomingMessage('27826666666', 'hi');
+  await sessionEngine.handleIncomingMessage('27826666666', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27826666666', 'Lindiwe');
+
+  const disputeResponse = await sessionEngine.handleIncomingMessage('27826666666', 'Meter token failed to generate');
+  assert.equal(disputeResponse.type, 'DISPUTE_RESOLUTION_SCREEN');
+  assert.ok(disputeResponse.text.includes('Prepaid Electricity Token Refresh'));
+});
