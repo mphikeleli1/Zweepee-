@@ -234,7 +234,7 @@ test('10. Stateful WhatsApp Session Engine & Payment Webhooks', async () => {
   assert.ok(addressScreen.text.includes('Location Saved'));
 
   const nameScreen = await sessionEngine.handleIncomingMessage('27820000000', 'John Doe');
-  assert.ok(nameScreen.text.includes('Personal Agent is Active'));
+  assert.ok(nameScreen.text.includes('Personal Helper is Active'));
 
   const paystack = new PaystackPaymentGateway('sk_test_mock_paystack_key');
   const paystackValid = await paystack.verifyWebhookSignature('{"event":"charge.success"}', 'mock_sig');
@@ -292,7 +292,7 @@ test('13. New User Onboarding Engine', async () => {
 
   const res3 = await onboarding.handleOnboarding('27811111111', 'Sipho', 'ONBOARDING_AWAITING_NAME');
   assert.equal(res3.nextStep, 'ONBOARDING_OPTIONAL_PREFS');
-  assert.ok(res3.screen.text.includes('POPIA Privacy Guarantee'));
+  assert.ok(res3.screen.text.includes('Your Privacy Guarantee'));
 
   const res4 = await onboarding.handleOnboarding('27811111111', 'skip_prefs', 'ONBOARDING_OPTIONAL_PREFS');
   assert.equal(res4.nextStep, 'ONBOARDING_COMPLETED');
