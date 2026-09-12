@@ -4,7 +4,8 @@ export const INTENT_MODES = {
   BUY_PLUS_DELIVER: 'BUY_PLUS_DELIVER',
   TRANSPORT_ONLY: 'TRANSPORT_ONLY',
   JOB_MATCHING: 'JOB_MATCHING',
-  SERVICE_REFERRAL: 'SERVICE_REFERRAL'
+  SERVICE_REFERRAL: 'SERVICE_REFERRAL',
+  BUSINESS_AGENCY_REQUEST: 'BUSINESS_AGENCY_REQUEST'
 };
 
 export function classifyIntent(messageText, metadata = {}) {
@@ -13,6 +14,22 @@ export function classifyIntent(messageText, metadata = {}) {
   }
 
   const text = (messageText || '').toLowerCase().trim();
+
+  // EXPLICIT SMALL BUSINESS INTENT: Must be asked for by the user!
+  if (
+    text.includes('help me run my') ||
+    text.includes('manage my small business') ||
+    text.includes('manage my business') ||
+    text.includes('manage my shop') ||
+    text.includes('manage my salon') ||
+    text.includes('manage my restaurant') ||
+    text.includes('build an agent for my business') ||
+    text.includes('create a bot for my business') ||
+    text.includes('create an agent for my business') ||
+    text.includes('business ai employee')
+  ) {
+    return INTENT_MODES.BUSINESS_AGENCY_REQUEST;
+  }
 
   // ADVICE PROHIBITION RULE: Intercept direct financial, medical, or legal queries
   if (

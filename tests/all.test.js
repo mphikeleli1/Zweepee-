@@ -149,6 +149,7 @@ test('5. Intent Router Classification', () => {
   assert.equal(classifyIntent('I want to sell my used laptop'), INTENT_MODES.A2A_SELL);
   assert.equal(classifyIntent('Transport only: send package to Sandton'), INTENT_MODES.TRANSPORT_ONLY);
   assert.equal(classifyIntent('Order 2 Streetwise Two from KFC'), INTENT_MODES.BUY_PLUS_DELIVER);
+  assert.equal(classifyIntent('Help me run my small business'), INTENT_MODES.BUSINESS_AGENCY_REQUEST);
 });
 
 test('6. Transport Vehicle Selection & Capabilities', async () => {
@@ -679,4 +680,33 @@ test('29. Model Context Protocol (MCP) Server Adapter & JSON-RPC 2.0 Interop', a
   const negObj = JSON.parse(negCall.result.content[0].text);
   assert.equal(negObj.agreed, true);
   assert.equal(negObj.agreedPriceCents, 325000);
+});
+
+test('30. Consultative Business Agent Creation Isolation & Factory Interview', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  // Retail Burger Order must NEVER receive business bot offers!
+  await sessionEngine.handleIncomingMessage('27899999999', 'hi');
+  await sessionEngine.handleIncomingMessage('27899999999', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27899999999', 'Thabo');
+
+  const burgerResponse = await sessionEngine.handleIncomingMessage('27899999999', 'Order a Zinger Burger Meal');
+  assert.ok(!burgerResponse.text.includes('R180.00'));
+  assert.ok(!burgerResponse.text.includes('Business AI Employee'));
+  assert.ok(burgerResponse.text.includes('Instant Checkout'));
+
+  // Explicit Business Management Intent launches consultative Agent Factory
+  const bizPrompt = await sessionEngine.handleIncomingMessage('27899999999', 'Help me run my small business');
+  assert.ok(bizPrompt.text.includes('Business AI Employee'));
+  assert.ok(bizPrompt.text.includes('R180.00 / month'));
+
+  const bizNamePrompt = await sessionEngine.handleIncomingMessage('27899999999', '', 'start_business_bot');
+  assert.ok(bizNamePrompt.text.includes('official name of your business'));
+
+  const bizServicesPrompt = await sessionEngine.handleIncomingMessage('27899999999', 'Thabo Spaza');
+  assert.ok(bizServicesPrompt.text.includes('main products or services'));
+
+  const bizActiveConfirmation = await sessionEngine.handleIncomingMessage('27899999999', 'Bread R18, Milk R22, Eggs R35');
+  assert.ok(bizActiveConfirmation.text.includes('Business Agent is Live'));
+  assert.ok(bizActiveConfirmation.text.includes('Thabo Spaza'));
 });

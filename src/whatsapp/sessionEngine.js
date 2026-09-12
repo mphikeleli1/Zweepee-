@@ -10,6 +10,7 @@ import { AntiAbuseGuardEngine } from '../trust/antiAbuse.js';
 import { AICostCurtailmentEngine } from '../lib/aiOptimizer.js';
 import { A2ACommerceEngine } from '../trust/a2aCommerce.js';
 import { P2PCommerceEngine } from '../trust/p2pFeatures.js';
+import { AgentFactory } from '../agents/factory.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -27,6 +28,7 @@ export class WhatsAppSessionEngine {
     this.aiOptimizer = new AICostCurtailmentEngine(kvCatalog);
     this.a2aEngine = new A2ACommerceEngine();
     this.p2pEngine = new P2PCommerceEngine(db);
+    this.agentFactory = new AgentFactory(db);
     this.inMemorySessions = new Map();
   }
 
@@ -184,6 +186,18 @@ export class WhatsAppSessionEngine {
 
     // 5. Interactive Button Tap Handlers
     if (buttonPayload) {
+      if (buttonPayload === 'start_business_bot') {
+        const draft = this.agentFactory.createDraft(waId, `${userProfile.name}'s Business`, 'General');
+        session.businessAgentDraftId = draft.id;
+        session.businessStep = 'AWAITING_BIZ_NAME';
+        await this.saveSession(waId, session);
+
+        return {
+          text: `🏢 *Create Your Business AI Agent*\n\n` +
+            `What is the official name of your business/shop? (e.g. *Sipho's Spaza & Groceries*)`
+        };
+      }
+
       if (buttonPayload.startsWith('release_escrow_')) {
         const txId = buttonPayload.replace('release_escrow_', '');
         const releaseResult = this.p2pEngine.buyerReleaseEscrowEarly(txId, waId);
@@ -313,9 +327,62 @@ export class WhatsAppSessionEngine {
       }
     }
 
+    // Business Agent Conversational Interview Steps
+    if (session.businessStep === 'AWAITING_BIZ_NAME') {
+      const bizName = text;
+      session.businessName = bizName;
+      session.businessStep = 'AWAITING_BIZ_SERVICES';
+      await this.saveSession(waId, session);
+
+      return {
+        text: `💼 *${bizName}*\n\nWhat main products or services do you offer? (e.g. *Haircuts R150, Braids R350* or *Plumbing Repairs R450/hr*)`
+      };
+    }
+
+    if (session.businessStep === 'AWAITING_BIZ_SERVICES') {
+      const servicesText = text;
+      const draftId = session.businessAgentDraftId;
+
+      this.agentFactory.collectData(draftId, {
+        catalog: [{ name: servicesText, priceCents: 18000 }]
+      });
+
+      const activeAgent = this.agentFactory.activate(draftId);
+      session.businessStep = null;
+      await this.saveSession(waId, session);
+
+      return {
+        text: `🎉 *Your Business Agent is Live on myAI Network!*\n\n` +
+          `• *Business Name:* ${session.businessName}\n` +
+          `• *Agent ID:* ${activeAgent.id}\n` +
+          `• *Monetization:* R180.00/month Subscription (Invoicing, Bookkeeping & Customer Booking Included)\n\n` +
+          `Your Business Agent is now discoverable by thousands of Personal Agents looking for services across South Africa! 🚀`
+      };
+    }
+
     // 6. Text Message NLU Intent & Advice Prohibition Intercept
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
+
+    // EXPLICIT BUSINESS AGENT CREATION REQUEST:
+    if (intentMode === INTENT_MODES.BUSINESS_AGENCY_REQUEST) {
+      return {
+        text: `💼 *myAI™ Business AI Employee*\n` +
+          `───────────────\n\n` +
+          `I can build a dedicated *Business Agent* customized specifically for your business!\n\n` +
+          `*Your Business AI Employee includes:*\n` +
+          `• 📊 Basic Bookkeeping & Cash Flow summaries\n` +
+          `• 🧾 Instant PDF Invoice & Quote Generation on WhatsApp\n` +
+          `• 📋 Employer Records & CCMA-compliant employment contracts\n` +
+          `• 🛒 24/7 Customer Query & Booking Management\n\n` +
+          `*Subscription:* R180.00 / month (configurable)\n\n` +
+          `Would you like me to assemble your Business Agent now?`,
+        buttons: [
+          { type: 'reply', reply: { id: 'start_business_bot', title: '🚀 Build My Business Bot' } },
+          { type: 'reply', reply: { id: 'tap_cancel_biz', title: '❌ Not Right Now' } }
+        ]
+      };
+    }
 
     // ADVICE PROHIBITION RULE INTERCEPT:
     if (intentMode === INTENT_MODES.SERVICE_REFERRAL) {
