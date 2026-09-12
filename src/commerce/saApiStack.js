@@ -26,8 +26,91 @@ export class SAApiStackManager {
       ['awin', { name: 'Awin API', type: 'RETAIL_AFFILIATE', active: true }],
       ['comparisure', { name: 'Comparisure / Root API', type: 'FINANCIAL_REFERRALS', active: true }],
       ['courierguy', { name: 'Courier Guy / PUDO API', type: 'COURIER_LOCKERS', active: true }],
-      ['stitch', { name: 'Stitch API', type: 'DIRECT_BANK_PAYMENTS', active: true }]
+      ['stitch', { name: 'Stitch API', type: 'DIRECT_BANK_PAYMENTS', active: true }],
+      ['bluelabel', { name: 'Blue Label Telecoms API', type: 'VOUCHERS_OTT_1VOUCHER', active: true }],
+      ['axxess', { name: 'Axxess Fibre API', type: 'FIBRE_INTERNET_COMMISSION', active: true }],
+      ['takealot', { name: 'Takealot Marketplace & Fresh API', type: 'GROCERY_RETAIL_AFFILIATE', active: true }],
+      ['payjustnow', { name: 'PayJustNow / Mobicred BNPL API', type: 'BNPL_PAYMENTS', active: true }],
+      ['mukuru', { name: 'Mukuru / Mama Money Remittance API', type: 'MONEY_REMITTANCE', active: true }],
+      ['payprop', { name: 'PayProp Rent API', type: 'PROPERTY_RENT_COLLECTION', active: true }]
     ]);
+  }
+
+  /**
+   * 11. Blue Label Telecoms API - OTT, 1Voucher, Netflix, Gaming Vouchers
+   */
+  async queryBlueLabelVouchers({ voucherType, amountCents }) {
+    return {
+      gateway: 'Blue Label Telecoms API',
+      voucherType: voucherType || '1VOUCHER',
+      amountCents,
+      pin: `BLU_${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+      affiliateEarningCents: 1500 // R15.00 flat commission per voucher
+    };
+  }
+
+  /**
+   * 12. Axxess Fibre API - Home/Business Fibre Install Referral
+   */
+  async queryAxxessFibreInstall({ address, speedMbps }) {
+    return {
+      gateway: 'Axxess Fibre API',
+      address,
+      speedMbps: speedMbps || 100,
+      monthlyPriceCents: 89900, // R899/mo
+      leadReferralPayoutCents: 50000 // R500.00 commission per successful fibre install
+    };
+  }
+
+  /**
+   * 13. Takealot Marketplace & Takealot Fresh API - Groceries & Retail
+   */
+  async queryTakealotFreshGrocery({ searchQuery }) {
+    return {
+      gateway: 'Takealot Marketplace & Fresh API',
+      searchQuery,
+      productName: 'Takealot Fresh Grocery Parcel',
+      priceCents: 35000, // R350.00
+      affiliateEarningCents: 2100 // 6% Takealot affiliate commission
+    };
+  }
+
+  /**
+   * 14. PayJustNow / Mobicred BNPL API - Buy Now Pay Later
+   */
+  async queryPayJustNowBNPL({ amountCents, installments = 3 }) {
+    return {
+      gateway: 'PayJustNow / Mobicred BNPL API',
+      amountCents,
+      installments,
+      installmentAmountCents: Math.round(amountCents / installments),
+      merchantCommissionCents: Math.round(amountCents * 0.05) // 5% BNPL transaction fee earned
+    };
+  }
+
+  /**
+   * 15. Mukuru / Mama Money Remittance API - Money Transfers
+   */
+  async queryMukuruRemittance({ recipientCountry, amountCents }) {
+    return {
+      gateway: 'Mukuru / Mama Money Remittance API',
+      recipientCountry: recipientCountry || 'Zimbabwe',
+      amountCents,
+      feeCents: 2500, // R25 transfer fee
+      agentCommissionCents: 1500 // R15.00 agent commission earned per transfer
+    };
+  }
+
+  /**
+   * 16. PayProp Rent API - Property Rent Collection & Landlord Management
+   */
+  async queryPayPropRentCollection({ rentCents, landlordId }) {
+    return {
+      gateway: 'PayProp Rent API',
+      rentCents,
+      landlordId,
+      commissionCents: Math.round(rentCents * 0.015) + 5000 // 1.5% of rent + R50.00 flat fee per landlord
+    };
   }
 
   /**

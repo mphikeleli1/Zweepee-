@@ -24,6 +24,9 @@ export class TransportAggregator {
   constructor(providers = []) {
     this.providers = providers.length > 0 ? providers : [
       { id: 'picup', name: 'PicUp', supportedVehicles: ['BIKE', 'BAKKIE_1TON', 'TRUCK_2TON', 'TRUCK_4TON', 'TRUCK_8TON'], baseRateCents: 4000, perKmCents: 1000 },
+      { id: 'wumdrop', name: 'WumDrop On-Demand', supportedVehicles: ['BIKE', 'BAKKIE_1TON'], baseRateCents: 3000, perKmCents: 700 }, // R7/km
+      { id: 'pargo', name: 'Pargo Smart Pickup', supportedVehicles: ['BIKE'], baseRateCents: 2500, perKmCents: 500 }, // 4,000+ pickup points
+      { id: 'droppa', name: 'Droppa Bakkies & Trucks', supportedVehicles: ['BAKKIE_1TON', 'TRUCK_2TON', 'TRUCK_4TON'], baseRateCents: 7500, perKmCents: 1400 },
       { id: 'pingo', name: 'Pingo Express', supportedVehicles: ['BIKE', 'BAKKIE_1TON'], baseRateCents: 3500, perKmCents: 900 },
       { id: 'truckin', name: 'TruckIn Heavy', supportedVehicles: ['TRUCK_2TON', 'TRUCK_4TON', 'TRUCK_8TON'], baseRateCents: 15000, perKmCents: 2500 },
       { id: 'muvr', name: 'Muvr Furniture', supportedVehicles: ['BAKKIE_1TON', 'TRUCK_2TON'], baseRateCents: 8000, perKmCents: 1500 }

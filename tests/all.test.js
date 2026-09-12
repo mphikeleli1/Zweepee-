@@ -930,3 +930,47 @@ test('34. Multilingual Language Detection & Localized UI Templates', () => {
   const xhCheckoutHeader = translate('checkout_title', SUPPORTED_LANGUAGES.XH);
   assert.ok(xhCheckoutHeader.includes('Ukuhlawula Kwangoko'));
 });
+
+test('35. Complete 16 SA Revenue API Stack & 7 Courier Provider Aggregation', async () => {
+  const saStack = new SAApiStackManager();
+
+  // 11. Blue Label Telecoms
+  const bluRes = await saStack.queryBlueLabelVouchers({ voucherType: '1VOUCHER', amountCents: 10000 });
+  assert.equal(bluRes.gateway, 'Blue Label Telecoms API');
+  assert.equal(bluRes.affiliateEarningCents, 1500);
+
+  // 12. Axxess Fibre Install
+  const axxRes = await saStack.queryAxxessFibreInstall({ address: 'Sandton', speedMbps: 100 });
+  assert.equal(axxRes.gateway, 'Axxess Fibre API');
+  assert.equal(axxRes.leadReferralPayoutCents, 50000);
+
+  // 13. Takealot Fresh Grocery
+  const takeRes = await saStack.queryTakealotFreshGrocery({ searchQuery: 'Milk & Bread' });
+  assert.equal(takeRes.gateway, 'Takealot Marketplace & Fresh API');
+  assert.equal(takeRes.affiliateEarningCents, 2100);
+
+  // 14. PayJustNow / Mobicred BNPL
+  const bnplRes = await saStack.queryPayJustNowBNPL({ amountCents: 150000, installments: 3 });
+  assert.equal(bnplRes.gateway, 'PayJustNow / Mobicred BNPL API');
+  assert.equal(bnplRes.merchantCommissionCents, 7500);
+
+  // 15. Mukuru / Mama Money Remittance
+  const mukRes = await saStack.queryMukuruRemittance({ recipientCountry: 'Zimbabwe', amountCents: 50000 });
+  assert.equal(mukRes.gateway, 'Mukuru / Mama Money Remittance API');
+  assert.equal(mukRes.agentCommissionCents, 1500);
+
+  // 16. PayProp Rent Collection
+  const rentRes = await saStack.queryPayPropRentCollection({ rentCents: 1000000, landlordId: 'landlord_99' });
+  assert.equal(rentRes.gateway, 'PayProp Rent API');
+  assert.equal(rentRes.commissionCents, 20000); // 1.5% of 10k + R50 = R200 (20000 cents)
+
+  // 7 Courier & Logistics Providers (PicUp, WumDrop, Pargo, Droppa, Pingo, TruckIn, Muvr)
+  const transport = new TransportAggregator();
+  const quotes = await transport.getQuotes({ distanceKm: 10, items: [{ category: 'Food' }] });
+
+  assert.equal(quotes.allQuotes.length, 4); // 4 providers supporting BIKE (picup, wumdrop, pargo, pingo)
+  assert.ok(quotes.allQuotes.some(q => q.providerId === 'wumdrop'));
+  assert.ok(quotes.allQuotes.some(q => q.providerId === 'pargo'));
+  assert.ok(quotes.allQuotes.some(q => q.providerId === 'picup'));
+  assert.equal(quotes.cheapestQuote.providerId, 'pargo', 'Pargo smart pickup should be cheapest for BIKE class');
+});
