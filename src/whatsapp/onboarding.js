@@ -74,6 +74,23 @@ export class UserOnboardingEngine {
     }
 
     if (onboardingStep === 'ONBOARDING_OPTIONAL_PREFS') {
+      if (text === 'prompt_prefs') {
+        return {
+          nextStep: 'ONBOARDING_AWAITING_PREF_TEXT',
+          screen: {
+            text: `🎨 *Customize Your Personal Agent*\n\n` +
+              `Feel free to share anything that helps me serve you better—for example:\n` +
+              `• 💼 *Profession / Business:* (helps match relevant jobs or business leads)\n` +
+              `• 🎓 *Education / Field:* (helps match academic or training queries)\n` +
+              `• 🥗 *Dietary / Shopping:* (e.g. Halal, Vegan, Woolworths shopper)\n\n` +
+              `Reply with whatever you'd like to share, or tap *Do This Later* anytime!`,
+            buttons: [
+              { type: 'reply', reply: { id: 'skip_prefs', title: '⏱️ Do This Later' } }
+            ]
+          }
+        };
+      }
+
       const prefs = text.trim();
       const isSkip = prefs.toLowerCase().includes('skip') || prefs.toLowerCase().includes('later') || text === 'skip_prefs';
 
@@ -82,6 +99,25 @@ export class UserOnboardingEngine {
         completedProfile: isSkip ? {} : { preferences: prefs },
         screen: {
           text: `🎉 *You're All Set!*\n\n` +
+            `I am ready to assist you anytime. How may I help you today?`,
+          buttons: [
+            { type: 'reply', reply: { id: 'action_food', title: '🍔 Order Food / Groceries' } },
+            { type: 'reply', reply: { id: 'action_sell', title: '🏷️ Buy or Sell Item' } },
+            { type: 'reply', reply: { id: 'action_moving', title: '🚚 Moving & Trucks' } }
+          ]
+        }
+      };
+    }
+
+    if (onboardingStep === 'ONBOARDING_AWAITING_PREF_TEXT') {
+      const prefs = text.trim();
+      const isSkip = prefs.toLowerCase().includes('skip') || prefs.toLowerCase().includes('later') || text === 'skip_prefs';
+
+      return {
+        nextStep: 'ONBOARDING_COMPLETED',
+        completedProfile: isSkip ? {} : { preferences: prefs },
+        screen: {
+          text: `🎉 *Preferences Saved & You're All Set!*\n\n` +
             `I am ready to assist you anytime. How may I help you today?`,
           buttons: [
             { type: 'reply', reply: { id: 'action_food', title: '🍔 Order Food / Groceries' } },

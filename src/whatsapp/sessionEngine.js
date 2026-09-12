@@ -61,7 +61,7 @@ export class WhatsAppSessionEngine {
   }
 
   async handleIncomingMessage(waId, incomingText, buttonPayload = null, locationObj = null) {
-    const text = (incomingText || '').trim();
+    const text = (incomingText || buttonPayload || '').trim();
 
     // 0. Anti-Abuse Check
     const abuseCheck = this.antiAbuse.screenInboundMessage(waId, text);
@@ -145,7 +145,8 @@ export class WhatsAppSessionEngine {
       if (onboardingResult.completedProfile) {
         userProfile = await this.onboardingEngine.saveUserProfile(waId, {
           name: onboardingResult.completedProfile.name || session.draftName || 'User',
-          address: onboardingResult.completedProfile.address || session.draftAddress || 'Default Address'
+          address: onboardingResult.completedProfile.address || session.draftAddress || 'Default Address',
+          preferences: onboardingResult.completedProfile.preferences || null
         });
         session.onboardingStep = 'ONBOARDING_COMPLETED';
         session.activeAddress = userProfile.address;
