@@ -11,7 +11,8 @@ export const DEFAULT_PRICING_CONFIG = {
   JOB_MATCHING_FLAT_FEE_CENTS: 50000, // R500.00 configurable flat rate
   SERVICE_REFERRAL_COMMISSION_PERCENT: 5, // Default 5% affiliate referral commission
   NON_AFFILIATE_SERVICE_FEE_CENTS: 1000, // R10.00 transparent service fee for municipal bills/fines where no provider affiliate rebate exists
-  PAYMENT_PROCESSING_FEE_CENTS: 250
+  PAYMENT_PROCESSING_FEE_CENTS: 250,
+  PAYFAST_ZERO_FEE_THRESHOLD_CENTS: 300000 // R3,000.00 zero payment processing fee threshold for PayFast Instant EFT
 };
 
 export async function getPricingConfig(dbOrKv) {
@@ -37,8 +38,7 @@ export async function getPricingConfig(dbOrKv) {
 
 /**
  * Calculates pricing & monetization deterministically for ALL intent modes.
- * Ensures 0% markup on physical store goods, earns affiliate commissions where available,
- * and applies transparent service convenience fees for non-affiliate municipal bill payments (PayAt / 3PE).
+ * Waives R2.50 payment fee (`paymentFeeCents = 0`) when user chooses PayFast Instant EFT for orders <= R3,000.
  */
 export function calculatePricing({
   intentMode,
@@ -46,6 +46,7 @@ export function calculatePricing({
   rawTransportQuoteCents = 0,
   hasAffiliateCommissionProgram = true,
   customReferralCommissionPercent = null,
+  isPayFastInstantEFT = false,
   config = DEFAULT_PRICING_CONFIG
 }) {
   const cfg = { ...DEFAULT_PRICING_CONFIG, ...config };
@@ -99,7 +100,10 @@ export function calculatePricing({
   const finalGoodsCents = addCents(goodsSubtotalCents, goodsMarkupCents);
   const finalTransportCents = addCents(rawTransportQuoteCents, transportMarginCents);
   const platformFeeCents = addCents(goodsMarkupCents, p2pCommissionCents, transportMarginCents, jobMatchingFeeCents, referralCommissionCents, serviceConvenienceFeeCents);
-  const paymentFeeCents = cfg.PAYMENT_PROCESSING_FEE_CENTS;
+
+  // PayFast Instant EFT Zero Fee override for amounts <= R3,000 (300,000 cents)
+  const isZeroFeeEligible = isPayFastInstantEFT && (addCents(finalGoodsCents, finalTransportCents, p2pCommissionCents, jobMatchingFeeCents, serviceConvenienceFeeCents) <= cfg.PAYFAST_ZERO_FEE_THRESHOLD_CENTS);
+  const paymentFeeCents = isZeroFeeEligible ? 0 : cfg.PAYMENT_PROCESSING_FEE_CENTS;
 
   const totalCustomerPaysCents = addCents(finalGoodsCents, finalTransportCents, p2pCommissionCents, jobMatchingFeeCents, serviceConvenienceFeeCents, paymentFeeCents);
 
@@ -117,6 +121,7 @@ export function calculatePricing({
     serviceConvenienceFeeCents,
     platformFeeCents,
     paymentFeeCents,
+    isZeroFeeInstantEFT: isZeroFeeEligible,
     totalCustomerPaysCents
   };
 }

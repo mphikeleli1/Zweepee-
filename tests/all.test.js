@@ -782,3 +782,52 @@ test('31. Full 10-API South African Gateway Stack & PayAt Municipal Rates', asyn
   assert.equal(stitchRes.gateway, 'Stitch API');
   assert.equal(stitchRes.status, 'STITCH_PAYMENT_INITIATED');
 });
+
+test('32. PayFast Instant EFT Zero Fee Waiver Threshold (<= R3,000.00)', async () => {
+  const payfast = new PayFastPaymentGateway('10000100');
+
+  // R3,000.00 = 300,000 cents
+  assert.equal(payfast.isInstantZeroFeePayFastEligible(300000), true);
+  assert.equal(payfast.isInstantZeroFeePayFastEligible(300001), false);
+
+  const zeroFeeSession = await payfast.createPaymentSession({
+    transactionId: 'tx_eft_zero',
+    amountCents: 150000,
+    paymentMethod: 'eft'
+  });
+
+  assert.equal(zeroFeeSession.isZeroFeeInstantEFT, true);
+  assert.equal(zeroFeeSession.paymentProcessingFeeCents, 0);
+
+  const standardFeeSession = await payfast.createPaymentSession({
+    transactionId: 'tx_eft_standard',
+    amountCents: 350000,
+    paymentMethod: 'eft'
+  });
+
+  assert.equal(standardFeeSession.isZeroFeeInstantEFT, false);
+  assert.equal(standardFeeSession.paymentProcessingFeeCents, 250);
+
+  // Test Pricing Engine Integration
+  const pricingZero = calculatePricing({
+    intentMode: 'BUY_PLUS_DELIVER',
+    goodsSubtotalCents: 10000, // R100
+    rawTransportQuoteCents: 5000, // R50
+    isPayFastInstantEFT: true,
+    config: DEFAULT_PRICING_CONFIG
+  });
+
+  assert.equal(pricingZero.isZeroFeeInstantEFT, true);
+  assert.equal(pricingZero.paymentFeeCents, 0, 'PayFast Instant EFT for order under R3000 must waive payment fee');
+
+  const pricingStandard = calculatePricing({
+    intentMode: 'BUY_PLUS_DELIVER',
+    goodsSubtotalCents: 350000, // R3,500
+    rawTransportQuoteCents: 5000,
+    isPayFastInstantEFT: true,
+    config: DEFAULT_PRICING_CONFIG
+  });
+
+  assert.equal(pricingStandard.isZeroFeeInstantEFT, false);
+  assert.equal(pricingStandard.paymentFeeCents, 250, 'PayFast Instant EFT for order over R3000 must charge R2.50 standard payment fee');
+});
