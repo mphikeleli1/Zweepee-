@@ -97,9 +97,10 @@ export default {
 
         const messageText = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || '';
         const buttonPayload = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive?.button_reply?.id || null;
+        const locationObj = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.location || null;
         const sender = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from || '27820000000';
 
-        const screenResponse = await sessionEngine.handleIncomingMessage(sender, messageText, buttonPayload);
+        const screenResponse = await sessionEngine.handleIncomingMessage(sender, messageText, buttonPayload, locationObj);
 
         return new Response(JSON.stringify({ success: true, screenResponse }), {
           headers: { 'Content-Type': 'application/json' }

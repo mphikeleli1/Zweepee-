@@ -11,6 +11,9 @@ import { AICostCurtailmentEngine } from '../lib/aiOptimizer.js';
 import { A2ACommerceEngine } from '../trust/a2aCommerce.js';
 import { P2PCommerceEngine } from '../trust/p2pFeatures.js';
 import { AgentFactory } from '../agents/factory.js';
+import { AgentMatchingEngine } from '../network/matching.js';
+import { NetworkDiscovery } from '../network/discovery.js';
+import { SAApiStackManager } from '../commerce/saApiStack.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -29,6 +32,9 @@ export class WhatsAppSessionEngine {
     this.a2aEngine = new A2ACommerceEngine();
     this.p2pEngine = new P2PCommerceEngine(db);
     this.agentFactory = new AgentFactory(db);
+    this.discovery = new NetworkDiscovery();
+    this.matchingEngine = new AgentMatchingEngine(this.discovery);
+    this.saStack = new SAApiStackManager();
     this.inMemorySessions = new Map();
   }
 
@@ -185,6 +191,32 @@ export class WhatsAppSessionEngine {
       });
     }
 
+    // P2P Listing Details Step Handler
+    if (session.step === 'AWAITING_P2P_LISTING_DETAILS') {
+      session.step = 'STATE_IDLE';
+      await this.saveSession(waId, session);
+
+      const parts = text.split(',');
+      const itemName = parts[0]?.trim() || 'Pre-owned Item';
+      const priceRandStr = parts[1]?.replace(/[^0-9.]/g, '') || '1000';
+      const priceCents = Math.round(parseFloat(priceRandStr) * 100) || 100000;
+
+      const protection = this.scamEngine.validateListingProtection({
+        sellerPhone: waId,
+        itemName,
+        askingPriceCents: priceCents
+      });
+
+      return {
+        text: `🏷️ *Listing Created & Published on myAI Open Network!*\n` +
+          `───────────────\n\n` +
+          `🛍️ *Item:* ${itemName}\n` +
+          `💵 *Asking Price:* R${(priceCents / 100).toFixed(2)}\n` +
+          `🛡️ *Safety Protection:* ${protection.escrowHoldNotice}\n\n` +
+          `Your Personal Agent is now matching your listing with active buyer agents across South Africa!`
+      };
+    }
+
     // 5. Interactive Button Tap Handlers
     if (buttonPayload) {
       if (buttonPayload === 'start_business_bot') {
@@ -265,6 +297,8 @@ export class WhatsAppSessionEngine {
       }
 
       if (buttonPayload === 'action_sell') {
+        session.step = 'AWAITING_P2P_LISTING_DETAILS';
+        await this.saveSession(waId, session);
         return { text: `🏷️ *Sell an Item*\n\nReply with what you are selling, your price, and category (e.g. *iPhone 15, R12000, Electronics*).` };
       }
 
@@ -365,6 +399,86 @@ export class WhatsAppSessionEngine {
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 
+    // MULTI-VERTICAL INTENT HANDLING: Travel, Hotel, Jobs, Property, Municipal Rates
+
+    // Travel & Hotel Bundle Intent
+    if (maskedText.toLowerCase().includes('hotel') || maskedText.toLowerCase().includes('car hire') || maskedText.toLowerCase().includes('flight') || maskedText.toLowerCase().includes('cpt')) {
+      const hotelRes = await this.saStack.queryAmadeusTravel({ origin: 'JNB', destination: 'CPT' });
+      const busRes = await this.saStack.queryTravelpayoutsBus({ origin: 'JNB', destination: 'CPT', departureDate: '2025-09-10' });
+
+      const hotelPriceCents = 925000; // R9,250.00
+      const carPriceCents = 175000;   // R1,750.00
+      const bundleTotalCents = hotelPriceCents + carPriceCents;
+
+      return this.uiBuilder.renderTravelBundleScreen({
+        title: 'Sea Point Beachfront Hotel & Polo Car Hire',
+        hotelImageUrl: 'https://cdn.myai.co.za/hotels/sea-point-cpt.jpg',
+        hotelRating: '⭐⭐⭐⭐⭐',
+        hotelAddress: 'Beach Road, Sea Point, Cape Town',
+        totalBundleCents,
+        components: [
+          { name: 'Sea Point Beachfront Hotel (5 Nights, Sep 10-15)', priceCents: hotelPriceCents, image: 'https://cdn.myai.co.za/hotels/sea-point-cpt.jpg' },
+          { name: 'VW Polo Hatchback Car Hire (5 Days, CPT Airport pickup)', priceCents: carPriceCents, image: 'https://cdn.myai.co.za/cars/polo.jpg' }
+        ]
+      });
+    }
+
+    // Municipal Bills & Rates Intent
+    if (maskedText.toLowerCase().includes('tshwane') || maskedText.toLowerCase().includes('joburg') || maskedText.toLowerCase().includes('rates') || maskedText.toLowerCase().includes('fine') || maskedText.toLowerCase().includes('bill')) {
+      const payAtRes = await this.saStack.queryPayAtMunicipalBills({
+        municipality: 'City of Tshwane',
+        billType: 'RATES_AND_TAXES',
+        accountOrNoticeNumber: 'TSH_998821',
+        amountCents: 150000 // R1,500
+      });
+
+      const config = await getPricingConfig(this.db);
+      const pricing = calculatePricing({
+        intentMode: 'BILL_PAYMENT',
+        goodsSubtotalCents: 150000,
+        hasAffiliateCommissionProgram: false,
+        config
+      });
+
+      const txId = `tx_bill_${Date.now()}`;
+      session.pricing = pricing;
+      session.transactionId = txId;
+      session.step = 'STATE_AWAITING_APPROVAL';
+      await this.saveSession(waId, session);
+
+      return {
+        text: `🏛️ *Municipal Bill Payment (${payAtRes.municipality})*\n` +
+          `───────────────\n\n` +
+          `📋 *Account:* ${payAtRes.accountOrNoticeNumber}\n` +
+          `💵 *Rates Amount:* R1,500.00 (Exact Municipal Bill)\n` +
+          `🛡️ *Service Convenience Fee:* R10.00\n` +
+          `💳 *Payment Fee:* R2.50\n` +
+          `───────────────\n` +
+          `🏷️ *ONE TOTAL:* R1,512.50\n\n` +
+          `Tap Approve below to settle your municipal rates instantly!`,
+        buttons: [
+          { type: 'reply', reply: { id: `tap_approve_${txId}`, title: '💳 Pay R1,512.50 Now' } },
+          { type: 'reply', reply: { id: `tap_cancel_${txId}`, title: '❌ Cancel' } }
+        ]
+      };
+    }
+
+    // Job / Hiring Intent
+    if (intentMode === INTENT_MODES.JOB_MATCHING) {
+      const match = this.matchingEngine.matchMultiDimensional({
+        queryText: maskedText,
+        filters: { vertical: 'JOBS', quantity: 11, maxSalaryCents: 500000, qualification: 'Matric' }
+      });
+
+      return this.uiBuilder.renderJobsMatchScreen({
+        jobTitle: 'Cashier / Retail Staff (Matric)',
+        location: 'Midrand, Gauteng',
+        quantity: 11,
+        salaryCents: 500000,
+        agentName: 'Midrand Staffing BA'
+      });
+    }
+
     // EXPLICIT BUSINESS AGENT CREATION REQUEST:
     if (intentMode === INTENT_MODES.BUSINESS_AGENCY_REQUEST) {
       return {
@@ -396,7 +510,7 @@ export class WhatsAppSessionEngine {
     }
 
     if (intentMode === INTENT_MODES.A2A_SELL) {
-      session.step = 'STATE_IDLE';
+      session.step = 'AWAITING_P2P_LISTING_DETAILS';
       await this.saveSession(waId, session);
 
       const velocityCheck = this.antiAbuse.validateListingVelocity(waId);

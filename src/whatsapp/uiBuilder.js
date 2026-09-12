@@ -25,19 +25,26 @@ export class WhatsAppUIBuilder {
   /**
    * PROPERTY / RENTALS MATCH SCREEN
    */
-  renderPropertyMatchScreen({ title, location, rentCents, bedrooms, availableFrom, agentName }) {
+  renderPropertyMatchScreen({ title, location, rentCents, bedrooms, availableFrom, agentName, photoUrl }) {
+    let text = `🏡 *Property Rental Matching Result*\n` +
+      `───────────────\n\n` +
+      `🏠 *Property:* ${title}\n` +
+      `📍 *Location:* ${location}\n` +
+      `🛏️ *Bedrooms:* ${bedrooms}\n` +
+      `💵 *Monthly Rent:* ${centsToRandsFormatted(rentCents)}\n` +
+      `📅 *Move-in Date:* ${availableFrom}\n` +
+      `🏢 *Listing Agent:* ${agentName}\n`;
+
+    if (photoUrl) {
+      text += `🖼️ *Photo Preview:* ${photoUrl}\n`;
+    }
+
+    text += `\n───────────────\n` +
+      `Tap below to request a viewing or lock in Paystack lease deposit escrow!`;
+
     return {
       type: 'PROPERTY_MATCH_SCREEN',
-      text: `🏡 *Property Rental Matching Result*\n` +
-        `───────────────\n\n` +
-        `🏠 *Property:* ${title}\n` +
-        `📍 *Location:* ${location}\n` +
-        `🛏️ *Bedrooms:* ${bedrooms}\n` +
-        `💵 *Monthly Rent:* ${centsToRandsFormatted(rentCents)}\n` +
-        `📅 *Move-in Date:* ${availableFrom}\n` +
-        `🏢 *Listing Agent:* ${agentName}\n\n` +
-        `───────────────\n` +
-        `Tap below to request a viewing or lock in Paystack lease deposit escrow!`,
+      text,
       buttons: [
         { type: 'reply', reply: { id: 'connect_prop_agent', title: '🤝 Connect Agent' } }
       ]
@@ -45,21 +52,31 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * TRAVEL & INSURANCE BUNDLE MATCH SCREEN
+   * TRAVEL & HOTEL BUNDLE MATCH SCREEN WITH FULL VISUAL HOTEL PREVIEWS
    */
-  renderTravelBundleScreen({ title, components = [], totalBundleCents }) {
-    let text = `✈️ *Travel & Holiday Bundle Result*\n` +
+  renderTravelBundleScreen({ title, components = [], totalBundleCents, hotelImageUrl, hotelRating = '⭐⭐⭐⭐⭐', hotelAddress = 'Cape Town Beachfront' }) {
+    let text = `🌴 *Travel & Hotel Bundle Result*\n` +
       `───────────────\n\n` +
-      `🌴 *Bundle Title:* ${title}\n\n` +
-      `*Included Service Components:*\n`;
+      `🏨 *Hotel Name:* ${title}\n` +
+      `⭐ *Hotel Rating:* ${hotelRating}\n` +
+      `📍 *Location:* ${hotelAddress}\n`;
+
+    if (hotelImageUrl) {
+      text += `🖼️ *Hotel Photo Preview:* ${hotelImageUrl}\n`;
+    }
+
+    text += `\n*Included Package Components:*\n`;
 
     components.forEach((c, idx) => {
       text += `${idx + 1}️⃣ *${c.name}* — ${centsToRandsFormatted(c.priceCents)}\n`;
+      if (c.image) {
+        text += `   🖼️ *Preview:* ${c.image}\n`;
+      }
     });
 
     text += `\n───────────────\n` +
       `💳 *PACKAGE TOTAL:* *${centsToRandsFormatted(totalBundleCents)}*\n` +
-      `💡 *Single Instant 1-Tap Booking!*`;
+      `💡 *Single Instant 1-Tap Booking with 0% Markup!*`;
 
     return {
       type: 'BUNDLE_MATCH_SCREEN',
