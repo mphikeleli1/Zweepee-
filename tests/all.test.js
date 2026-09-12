@@ -29,6 +29,7 @@ import { P2PCommerceEngine } from '../src/trust/p2pFeatures.js';
 import { AICostCurtailmentEngine } from '../src/lib/aiOptimizer.js';
 import { A2ACommerceEngine } from '../src/trust/a2aCommerce.js';
 import { MCPServerAdapter } from '../src/network/mcpServer.js';
+import { SAApiStackManager } from '../src/commerce/saApiStack.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -709,4 +710,75 @@ test('30. Consultative Business Agent Creation Isolation & Factory Interview', a
   const bizActiveConfirmation = await sessionEngine.handleIncomingMessage('27899999999', 'Bread R18, Milk R22, Eggs R35');
   assert.ok(bizActiveConfirmation.text.includes('Business Agent is Live'));
   assert.ok(bizActiveConfirmation.text.includes('Thabo Spaza'));
+});
+
+test('31. Full 10-API South African Gateway Stack & PayAt Municipal Rates', async () => {
+  const saStack = new SAApiStackManager();
+
+  // 1. Flash Prepaid Electricity
+  const flashRes = await saStack.queryFlashPrepaid({ serviceType: 'ELECTRICITY', accountNumber: '04123456789', amountCents: 20000 });
+  assert.equal(flashRes.gateway, 'Flash API');
+  assert.equal(flashRes.affiliateEarningCents, 600); // 3% rebate
+
+  // 10. PayAt Municipal Rates (Tshwane / Joburg / Ekurhuleni)
+  const payAtRes = await saStack.queryPayAtMunicipalBills({
+    municipality: 'City of Tshwane',
+    billType: 'RATES_AND_TAXES',
+    accountOrNoticeNumber: 'TSH_123456',
+    amountCents: 150000 // R1,500 municipal rates
+  });
+  assert.equal(payAtRes.gateway, 'PayAt / 3PE / SwitchPay API');
+  assert.equal(payAtRes.isMunicipalRates, true);
+  assert.equal(payAtRes.hasAffiliateProgram, false);
+
+  // Pricing Rule check for Non-Affiliate Municipal Bills (Transparent R10.00 Convenience Fee, 0% Store Markup Preserved)
+  const billPricing = calculatePricing({
+    intentMode: 'BILL_PAYMENT',
+    goodsSubtotalCents: 150000,
+    hasAffiliateCommissionProgram: false
+  });
+
+  assert.equal(billPricing.goodsMarkupCents, 0, 'Physical Store Goods markup must remain strictly 0%');
+  assert.equal(billPricing.serviceConvenienceFeeCents, 1000, 'Non-affiliate municipal rates bill payment must apply R10.00 transparent service fee');
+  assert.equal(billPricing.platformFeeCents, 1000);
+
+  // 2. Travelpayouts Bus
+  const busRes = await saStack.queryTravelpayoutsBus({ origin: 'PTA', destination: 'CPT', departureDate: '2025-10-01' });
+  assert.equal(busRes.gateway, 'Travelpayouts API');
+  assert.equal(busRes.affiliateEarningCents, 2450);
+
+  // 3. Airalo eSIM
+  const esimRes = await saStack.queryAiraloESIM({ countryCode: 'ZA', dataSizeMb: 5000 });
+  assert.equal(esimRes.gateway, 'Airalo API');
+  assert.equal(esimRes.affiliateEarningCents, 1800);
+
+  // 4. Quicket
+  const quicketRes = await saStack.queryQuicketTickets({ eventQuery: 'Cape Town Jazz Fest' });
+  assert.equal(quicketRes.gateway, 'Quicket API');
+  assert.equal(quicketRes.affiliateEarningCents, 1250);
+
+  // 5. Amadeus
+  const amadeusRes = await saStack.queryAmadeusTravel({ origin: 'JNB', destination: 'CPT' });
+  assert.equal(amadeusRes.gateway, 'Amadeus API');
+  assert.equal(amadeusRes.affiliateEarningCents, 13500);
+
+  // 6. Awin
+  const awinRes = await saStack.queryAwinGoods({ searchQuery: 'Samsung TV' });
+  assert.equal(awinRes.gateway, 'Awin API');
+  assert.equal(awinRes.affiliateEarningCents, 3150);
+
+  // 7. Comparisure
+  const compRes = await saStack.queryComparisureFinancials({ serviceType: 'FUNERAL_COVER' });
+  assert.equal(compRes.gateway, 'Comparisure / Root API');
+  assert.equal(compRes.leadReferralPayoutCents, 7500);
+
+  // 8. Courier Guy / PUDO
+  const pudoRes = await saStack.queryCourierGuyPudo({ pickupLocker: 'Rosebank Locker', dropoffAddress: 'Sandton', packageWeightKg: 2 });
+  assert.equal(pudoRes.gateway, 'Courier Guy / PUDO API');
+  assert.equal(pudoRes.quoteCents, 6000);
+
+  // 9. Stitch
+  const stitchRes = await saStack.queryStitchDirectBankPayment({ bankName: 'FNB', amountCents: 50000 });
+  assert.equal(stitchRes.gateway, 'Stitch API');
+  assert.equal(stitchRes.status, 'STITCH_PAYMENT_INITIATED');
 });
