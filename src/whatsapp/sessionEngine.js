@@ -15,6 +15,7 @@ import { AgentMatchingEngine } from '../network/matching.js';
 import { NetworkDiscovery } from '../network/discovery.js';
 import { SAApiStackManager } from '../commerce/saApiStack.js';
 import { detectLanguage, translate } from '../lib/i18n.js';
+import { EmploymentReadinessEngine } from '../employment/readinessPack.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -36,6 +37,7 @@ export class WhatsAppSessionEngine {
     this.discovery = new NetworkDiscovery();
     this.matchingEngine = new AgentMatchingEngine(this.discovery);
     this.saStack = new SAApiStackManager();
+    this.employmentEngine = new EmploymentReadinessEngine();
     this.inMemorySessions = new Map();
   }
 
@@ -254,6 +256,27 @@ export class WhatsAppSessionEngine {
 
     // 5. Interactive Button Tap Handlers
     if (buttonPayload) {
+      if (buttonPayload === 'book_travel_bundle') {
+        const txId = `tx_bundle_${Date.now()}`;
+        session.step = 'STATE_LIVE_ORDER';
+        await this.saveSession(waId, session);
+
+        return this.uiBuilder.renderLiveOrderScreen({
+          orderId: `ord_bundle_${txId.substring(0, 6)}`,
+          status: 'TRAVEL BUNDLE BOOKED - AMADEUS / TRAVELPAYOUTS CONFIRMED',
+          courierName: 'Airport Shuttle / Car Hire Desk',
+          driverName: 'Amadeus Booking Agent',
+          etaMinutes: 0
+        });
+      }
+
+      if (buttonPayload === 'connect_job_agent' || buttonPayload === 'connect_prop_agent') {
+        return {
+          text: `🤝 *Agents Connected Successfully!*\n\n` +
+            `Your Personal Agent has established a direct agent-to-agent channel on the myAI Network. You will receive real-world updates right here!`
+        };
+      }
+
       if (buttonPayload === 'start_business_bot') {
         const draft = this.agentFactory.createDraft(waId, `${userProfile.name}'s Business`, 'General');
         session.businessAgentDraftId = draft.id;
@@ -496,6 +519,31 @@ export class WhatsAppSessionEngine {
           { type: 'reply', reply: { id: `tap_cancel_${txId}`, title: '❌ Cancel' } }
         ]
       };
+    }
+
+    // Employment Readiness Pack & Z83 Form Intent
+    if (intentMode === INTENT_MODES.EMPLOYMENT_PACK) {
+      const candidateData = {
+        fullName: userProfile.name,
+        phone: waId,
+        address: session.activeAddress || userProfile.address || 'Gauteng, South Africa',
+        positionAppliedFor: 'General / Admin / Retail Assistant'
+      };
+
+      const pack = this.employmentEngine.assembleReadinessPack(candidateData);
+      const txId = `tx_emp_${Date.now()}`;
+      session.transactionId = txId;
+      session.employmentPack = pack;
+      session.step = 'STATE_AWAITING_APPROVAL';
+      await this.saveSession(waId, session);
+
+      return this.uiBuilder.renderEmploymentPackScreen({
+        candidateName: candidateData.fullName,
+        packPriceCents: pack.priceCents,
+        transactionId: txId,
+        cvPreviewUrl: pack.atsCv.pdfDownloadUrl,
+        z83PreviewUrl: pack.z83Form.pdfDownloadUrl
+      });
     }
 
     // Job / Hiring Intent

@@ -5,7 +5,8 @@ export const INTENT_MODES = {
   TRANSPORT_ONLY: 'TRANSPORT_ONLY',
   JOB_MATCHING: 'JOB_MATCHING',
   SERVICE_REFERRAL: 'SERVICE_REFERRAL',
-  BUSINESS_AGENCY_REQUEST: 'BUSINESS_AGENCY_REQUEST'
+  BUSINESS_AGENCY_REQUEST: 'BUSINESS_AGENCY_REQUEST',
+  EMPLOYMENT_PACK: 'EMPLOYMENT_PACK'
 };
 
 export function classifyIntent(messageText, metadata = {}) {
@@ -47,6 +48,19 @@ export function classifyIntent(messageText, metadata = {}) {
     text.includes('medical aid')
   ) {
     return INTENT_MODES.SERVICE_REFERRAL;
+  }
+
+  // Employment Pack & Z83 Government Form Intent
+  if (
+    text.includes('cv') ||
+    text.includes('resume') ||
+    text.includes('z83') ||
+    text.includes('employment pack') ||
+    text.includes('job pack') ||
+    text.includes('government job') ||
+    text.includes('apply for job')
+  ) {
+    return INTENT_MODES.EMPLOYMENT_PACK;
   }
 
   // Job matching intents

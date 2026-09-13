@@ -69,23 +69,20 @@ export class CommerceAggregator {
     }
 
     // 2. Query OneCart API Feed
-    if (q) {
-      const onecartItems = await this.onecartAdapter.fetchCatalog(q);
-      for (const item of onecartItems) {
-        if (!results.some(r => r.name === item.name)) {
-          results.push(item);
-        }
+    const searchParam = q || 'groceries';
+    const onecartItems = await this.onecartAdapter.fetchCatalog(searchParam);
+    for (const item of onecartItems) {
+      if (!results.some(r => r.id === item.id || r.name === item.name)) {
+        results.push(item);
       }
     }
 
     // 3. Query Universal Click & Collect Adapter for long-tail stores
-    if (q) {
-      const universalAdapter = new UniversalClickCollectAdapter(q, 'Click & Collect Store');
-      const universalItems = await universalAdapter.fetchCatalog(q);
-      for (const item of universalItems) {
-        if (!results.some(r => r.name === item.name)) {
-          results.push(item);
-        }
+    const universalAdapter = new UniversalClickCollectAdapter(searchParam, 'Click & Collect Store');
+    const universalItems = await universalAdapter.fetchCatalog(searchParam);
+    for (const item of universalItems) {
+      if (!results.some(r => r.id === item.id || r.name === item.name)) {
+        results.push(item);
       }
     }
 

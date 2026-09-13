@@ -3,6 +3,35 @@ import { translate } from '../lib/i18n.js';
 
 export class WhatsAppUIBuilder {
   /**
+   * EMPLOYMENT READINESS PACK & Z83 GOVERNMENT FORM SCREEN
+   */
+  renderEmploymentPackScreen({ candidateName, packPriceCents = 2900, transactionId, cvPreviewUrl, z83PreviewUrl }) {
+    const text = `💼 *myAI™ Employment Readiness Pack* 💼\n` +
+      `───────────────\n\n` +
+      `👤 *Candidate:* ${candidateName || 'Job Seeker'}\n\n` +
+      `*Included In Your Bundle (R29.00):*\n` +
+      `• 📄 *ATS-Optimized Professional CV* (Plain-text & PDF Download)\n` +
+      `• 📋 *Official Z83 Government Application Form* (Auto-Filled)\n` +
+      `• ✉️ *Tailored Cover Letter* (Government & Corporate)\n` +
+      `• 💡 *SA Interview Preparation Q&A Guide*\n` +
+      `• 🚀 *Auto-Broadcast to active employers on myAI Recruitment Network*\n\n` +
+      `🖼️ *CV PDF Link:* ${cvPreviewUrl || 'https://cdn.myai.co.za/cv/preview.pdf'}\n` +
+      `🖼️ *Z83 PDF Link:* ${z83PreviewUrl || 'https://cdn.myai.co.za/z83/preview.pdf'}\n\n` +
+      `───────────────\n` +
+      `💳 *BUNDLE TOTAL:* *${centsToRandsFormatted(packPriceCents)}*\n` +
+      `Tap Approve below to unlock your complete Employment Readiness Pack!`;
+
+    return {
+      type: 'EMPLOYMENT_PACK_SCREEN',
+      text,
+      buttons: [
+        { type: 'reply', reply: { id: `tap_approve_${transactionId}`, title: `💳 Pay ${centsToRandsFormatted(packPriceCents)}` } },
+        { type: 'reply', reply: { id: `tap_cancel_${transactionId}`, title: '❌ Cancel' } }
+      ]
+    };
+  }
+
+  /**
    * JOBS / RECRUITMENT MATCH SCREEN
    */
   renderJobsMatchScreen({ jobTitle, location, quantity, salaryCents, agentName }) {

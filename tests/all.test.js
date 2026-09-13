@@ -31,6 +31,7 @@ import { A2ACommerceEngine } from '../src/trust/a2aCommerce.js';
 import { MCPServerAdapter } from '../src/network/mcpServer.js';
 import { SAApiStackManager } from '../src/commerce/saApiStack.js';
 import { detectLanguage, translate, SUPPORTED_LANGUAGES } from '../src/lib/i18n.js';
+import { EmploymentReadinessEngine } from '../src/employment/readinessPack.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -973,4 +974,57 @@ test('35. Complete 16 SA Revenue API Stack & 7 Courier Provider Aggregation', as
   assert.ok(quotes.allQuotes.some(q => q.providerId === 'pargo'));
   assert.ok(quotes.allQuotes.some(q => q.providerId === 'picup'));
   assert.equal(quotes.cheapestQuote.providerId, 'pargo', 'Pargo smart pickup should be cheapest for BIKE class');
+});
+
+test('36. ATS CV Builder, Z83 Form Auto-Filler & Employment Readiness Pack (R29.00)', async () => {
+  const empEngine = new EmploymentReadinessEngine();
+
+  // 1. ATS CV Generation
+  const cv = empEngine.generateATSCV({
+    fullName: 'Sipho Dlamini',
+    phone: '0821234567',
+    email: 'sipho@gmail.com',
+    address: 'Soweto, Johannesburg',
+    matricYear: 2020,
+    skills: ['Retail Operations', 'Cashier', 'Customer Service']
+  });
+
+  assert.equal(cv.isATSCompliant, true);
+  assert.ok(cv.cvText.includes('Sipho Dlamini'));
+  assert.ok(cv.cvText.includes('CURRICULUM VITAE (ATS-OPTIMIZED)'));
+  assert.ok(cv.pdfDownloadUrl.includes('.pdf'));
+
+  // 2. Official Z83 Government Form Auto-Filler
+  const z83 = empEngine.fillZ83GovernmentForm({
+    fullName: 'Sipho Dlamini',
+    idNumber: '0001015800088',
+    departmentName: 'Department of Health',
+    postReferenceNumber: 'REF-HEALTH-2025-01',
+    positionAppliedFor: 'Admin Clerk'
+  });
+
+  assert.ok(z83.z83Text.includes('OFFICIAL Z83 GOVERNMENT APPLICATION FORM'));
+  assert.ok(z83.z83Text.includes('Department of Health'));
+  assert.ok(z83.z83Text.includes('0001015800088'));
+
+  // 3. Employment Readiness Pack Assembly (R29.00)
+  const pack = empEngine.assembleReadinessPack({
+    fullName: 'Sipho Dlamini',
+    positionAppliedFor: 'Admin Clerk'
+  });
+
+  assert.equal(pack.priceCents, 2900, 'Pack price must be R29.00 (2,900 cents)');
+  assert.ok(pack.coverLetter.includes('Dear Hiring Manager'));
+  assert.ok(pack.interviewGuide.includes('SA INTERVIEW PREPARATION GUIDE'));
+
+  // 4. Session Engine Intercept
+  const sessionEngine = new WhatsAppSessionEngine();
+  await sessionEngine.handleIncomingMessage('27831111111', 'hi');
+  await sessionEngine.handleIncomingMessage('27831111111', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27831111111', 'Sipho');
+
+  const packScreen = await sessionEngine.handleIncomingMessage('27831111111', 'I need a CV and z83 form for a government job');
+  assert.equal(packScreen.type, 'EMPLOYMENT_PACK_SCREEN');
+  assert.ok(packScreen.text.includes('Employment Readiness Pack'));
+  assert.ok(packScreen.buttons[0].reply.title.includes('Pay R29.00'));
 });
