@@ -541,14 +541,29 @@ test('26. Advice Prohibition Rule & Job Matching Monetization', async () => {
   assert.ok(medicalQuery.text.includes('Professional Service Referral Conduit'));
   assert.ok(medicalQuery.text.includes('I do *not* provide direct medical, financial, or legal advice'));
 
-  const jobPricing = calculatePricing({
+  // Entry level cashier (< R8k/mo) -> R500 flat fee
+  const jobPricingEntry = calculatePricing({
     intentMode: 'JOB_MATCHING',
-    goodsSubtotalCents: 0,
+    goodsSubtotalCents: 500000, // R5,000/mo salary
     rawTransportQuoteCents: 0
   });
+  assert.equal(jobPricingEntry.jobMatchingFeeCents, 50000, 'Entry level cashier must be R500.00 flat placement fee');
 
-  assert.equal(jobPricing.jobMatchingFeeCents, 50000, 'Job matching fee must be R500.00 flat rate (50,000 cents)');
-  assert.equal(jobPricing.platformFeeCents, 50000);
+  // Mid-tier postgraduate (R15,000/mo) -> 8% fee = R1,200 (120,000 cents)
+  const jobPricingMid = calculatePricing({
+    intentMode: 'JOB_MATCHING',
+    goodsSubtotalCents: 1500000, // R15,000/mo salary
+    rawTransportQuoteCents: 0
+  });
+  assert.equal(jobPricingMid.jobMatchingFeeCents, 120000, 'Mid-tier postgraduate must be 8% placement fee = R1,200');
+
+  // Senior executive (R30,000/mo) -> 12% fee = R3,600 (360,000 cents)
+  const jobPricingSenior = calculatePricing({
+    intentMode: 'JOB_MATCHING',
+    goodsSubtotalCents: 3000000, // R30,000/mo salary
+    rawTransportQuoteCents: 0
+  });
+  assert.equal(jobPricingSenior.jobMatchingFeeCents, 360000, 'Senior executive must be 12% placement fee = R3,600');
 });
 
 test('27. Dynamic Affiliate Referral Commissions & Buyer Early Escrow Release Override', async () => {

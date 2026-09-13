@@ -75,8 +75,22 @@ export function calculatePricing({
   } else if (mode === 'TRANSPORT_ONLY') {
     transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.TRANSPORT_ONLY_MARGIN_PERCENT);
   } else if (mode === 'JOB_MATCHING') {
-    // Flat R500.00 job placement matching fee
-    jobMatchingFeeCents = cfg.JOB_MATCHING_FLAT_FEE_CENTS;
+    // Tiered Employer Placement Fee (Job Seekers strictly R0.00 free):
+    // 1. Entry-Level / High-Volume (< R8,000/mo salary e.g. Cashier, Waiter): Flat R500.00 placement fee
+    // 2. Mid-Tier Professional (R8,000 - R25,000/mo salary e.g. Postgraduate, Developer): 8% of 1st month salary
+    // 3. Senior / Executive (> R25,000/mo salary): 12% of 1st month salary
+    const salaryCents = goodsSubtotalCents || 0;
+    if (salaryCents > 0) {
+      if (salaryCents < 800000) { // < R8,000/mo
+        jobMatchingFeeCents = cfg.JOB_MATCHING_FLAT_FEE_CENTS; // R500.00
+      } else if (salaryCents <= 2500000) { // R8,000 - R25,000/mo
+        jobMatchingFeeCents = calculatePercentageCents(salaryCents, 8); // 8%
+      } else { // > R25,000/mo
+        jobMatchingFeeCents = calculatePercentageCents(salaryCents, 12); // 12%
+      }
+    } else {
+      jobMatchingFeeCents = cfg.JOB_MATCHING_FLAT_FEE_CENTS;
+    }
   } else if (mode === 'SERVICE_REFERRAL' || mode === 'BILL_PAYMENT') {
     if (hasAffiliateCommissionProgram) {
       // Affiliate Commission earned directly from gateway provider (Flash 3%, Travelpayouts 7%, Amadeus 5%, Airalo 10%, Quicket 5%, Awin 7%)

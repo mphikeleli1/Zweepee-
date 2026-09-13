@@ -35,6 +35,13 @@ export class WhatsAppUIBuilder {
    * JOBS / RECRUITMENT MATCH SCREEN
    */
   renderJobsMatchScreen({ jobTitle, location, quantity, salaryCents, agentName }) {
+    let tierNotice = 'R500.00 Flat Placement Fee';
+    if (salaryCents > 2500000) {
+      tierNotice = '12% Senior Placement Commission';
+    } else if (salaryCents >= 800000) {
+      tierNotice = '8% Postgraduate / Mid-Tier Placement Commission';
+    }
+
     return {
       type: 'JOBS_MATCH_SCREEN',
       text: `👔 *Recruitment Matching Result*\n` +
@@ -43,6 +50,7 @@ export class WhatsAppUIBuilder {
         `📍 *Location:* ${location}\n` +
         `👥 *Quantity Available:* ${quantity} Candidates\n` +
         `💵 *Salary Offered:* ${centsToRandsFormatted(salaryCents)}/month\n` +
+        `🛡️ *Employer Fee Structure:* ${tierNotice} *(Job Seekers strictly 100% Free)*\n` +
         `🏢 *Matched Agent:* ${agentName}\n\n` +
         `───────────────\n` +
         `Tap below to connect agents and initiate candidate interview scheduling!`,
