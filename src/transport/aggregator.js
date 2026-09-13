@@ -7,13 +7,17 @@ export const VEHICLE_CLASSES = {
 };
 
 export function classifyLoadVehicle({ items = [], totalWeightKg = 1 }) {
+  const hasFragile = items.some(i => ['Flowers', 'Cake', 'Glassware', 'Fragile'].includes(i.category) || (i.name || '').toLowerCase().includes('flower') || (i.name || '').toLowerCase().includes('bouquet'));
+  const hasHeavy = totalWeightKg > 10 || items.some(i => ['Furniture', 'Appliances', 'Hardware', 'Heavy Groceries'].includes(i.category));
+
   if (totalWeightKg > 4000) {
     return 'TRUCK_8TON';
   } else if (totalWeightKg > 2000) {
     return 'TRUCK_4TON';
   } else if (totalWeightKg > 1000) {
     return 'TRUCK_2TON';
-  } else if (totalWeightKg > 10 || items.some(i => ['Furniture', 'Appliances', 'Hardware'].includes(i.category))) {
+  } else if (hasHeavy || (hasFragile && totalWeightKg > 5)) {
+    // Fragile items mixed with heavy loads are upgraded to BAKKIE_1TON for cargo tie-down protection
     return 'BAKKIE_1TON';
   }
 

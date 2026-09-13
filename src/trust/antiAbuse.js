@@ -75,6 +75,41 @@ export class AntiAbuseGuardEngine {
   /**
    * Anti-Gaming Check for Listing Spam
    */
+  /**
+   * RSA ID Age Gate Verification (Extracts DOB from 13-digit RSA ID Number)
+   */
+  verifyAgeGate(rsaIdNumber) {
+    const cleaned = String(rsaIdNumber || '').replace(/[^0-9]/g, '');
+    if (cleaned.length !== 13) {
+      return { isAdult: false, age: 0, reason: 'Please provide a valid 13-digit RSA Identity Number for liquor/age-restricted orders.' };
+    }
+
+    const yearPrefix = parseInt(cleaned.substring(0, 2), 10);
+    const month = parseInt(cleaned.substring(2, 4), 10);
+    const day = parseInt(cleaned.substring(4, 6), 10);
+
+    const currentYear = new Date().getFullYear();
+    const currentYearShort = currentYear % 100;
+
+    // Century determination (00-25 -> 2000s, 26-99 -> 1900s)
+    const birthYear = yearPrefix <= currentYearShort ? (2000 + yearPrefix) : (1900 + yearPrefix);
+    const birthDate = new Date(birthYear, month - 1, day);
+
+    let age = currentYear - birthYear;
+    const now = new Date();
+    if (now.getMonth() < (month - 1) || (now.getMonth() === (month - 1) && now.getDate() < day)) {
+      age--;
+    }
+
+    const isAdult = age >= 18;
+
+    return {
+      isAdult,
+      age,
+      reason: isAdult ? 'Verified: Age >= 18 years old.' : `Age verification failed: Customer is ${age} years old (must be 18+ for alcohol).`
+    };
+  }
+
   validateListingVelocity(waId) {
     const count = (this.userListingCounts.get(waId) || 0) + 1;
     this.userListingCounts.set(waId, count);

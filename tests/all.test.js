@@ -1035,3 +1035,24 @@ test('36. ATS CV Builder, Z83 Form Auto-Filler & Employment Readiness Pack (R29.
   assert.ok(packScreen.text.includes('Employment Readiness Pack'));
   assert.ok(packScreen.buttons[0].reply.title.includes('Pay R29.00'));
 });
+
+test('37. RSA ID Age Gate Verification & Fragile Load Upgrade', () => {
+  const antiAbuse = new AntiAbuseGuardEngine();
+
+  // 1. RSA ID Age Gate Check (Adult: 9505125800088 -> Born May 12, 1995 -> 29 years old)
+  const adultCheck = antiAbuse.verifyAgeGate('9505125800088');
+  assert.equal(adultCheck.isAdult, true);
+  assert.ok(adultCheck.age >= 18);
+
+  // Minor: 1005125800088 -> Born May 12, 2010 -> 14 years old
+  const minorCheck = antiAbuse.verifyAgeGate('1005125800088');
+  assert.equal(minorCheck.isAdult, false);
+  assert.ok(minorCheck.reason.includes('failed'));
+
+  // 2. Fragile & Heavy Load Vehicle Upgrade
+  const fragileHeavyVehicle = classifyLoadVehicle({
+    items: [{ name: 'Fresh Rose Bouquet', category: 'Flowers' }, { name: '10kg Maize Meal', category: 'Heavy Groceries' }],
+    totalWeightKg: 12
+  });
+  assert.equal(fragileHeavyVehicle, 'BAKKIE_1TON', 'Mixed fragile bouquet + heavy groceries must upgrade to BAKKIE_1TON');
+});
