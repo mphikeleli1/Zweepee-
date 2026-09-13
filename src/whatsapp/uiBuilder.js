@@ -111,7 +111,7 @@ export class WhatsAppUIBuilder {
       text,
       buttons: [
         { type: 'reply', reply: { id: `tap_approve_${transactionId}`, title: payTitle } },
-        { type: 'reply', reply: { id: 'swap_item', title: '🔄 Swap Item / Menu' } },
+        { type: 'reply', reply: { id: 'swap_item', title: '🔄 Change Item / Menu' } },
         { type: 'reply', reply: { id: 'change_location', title: '📍 Change Address' } }
       ]
     };
