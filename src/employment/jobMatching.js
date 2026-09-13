@@ -8,9 +8,12 @@
  * 4. Interactive WhatsApp Candidate Profile Cards with Verified Badges & 1-Tap Interview Scheduling
  */
 
+import { SAJobAggregator } from './jobAggregator.js';
+
 export class SuperiorJobMatchingEngine {
   constructor() {
     this.candidatePool = new Map();
+    this.jobAggregator = new SAJobAggregator();
     this.seedSampleCandidates();
   }
 

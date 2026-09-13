@@ -16,6 +16,7 @@ import { NetworkDiscovery } from '../network/discovery.js';
 import { SAApiStackManager } from '../commerce/saApiStack.js';
 import { detectLanguage, translate } from '../lib/i18n.js';
 import { EmploymentReadinessEngine } from '../employment/readinessPack.js';
+import { SAJobAggregator } from '../employment/jobAggregator.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -38,6 +39,7 @@ export class WhatsAppSessionEngine {
     this.matchingEngine = new AgentMatchingEngine(this.discovery);
     this.saStack = new SAApiStackManager();
     this.employmentEngine = new EmploymentReadinessEngine();
+    this.jobAggregator = new SAJobAggregator();
     this.inMemorySessions = new Map();
   }
 
@@ -458,6 +460,17 @@ export class WhatsAppSessionEngine {
           `• *Monetization:* R180.00/month Subscription (Invoicing, Bookkeeping & Customer Booking Included)\n\n` +
           `Your Business Agent is now discoverable by thousands of Personal Agents looking for services across South Africa! 🚀`
       };
+    }
+
+    // 5b. Employer Forward-a-CV Ingestion Intercept
+    if (text.toLowerCase().startsWith('forward cv') || text.toLowerCase().startsWith('parse cv') || text.toLowerCase().includes('curriculum vitae')) {
+      const cvReport = this.jobAggregator.ingestEmployerForwardedCV({
+        employerPhone: waId,
+        rawCvText: text,
+        targetRole: 'Cashier / Admin Staff'
+      });
+
+      return { text: cvReport.summary };
     }
 
     // 6. Text Message NLU Intent & Advice Prohibition Intercept

@@ -32,6 +32,7 @@ import { MCPServerAdapter } from '../src/network/mcpServer.js';
 import { SAApiStackManager } from '../src/commerce/saApiStack.js';
 import { detectLanguage, translate, SUPPORTED_LANGUAGES } from '../src/lib/i18n.js';
 import { EmploymentReadinessEngine } from '../src/employment/readinessPack.js';
+import { SAJobAggregator } from '../src/employment/jobAggregator.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -1112,4 +1113,48 @@ test('38. Ultra-Superior AI Job Matching & Proactive Candidate Placement', () =>
   });
 
   assert.ok(postgradMatches.matched.some(m => m.title.includes('Software Engineer')));
+});
+
+test('39. SA Job Board Aggregator, WhatsApp CV Forwarding & Reputation Graph', async () => {
+  const aggregator = new SAJobAggregator();
+
+  // 1. External Vacancy Ingestion (< 5-minute push window)
+  const vac = aggregator.ingestExternalVacancy({
+    source: 'Careers24 / Indeed API',
+    title: 'Store Assistant',
+    company: 'Woolworths SA',
+    location: 'Sandton',
+    salaryCents: 550000
+  });
+
+  assert.ok(vac.vacancyId.includes('vac_'));
+  assert.equal(vac.company, 'Woolworths SA');
+
+  // 2. Employer "Forward-a-CV" WhatsApp Endpoint
+  const rawCv = 'Curriculum Vitae for Thabo Mokoena. Passed Matric 2021. Worked as Cashier at Pick n Pay for 2 years. Code 8 Driver License.';
+  const cvReport = aggregator.ingestEmployerForwardedCV({
+    employerPhone: '27829998888',
+    rawCvText: rawCv,
+    targetRole: 'Cashier'
+  });
+
+  assert.equal(cvReport.success, true);
+  assert.ok(cvReport.atsScore >= 75);
+  assert.ok(cvReport.summary.includes('HIGHLY RECOMMENDED'));
+
+  // 3. Candidate Interview Attendance Reputation Graph
+  const rep1 = aggregator.recordInterviewAttendance('cand_thabo_1', true);
+  assert.equal(rep1.reputationScore, 100);
+
+  const rep2 = aggregator.recordInterviewAttendance('cand_thabo_1', false);
+  assert.equal(rep2.reputationScore, 50, '1 attended out of 2 total interviews = 50% score');
+
+  // 4. Session Engine CV Forwarding Intercept
+  const sessionEngine = new WhatsAppSessionEngine();
+  await sessionEngine.handleIncomingMessage('27829998888', 'hi');
+  await sessionEngine.handleIncomingMessage('27829998888', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27829998888', 'Manager');
+
+  const forwardResponse = await sessionEngine.handleIncomingMessage('27829998888', `Forward CV: ${rawCv}`);
+  assert.ok(forwardResponse.text.includes('ATS Candidate Match Report'));
 });
