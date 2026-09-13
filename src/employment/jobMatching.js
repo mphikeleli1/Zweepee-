@@ -68,6 +68,52 @@ export class SuperiorJobMatchingEngine {
     return record;
   }
 
+  /**
+   * Unlocks Candidate Full Details & ATS CV for Employer upon placement fee authorization
+   */
+  unlockCandidateForEmployer({ candidateId, employerId, salaryCents }) {
+    const candidate = this.candidatePool.get(candidateId);
+    if (!candidate) {
+      return { success: false, message: 'Candidate record not found.' };
+    }
+
+    const sal = salaryCents || candidate.salaryCents || 500000;
+    let feeCents = 50000; // R500 flat default
+    if (sal > 2500000) {
+      feeCents = Math.round(sal * 0.12); // 12%
+    } else if (sal >= 800000) {
+      feeCents = Math.round(sal * 0.08); // 8%
+    }
+
+    const unlockRecord = {
+      candidateId,
+      employerId,
+      unlockedPhone: candidate.phone,
+      unlockedFullName: candidate.fullName,
+      feeCents,
+      status: 'UNLOCKED_ESCROW_PROTECTED',
+      warrantyDays: 14,
+      unlockedAt: Date.now()
+    };
+
+    return {
+      success: true,
+      unlockRecord,
+      unlockedCandidate: {
+        fullName: candidate.fullName,
+        phone: candidate.phone,
+        role: candidate.role,
+        suburb: candidate.suburb,
+        qualifications: candidate.qualifications
+      },
+      employerNotice: `🔓 *Candidate Contact Details Unlocked!*\n\n` +
+        `• Candidate: *${candidate.fullName}*\n` +
+        `• Phone/WhatsApp: *${candidate.phone}*\n` +
+        `• Placement Fee Held in Escrow: *R${(feeCents / 100).toFixed(2)}*\n\n` +
+        `🛡️ *14-Day Free Replacement Guarantee:* If candidate no-shows or leaves within 14 days, you get a 100% free replacement or full refund!`
+    };
+  }
+
   calculateDistanceKm(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth radius in km
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -115,8 +161,17 @@ export class SuperiorJobMatchingEngine {
 
       const totalScore = Math.round(((proximityScore * 0.4) + (expScore * 0.25) + (ratingScore * 0.25) + clearanceBonus) * 100) / 100;
 
+      // Mask candidate surname and phone number prior to employer unlock
+      const firstNameOnly = candidate.fullName.split(' ')[0] || 'Candidate';
+      const maskedCandidate = {
+        ...candidate,
+        fullName: `${firstNameOnly} [CONTACT MASKED UNTIL UNLOCK]`,
+        phone: '[MASKED UNTIL UNLOCK]'
+      };
+
       matches.push({
-        candidate,
+        candidate: maskedCandidate,
+        realCandidateId: candidate.candidateId,
         distanceKm,
         matchScore: totalScore,
         proximityBadge: distanceKm <= 5.0 ? '📍 < 5km (Low Commute Cost)' : `📍 ${distanceKm}km away`,

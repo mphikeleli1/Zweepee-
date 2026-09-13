@@ -48,14 +48,15 @@ export class WhatsAppUIBuilder {
         `───────────────\n\n` +
         `💼 *Role:* ${jobTitle}\n` +
         `📍 *Location:* ${location}\n` +
-        `👥 *Quantity Available:* ${quantity} Candidates\n` +
+        `👥 *Candidates Matched:* ${quantity}\n` +
         `💵 *Salary Offered:* ${centsToRandsFormatted(salaryCents)}/month\n` +
-        `🛡️ *Employer Fee Structure:* ${tierNotice} *(Job Seekers strictly 100% Free)*\n` +
+        `🛡️ *Employer Placement Fee:* ${tierNotice} *(100% Free for Candidates)*\n` +
+        `🔒 *Candidate Direct Contact Details:* Masked until placement fee authorization.\n\n` +
         `🏢 *Matched Agent:* ${agentName}\n\n` +
         `───────────────\n` +
-        `Tap below to connect agents and initiate candidate interview scheduling!`,
+        `Tap below to unlock direct candidate contact details and schedule your interview!`,
       buttons: [
-        { type: 'reply', reply: { id: 'connect_job_agent', title: '🤝 Connect Agents' } }
+        { type: 'reply', reply: { id: 'connect_job_agent', title: '🔓 Unlock Candidate & Interview' } }
       ]
     };
   }

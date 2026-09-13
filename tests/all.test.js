@@ -1089,7 +1089,23 @@ test('38. Ultra-Superior AI Job Matching & Proactive Candidate Placement', () =>
   assert.ok(topMatch.proximityBadge.includes('📍'));
   assert.ok(topMatch.verifiedBadge.includes('Police Cleared'));
 
-  // 2. Match Postgraduate Software Engineer / Data Analyst
+  // Verify Anti-Circumvention Masking
+  assert.ok(topMatch.agentName.includes('[CONTACT MASKED UNTIL UNLOCK]'));
+
+  // 2. Unlock Candidate Contact Details for Employer
+  const unlockResult = matchingEngine.jobEngine.unlockCandidateForEmployer({
+    candidateId: 'cand_sipho_101',
+    employerId: 'emp_picknpay_sandton',
+    salaryCents: 500000
+  });
+
+  assert.equal(unlockResult.success, true);
+  assert.equal(unlockResult.unlockedCandidate.phone, '27821112222');
+  assert.equal(unlockResult.unlockedCandidate.fullName, 'Sipho Dlamini');
+  assert.equal(unlockResult.unlockRecord.feeCents, 50000);
+  assert.ok(unlockResult.employerNotice.includes('14-Day Free Replacement Guarantee'));
+
+  // 3. Match Postgraduate Software Engineer / Data Analyst
   const postgradMatches = matchingEngine.matchMultiDimensional({
     queryText: 'Software Engineer Rosebank',
     filters: { vertical: 'JOBS', maxSalaryCents: 2000000 }
