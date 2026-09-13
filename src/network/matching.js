@@ -1,8 +1,10 @@
 import { NetworkDiscovery } from './discovery.js';
+import { SuperiorJobMatchingEngine } from '../employment/jobMatching.js';
 
 export class AgentMatchingEngine {
   constructor(discoveryService) {
     this.discovery = discoveryService || new NetworkDiscovery();
+    this.jobEngine = new SuperiorJobMatchingEngine();
     this.outcomeHistory = new Map();
   }
 
@@ -48,27 +50,27 @@ export class AgentMatchingEngine {
 
     // 2. Jobs / Hiring Intents
     if (filters.vertical === 'JOBS' || q.includes('cashier') || q.includes('hire staff') || q.includes('hiring') || q.includes('recruit')) {
-      const candidates = [
-        {
-          agentId: 'agent_recruitment_midrand',
-          agentName: 'Midrand Staffing & Recruitment Agent',
-          title: 'Cashier (Matric Required)',
-          location: 'Midrand',
-          quantityAvailable: 15,
-          salaryCents: 500000,
-          qualifications: ['Matric'],
-          reputationScore: 0.98
-        }
-      ];
+      const superiorMatches = this.jobEngine.matchSuperiorCandidates({
+        jobRole: q,
+        employerLocation: userLocation,
+        maxSalaryCents: filters.maxSalaryCents
+      });
 
       return {
         vertical: 'JOBS',
-        matched: candidates.filter(c => {
-          if (filters.quantity && c.quantityAvailable < filters.quantity) return false;
-          if (filters.maxSalaryCents && c.salaryCents > filters.maxSalaryCents) return false;
-          if (filters.qualification && !c.qualifications.includes(filters.qualification)) return false;
-          return true;
-        })
+        matched: superiorMatches.map(m => ({
+          agentId: m.candidate.candidateId,
+          agentName: `${m.candidate.fullName} (${m.candidate.suburb})`,
+          title: m.candidate.role,
+          location: m.candidate.suburb,
+          distanceKm: m.distanceKm,
+          quantityAvailable: 1,
+          salaryCents: m.candidate.salaryCents,
+          qualifications: m.candidate.qualifications,
+          reputationScore: m.matchScore,
+          proximityBadge: m.proximityBadge,
+          verifiedBadge: m.verifiedBadge
+        }))
       };
     }
 

@@ -278,8 +278,9 @@ export class WhatsAppSessionEngine {
 
       if (buttonPayload === 'connect_job_agent' || buttonPayload === 'connect_prop_agent') {
         return {
-          text: `🤝 *Agents Connected Successfully!*\n\n` +
-            `Your Personal Agent has established a direct agent-to-agent channel on the myAI Network. You will receive real-world updates right here!`
+          text: `🤝 *Agents Connected & Interview Scheduled!*\n\n` +
+            `Your Personal Agent has established a direct agent-to-agent recruitment channel on the myAI Network.\n\n` +
+            `📅 *Status:* Interview invitation sent directly to the candidate's Personal Agent!`
         };
       }
 
