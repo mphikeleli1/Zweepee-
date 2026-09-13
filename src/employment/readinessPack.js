@@ -13,7 +13,7 @@
 
 export class EmploymentReadinessEngine {
   constructor() {
-    this.packPriceCents = 2900; // R29.00 affordable price point for job seekers
+    this.packPriceCents = 0; // 100% Strictly FREE (R0.00) for all job candidates
   }
 
   /**
@@ -116,7 +116,7 @@ export class EmploymentReadinessEngine {
       z83Form,
       coverLetter,
       interviewGuide,
-      bundleSummary: `🎉 *Your Employment Readiness Pack is Ready! (R29.00)*\n` +
+      bundleSummary: `🎉 *Your Employment Readiness Pack is Ready! (100% FREE - R0.00)*\n` +
         `• 📄 ATS-Optimized Professional CV (PDF & Editable Text)\n` +
         `• 📋 Official Z83 Government Form Auto-Filled\n` +
         `• ✉️ Tailored Professional Cover Letter\n` +

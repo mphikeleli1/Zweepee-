@@ -1035,7 +1035,7 @@ test('36. ATS CV Builder, Z83 Form Auto-Filler & Employment Readiness Pack (R29.
     positionAppliedFor: 'Admin Clerk'
   });
 
-  assert.equal(pack.priceCents, 2900, 'Pack price must be R29.00 (2,900 cents)');
+  assert.equal(pack.priceCents, 0, 'Pack price must be 100% FREE (R0.00)');
   assert.ok(pack.coverLetter.includes('Dear Hiring Manager'));
   assert.ok(pack.interviewGuide.includes('SA INTERVIEW PREPARATION GUIDE'));
 
@@ -1048,7 +1048,7 @@ test('36. ATS CV Builder, Z83 Form Auto-Filler & Employment Readiness Pack (R29.
   const packScreen = await sessionEngine.handleIncomingMessage('27831111111', 'I need a CV and z83 form for a government job');
   assert.equal(packScreen.type, 'EMPLOYMENT_PACK_SCREEN');
   assert.ok(packScreen.text.includes('Employment Readiness Pack'));
-  assert.ok(packScreen.buttons[0].reply.title.includes('Pay R29.00'));
+  assert.ok(packScreen.buttons[0].reply.title.includes('Unlock Free Readiness Pack'));
 });
 
 test('37. RSA ID Age Gate Verification & Fragile Load Upgrade', () => {
