@@ -49,25 +49,56 @@ export class P2PCommerceEngine {
   }
 
   /**
-   * Calculate 24-Hour Inspection Window Escrow Hold
+   * Calculate 24-Hour Inspection Window Escrow Hold & 6-Digit Escrow Unlock PIN
    */
   createP2PEscrowHold({ transactionId, buyerId, sellerId, amountCents }) {
     const holdHours = 24;
     const releaseTimestamp = Date.now() + (holdHours * 60 * 60 * 1000);
+    const escrowPin = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit PIN
 
     const hold = {
       transactionId,
       buyerId,
       sellerId,
       amountCents,
+      escrowPin,
       status: 'ESCROW_HELD',
       releaseTimestamp,
       inspectionWindowHours: holdHours,
-      noticeText: `🛡️ *Paystack Escrow Protection Active:* Your payment of R${(amountCents / 100).toFixed(2)} is held safely in escrow. You have a 24-hour inspection window after delivery to inspect the item before money is released to the seller.`
+      noticeText: `🛡️ *Paystack Escrow Protection Active:* Your payment of R${(amountCents / 100).toFixed(2)} is held safely in escrow. Your secret 6-digit Escrow Unlock PIN is *${escrowPin}*. Hand this PIN to the seller face-to-face only when satisfied with the item!`
     };
 
     this.escrowHolds.set(transactionId, hold);
     return hold;
+  }
+
+  /**
+   * Validates 6-Digit Escrow Release PIN entered by Seller face-to-face
+   */
+  verifySelfCollectEscrowPin(transactionId, sellerId, enteredPin) {
+    const hold = this.escrowHolds.get(transactionId);
+    if (!hold) {
+      return { success: false, message: 'Escrow transaction record not found.' };
+    }
+
+    if (hold.status !== 'ESCROW_HELD') {
+      return { success: false, message: 'Escrow funds have already been released or cancelled.' };
+    }
+
+    if (hold.escrowPin !== String(enteredPin).trim()) {
+      return { success: false, message: '❌ Invalid Escrow Release PIN. Please double check the 6-digit PIN given by the buyer.' };
+    }
+
+    hold.status = 'ESCROW_RELEASED_VIA_PIN';
+    hold.releasedAt = Date.now();
+    this.recordCompletedDeal(hold.sellerId);
+
+    return {
+      success: true,
+      transactionId,
+      status: hold.status,
+      message: `🎉 *Escrow Release PIN Verified!* R${(hold.amountCents / 100).toFixed(2)} has been instantly transferred from Paystack Escrow to seller account (${sellerId}). Deal complete!`
+    };
   }
 
   /**

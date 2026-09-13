@@ -158,7 +158,13 @@ export class WhatsAppSessionEngine {
       });
     }
 
-    // 3. Early Buyer Escrow Release Handler
+    // 3. Early Buyer Escrow Release or Face-to-Face 6-Digit Escrow PIN Verification Handler
+    if (/^\d{6}$/.test(text.trim())) {
+      const txId = session.transactionId || 'tx_p2p_recent';
+      const pinResult = this.p2pEngine.verifySelfCollectEscrowPin(txId, waId, text.trim());
+      return { text: pinResult.message };
+    }
+
     if (text.toLowerCase().includes('release escrow') || text.toLowerCase().includes('release funds') || text.toLowerCase().includes('approve goods')) {
       const txId = session.transactionId || 'tx_p2p_recent';
       const releaseResult = this.p2pEngine.buyerReleaseEscrowEarly(txId, waId);

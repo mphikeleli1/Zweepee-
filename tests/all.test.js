@@ -391,7 +391,14 @@ test('18. P2P Strategic Features (Trust Score & 24h Inspection Escrow)', () => {
 
   assert.equal(escrowHold.status, 'ESCROW_HELD');
   assert.equal(escrowHold.inspectionWindowHours, 24);
-  assert.ok(escrowHold.noticeText.includes('24-hour inspection window'));
+  assert.ok(escrowHold.escrowPin.length === 6, 'Escrow hold must generate a secret 6-digit PIN');
+
+  const invalidPinResult = p2pEngine.verifySelfCollectEscrowPin('tx_p2p_99', 'seller_1', '000000');
+  assert.equal(invalidPinResult.success, false);
+
+  const validPinResult = p2pEngine.verifySelfCollectEscrowPin('tx_p2p_99', 'seller_1', escrowHold.escrowPin);
+  assert.equal(validPinResult.success, true);
+  assert.equal(validPinResult.status, 'ESCROW_RELEASED_VIA_PIN');
 
   for (let i = 0; i < 5; i++) {
     p2pEngine.recordCompletedDeal('seller_trusted_1');
