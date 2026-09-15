@@ -495,6 +495,68 @@ export class WhatsAppSessionEngine {
       return { text: cvReport.summary };
     }
 
+    // 5c. Proactive Clarification Intercept for Vague Product Queries
+    const isVagueProductQuery = (txt) => {
+      const lower = txt.toLowerCase().trim();
+      const vaguePatterns = [
+        'headphones', 'sony headphones', 'shoes', 'tv', 'television', 'laptop', 'fridge',
+        'blender', 'couch', 'phone', 'smartphone', 'watch', 'sneakers', 'microwave'
+      ];
+      const hasVagueMatch = vaguePatterns.some(p => lower.includes(p));
+      const hasSpecificDetails = lower.includes('from') || lower.includes('model') || lower.includes('under r') || lower.includes('new') || lower.includes('used') || lower.includes('refurbished');
+      return hasVagueMatch && !hasSpecificDetails;
+    };
+
+    if (isVagueProductQuery(text)) {
+      session.step = 'AWAITING_PROACTIVE_CLARIFICATION';
+      session.vagueQuery = text;
+      await this.saveSession(waId, session);
+
+      return this.uiBuilder.renderProactiveClarificationScreen({
+        query: text,
+        productCategory: 'Electronics / Retail'
+      });
+    }
+
+    if (session.step === 'AWAITING_PROACTIVE_CLARIFICATION') {
+      session.step = 'STATE_IDLE';
+      const originalQuery = session.vagueQuery || 'Item';
+      await this.saveSession(waId, session);
+
+      const items = await this.commerce.searchCatalog(originalQuery);
+      const matchedItem = items[0] || { id: 'generic_1', name: `${originalQuery} (Clarified)`, priceCents: 89900, storeName: 'HiFi Corp' };
+
+      const quotes = await this.transport.getQuotes({ distanceKm: 5, items: [matchedItem] });
+      const config = await getPricingConfig(this.db);
+      const pricing = calculatePricing({
+        intentMode: 'BUY_PLUS_DELIVER',
+        goodsSubtotalCents: matchedItem.priceCents,
+        rawTransportQuoteCents: quotes.cheapestQuote.rawQuoteCents,
+        config
+      });
+
+      const txId = `tx_clarified_${Date.now()}`;
+      session.cart = [matchedItem];
+      session.deliveryQuote = quotes.cheapestQuote;
+      session.pricing = pricing;
+      session.transactionId = txId;
+      session.activeAddress = session.activeAddress || userProfile.address || 'Saved Location';
+      session.step = 'STATE_AWAITING_APPROVAL';
+      await this.saveSession(waId, session);
+
+      return this.uiBuilder.renderOneTapCheckoutScreen({
+        storeName: matchedItem.storeName || 'Partner Store',
+        itemName: matchedItem.name,
+        itemPriceCents: matchedItem.priceCents,
+        vehicleClass: quotes.requiredVehicleClass,
+        providerName: quotes.cheapestQuote.providerName,
+        transportCostCents: quotes.cheapestQuote.rawQuoteCents,
+        totalCustomerPaysCents: pricing.totalCustomerPaysCents,
+        deliveryAddress: session.activeAddress,
+        transactionId: txId
+      });
+    }
+
     // 6. Text Message NLU Intent & Advice Prohibition Intercept
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);

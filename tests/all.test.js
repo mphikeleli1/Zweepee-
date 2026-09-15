@@ -1206,3 +1206,21 @@ test('41. 1-Click Master Service Agreement (MSA) Contract & Anti-Circumvention E
   assert.equal(acceptRes.record.status, 'ACCEPTED_LEGAL_BINDING');
   assert.ok(acceptRes.confirmationText.includes('Master Service Agreement Accepted'));
 });
+
+test('42. Proactive Intelligent Sourcing Clarification Intercept', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  await sessionEngine.handleIncomingMessage('27842222222', 'hi');
+  await sessionEngine.handleIncomingMessage('27842222222', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27842222222', 'John');
+
+  const clarificationScreen = await sessionEngine.handleIncomingMessage('27842222222', 'Get me Sony headphones');
+  assert.equal(clarificationScreen.type, 'PROACTIVE_CLARIFICATION_SCREEN');
+  assert.ok(clarificationScreen.text.includes('Intelligent Sourcing Clarification'));
+  assert.ok(clarificationScreen.text.includes('Preferred Store'));
+  assert.ok(clarificationScreen.buttons.length === 3);
+
+  const checkoutScreen = await sessionEngine.handleIncomingMessage('27842222222', '', 'clarify_new_budget');
+  assert.equal(checkoutScreen.type, 'ONE_TAP_CHECKOUT_SCREEN');
+  assert.ok(checkoutScreen.text.includes('Instant Checkout'));
+});

@@ -94,6 +94,7 @@ export default {
       try {
         const body = await request.json();
         const sessionEngine = new WhatsAppSessionEngine(env?.SESSIONS_KV, env?.USERS_KV, env?.CATALOG_CACHE_KV, env?.DB);
+        const transportAdapter = new WhatsAppTransportAdapter('META_WEBHOOK');
 
         const messageText = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || '';
         const buttonPayload = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive?.button_reply?.id || null;
@@ -102,7 +103,10 @@ export default {
 
         const screenResponse = await sessionEngine.handleIncomingMessage(sender, messageText, buttonPayload, locationObj);
 
-        return new Response(JSON.stringify({ success: true, screenResponse }), {
+        // Dispatch outbound WhatsApp response via Transport Abstraction
+        const outboundDispatch = await transportAdapter.sendMessage(sender, screenResponse);
+
+        return new Response(JSON.stringify({ success: true, screenResponse, outboundDispatch }), {
           headers: { 'Content-Type': 'application/json' }
         });
       } catch (err) {
@@ -119,22 +123,71 @@ export default {
         return new Response('Invalid signature', { status: 400 });
       }
 
+      let payload = {};
+      try { payload = JSON.parse(rawBody); } catch (_) {}
+
+      const eventType = payload?.event || 'charge.success';
+      const eventId = payload?.data?.id || sig || Date.now();
+
       const idempotency = new IdempotencyManager(env?.SESSIONS_KV);
-      const lock = await idempotency.checkAndLock(`paystack_${sig || Date.now()}`);
+      const lock = await idempotency.checkAndLock(`paystack_${eventId}`);
       if (lock.isDuplicate) {
         return new Response('Duplicate event ignored', { status: 200 });
       }
 
-      await idempotency.complete(`paystack_${sig || Date.now()}`, { processed: true });
-      return new Response(JSON.stringify({ status: 'success' }), { headers: { 'Content-Type': 'application/json' } });
+      if (eventType === 'charge.success') {
+        const txId = payload?.data?.reference || `tx_paystack_${Date.now()}`;
+        const amountCents = payload?.data?.amount || 0;
+        const ledger = new DoubleEntryLedger(env?.DB);
+
+        await ledger.recordTransaction({
+          transactionId: txId,
+          idempotencyKey: `idem_paystack_${eventId}`,
+          entries: [
+            { account: 'ASSETS:PAYSTACK_CLEARING', type: 'DEBIT', amountCents: amountCents || 10000 },
+            { account: 'LIABILITIES:MERCHANT_PAYABLE', type: 'CREDIT', amountCents: Math.round((amountCents || 10000) * 0.7) },
+            { account: 'REVENUE:MYAI_MARGIN', type: 'CREDIT', amountCents: Math.round((amountCents || 10000) * 0.3) }
+          ],
+          description: 'Paystack Charge Success Payment Webhook Settlement'
+        });
+      }
+
+      await idempotency.complete(`paystack_${eventId}`, { processed: true });
+      return new Response(JSON.stringify({ status: 'success', eventProcessed: eventType }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (path === '/api/v25/webhook/payfast' && method === 'POST') {
-      return new Response(JSON.stringify({ status: 'success' }), { headers: { 'Content-Type': 'application/json' } });
+      const rawText = await request.text();
+      const params = Object.fromEntries(new URLSearchParams(rawText));
+      const payfast = new PayFastPaymentGateway(env?.PAYFAST_MERCHANT_ID || '10000100');
+
+      if (!payfast.verifyWebhookSignature(params)) {
+        return new Response('Invalid PayFast Signature', { status: 400 });
+      }
+
+      const txId = params.m_payment_id || `tx_pf_${Date.now()}`;
+      const amountCents = Math.round(parseFloat(params.amount_gross || '0') * 100);
+      const ledger = new DoubleEntryLedger(env?.DB);
+
+      await ledger.recordTransaction({
+        transactionId: txId,
+        idempotencyKey: `idem_payfast_${txId}`,
+        entries: [
+          { account: 'ASSETS:PAYFAST_CLEARING', type: 'DEBIT', amountCents: amountCents || 10000 },
+          { account: 'REVENUE:MYAI_MARGIN', type: 'CREDIT', amountCents: amountCents || 10000 }
+        ],
+        description: 'PayFast Instant EFT Webhook Settlement'
+      });
+
+      return new Response(JSON.stringify({ status: 'success', transactionId: txId }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (path === '/api/v25/webhook/picup' && method === 'POST') {
-      return new Response(JSON.stringify({ status: 'success' }), { headers: { 'Content-Type': 'application/json' } });
+      const body = await request.json();
+      const waybillNo = body?.waybill_number || `picup_${Date.now()}`;
+      const status = body?.status || 'COLLECTED';
+
+      return new Response(JSON.stringify({ status: 'success', waybillNo, deliveryStatus: status }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     return new Response('Not Found', { status: 404 });

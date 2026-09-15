@@ -34,20 +34,21 @@ export class DoubleEntryLedger {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
-      for (const entry of entries) {
-        if (entry.type === 'DEBIT') {
-          const entryId = `led_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-          await stmt.bind(
-            entryId,
-            transactionId,
-            `${idempotencyKey}_${entry.account}`,
-            entry.account,
-            'BALANCING',
-            entry.amountCents,
-            description,
-            Date.now()
-          ).run();
-        }
+      const debitAccount = entries.find(e => e.type === 'DEBIT')?.account || 'ASSETS:CUSTOMER_PAYMENT';
+      const creditEntries = entries.filter(e => e.type === 'CREDIT');
+
+      for (const entry of creditEntries) {
+        const entryId = `led_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await stmt.bind(
+          entryId,
+          transactionId,
+          `${idempotencyKey}_${entry.account}`,
+          debitAccount,
+          entry.account,
+          entry.amountCents,
+          description,
+          Date.now()
+        ).run();
       }
     }
 

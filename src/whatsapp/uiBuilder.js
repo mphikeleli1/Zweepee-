@@ -3,8 +3,30 @@ import { translate } from '../lib/i18n.js';
 
 export class WhatsAppUIBuilder {
   /**
-   * EMPLOYMENT READINESS PACK & Z83 GOVERNMENT FORM SCREEN
+   * PROACTIVE INTELLIGENT SOURCING CLARIFICATION SCREEN
    */
+  renderProactiveClarificationScreen({ query, productCategory = 'Product' }) {
+    return {
+      type: 'PROACTIVE_CLARIFICATION_SCREEN',
+      text: `🤖 *myAI™ Intelligent Sourcing Clarification*\n` +
+        `───────────────\n\n` +
+        `I noticed you are looking for *${query}*!\n\n` +
+        `To source the exact item for you with 0% store price markup, could you clarify a few details?\n\n` +
+        `1. 🏪 *Preferred Store:* (e.g., Takealot, Makro, HiFi Corp, Dischem, or local verified A2A seller)\n` +
+        `2. 🏷️ *Condition:* New or Pre-owned / Refurbished?\n` +
+        `3. 🎧 *Exact Model & Features:* (e.g. Over-Ear, In-Ear, Noise-Cancelling, Color)\n` +
+        `4. 💰 *Target Budget:* (e.g., Under R1,500)?\n` +
+        `5. 📝 *Additional Requirements:* (e.g., Warranty, specific brand/use case)\n\n` +
+        `───────────────\n` +
+        `Or tap one of the quick options below:`,
+      buttons: [
+        { type: 'reply', reply: { id: 'clarify_new_budget', title: '🎧 New under R1,500' } },
+        { type: 'reply', reply: { id: 'clarify_premium_new', title: '🎧 Premium Brand (New)' } },
+        { type: 'reply', reply: { id: 'clarify_any_deal', title: '🏷️ Best Value Deal' } }
+      ]
+    };
+  }
+
   renderEmploymentPackScreen({ candidateName, packPriceCents = 0, transactionId, cvPreviewUrl, z83PreviewUrl }) {
     const text = `💼 *myAI™ Employment Readiness Pack (100% FREE)* 💼\n` +
       `───────────────\n\n` +
