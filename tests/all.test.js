@@ -1193,6 +1193,17 @@ test('40. Intent-First & Constraint-First Job Seeker Onboarding (PAUSE/Resume Su
   const q4 = await onboarding.handleJobSeekerMessage('27840001111', 'Soweto, up to 20km');
   assert.equal(q4.completed, true);
   assert.equal(q4.seekerType, 'DRIVER');
+
+  // 5. Conversational "Tell Me About Yourself" Profiling Flow
+  const conv1 = await onboarding.handleJobSeekerMessage('27840002222', 'Tell me about yourself - start profiling');
+  assert.ok(conv1.text.includes('Tell Me A Bit About Yourself'));
+
+  const conv2 = await onboarding.handleJobSeekerMessage('27840002222', 'I am a software engineer with BSc CompSci from Wits and 2.5 yrs experience in Node.js');
+  assert.ok(conv2.text.includes('wonderful background'));
+
+  const conv3 = await onboarding.handleJobSeekerMessage('27840002222', 'R22,000/mo salary in Rosebank');
+  assert.equal(conv3.completed, true);
+  assert.equal(conv3.seekerType, 'PROFESSIONAL_CONVERSATIONAL');
 });
 
 test('41. 1-Click Master Service Agreement (MSA) Contract & Anti-Circumvention Enforcement', () => {

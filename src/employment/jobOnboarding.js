@@ -57,10 +57,19 @@ export class JobSeekerOnboardingEngine {
       return { text: `⏸️ Onboarding is currently paused. Reply *RESUME* when you're ready to continue!` };
     }
 
-    // Step 1: Start with Intent
+    // Step 1: Start with Intent or Conversational Opener
     if (state.step === 'AWAITING_INTENT') {
       state.data.intent = input;
       const lower = input.toLowerCase();
+
+      if (lower.includes('tell me about yourself') || lower.includes('profile setup') || lower.includes('start profiling')) {
+        state.step = 'CONVERSATIONAL_STORY';
+        await this.saveOnboardingState(waId, state);
+        return {
+          text: `😊 *Tell Me A Bit About Yourself & Your Journey!*\n\n` +
+            `What kind of work do you do, what did you study or work on recently, and what are you looking for in your next role?`
+        };
+      }
 
       // Classify Job Seeker Type
       if (lower.includes('driver') || lower.includes('pdp') || lower.includes('code')) {
@@ -70,11 +79,11 @@ export class JobSeekerOnboardingEngine {
         return { text: `🚚 *Driver Profile Setup*\n\nWhat license code do you have? (e.g. *Code 8, Code 10, Code 14*)` };
       }
 
-      if (lower.includes('grad') || lower.includes('degree') || lower.includes('diploma') || lower.includes('bsc') || lower.includes('bcom')) {
+      if (lower.includes('grad') || lower.includes('degree') || lower.includes('diploma') || lower.includes('bsc') || lower.includes('bcom') || lower.includes('engineer') || lower.includes('advocate') || lower.includes('legal')) {
         state.seekerType = 'GRADUATE';
         state.step = 'GRAD_QUALIFICATION';
         await this.saveOnboardingState(waId, state);
-        return { text: `🎓 *Graduate Profile Setup*\n\nWhat degree or qualification did you study and at which institution? (e.g. *BCom Accounting at Wits*)` };
+        return { text: `🎓 *Professional Profile Setup*\n\nTell me a bit about your qualification, degree, or legal bar admission! (e.g. *BSc CompSci at Wits* or *Admitted Advocate*)` };
       }
 
       if (lower.includes('first time') || lower.includes('never worked') || lower.includes('matric')) {
@@ -89,6 +98,35 @@ export class JobSeekerOnboardingEngine {
       state.step = 'CONSTRAINT_WEEKENDS';
       await this.saveOnboardingState(waId, state);
       return { text: `🏬 *Job Preferences*\n\nAre you open to working weekends and public holidays if required? (Reply *Yes* or *No*)` };
+    }
+
+    if (state.step === 'CONVERSATIONAL_STORY') {
+      state.data.story = input;
+      state.step = 'GENTLE_FOLLOWUP_SALARY_LOCATION';
+      await this.saveOnboardingState(waId, state);
+
+      return {
+        text: `That sounds like a wonderful background! 🚀\n\n` +
+          `Just two quick details to round out your profile:\n` +
+          `1. What target monthly salary or retainer are you aiming for?\n` +
+          `2. Where do you stay and what is your preferred work setup? (e.g. *Rosebank, Hybrid / In-Office*)`
+      };
+    }
+
+    if (state.step === 'GENTLE_FOLLOWUP_SALARY_LOCATION') {
+      state.data.salaryAndLocation = input;
+      state.step = 'COMPLETED';
+      await this.saveOnboardingState(waId, state);
+
+      return {
+        completed: true,
+        seekerType: 'PROFESSIONAL_CONVERSATIONAL',
+        candidateProfile: state.data,
+        text: `🎉 *Your Job Candidate Profile Is Complete & Active!*\n\n` +
+          `• *Background:* ${state.data.story}\n` +
+          `• *Salary & Location:* ${state.data.salaryAndLocation}\n\n` +
+          `Your Personal Agent has generated your Free ATS CV and auto-broadcasted your profile to top employers! 🚀`
+      };
     }
 
     // Step 2: Intent-Adaptive Questioning
