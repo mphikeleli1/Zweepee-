@@ -1054,7 +1054,7 @@ test('36. ATS CV Builder, Z83 Form Auto-Filler & Employment Readiness Pack (R29.
   assert.ok(packScreen.buttons[0].reply.title.includes('Unlock Free Readiness Pack'));
 });
 
-test('37. RSA ID Age Gate Verification & Fragile Load Upgrade', () => {
+test('37. RSA ID Age Gate Verification & Intelligent Vehicle Sizing', () => {
   const antiAbuse = new AntiAbuseGuardEngine();
 
   // 1. RSA ID Age Gate Check (Adult: 9505125800088 -> Born May 12, 1995 -> 29 years old)
@@ -1067,12 +1067,19 @@ test('37. RSA ID Age Gate Verification & Fragile Load Upgrade', () => {
   assert.equal(minorCheck.isAdult, false);
   assert.ok(minorCheck.reason.includes('failed'));
 
-  // 2. Fragile & Heavy Load Vehicle Upgrade
-  const fragileHeavyVehicle = classifyLoadVehicle({
-    items: [{ name: 'Fresh Rose Bouquet', category: 'Flowers' }, { name: '10kg Maize Meal', category: 'Heavy Groceries' }],
-    totalWeightKg: 12
+  // 2. Intelligent Light Load Classification (Flowers + 6-pack beer + KFC <= 10kg must be BIKE)
+  const lightLoadVehicle = classifyLoadVehicle({
+    items: [{ name: 'Fresh Rose Bouquet', category: 'Flowers' }, { name: '6-Pack Beer', category: 'Liquor' }, { name: 'KFC Meal', category: 'Food' }],
+    totalWeightKg: 3
   });
-  assert.equal(fragileHeavyVehicle, 'BAKKIE_1TON', 'Mixed fragile bouquet + heavy groceries must upgrade to BAKKIE_1TON');
+  assert.equal(lightLoadVehicle, 'BIKE', 'Light bouquet + 6-pack beer + food (3kg) must use BIKE');
+
+  // Heavy Load (>10kg) upgrade to BAKKIE_1TON
+  const heavyVehicle = classifyLoadVehicle({
+    items: [{ name: 'L-Shape Couch', category: 'Furniture' }],
+    totalWeightKg: 50
+  });
+  assert.equal(heavyVehicle, 'BAKKIE_1TON', 'Heavy load >10kg must upgrade to BAKKIE_1TON');
 });
 
 test('38. Ultra-Superior AI Job Matching & Proactive Candidate Placement', () => {
@@ -1223,4 +1230,23 @@ test('42. Proactive Intelligent Sourcing Clarification Intercept', async () => {
   const checkoutScreen = await sessionEngine.handleIncomingMessage('27842222222', '', 'clarify_new_budget');
   assert.equal(checkoutScreen.type, 'ONE_TAP_CHECKOUT_SCREEN');
   assert.ok(checkoutScreen.text.includes('Instant Checkout'));
+});
+
+test('43. Composite Multi-Intent Bundle & Age Gate Verification Intercept', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  await sessionEngine.handleIncomingMessage('27843333333', 'hi');
+  await sessionEngine.handleIncomingMessage('27843333333', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27843333333', 'Kagiso');
+
+  // Request includes beer + travel -> triggers age gate intercept first
+  const ageGateScreen = await sessionEngine.handleIncomingMessage('27843333333', 'Get me KFC, flowers, beer, airtime, rental car from Sep 21-24, hotel from Sep 24-27');
+  assert.ok(ageGateScreen.text.includes('Age Gate Verification Required'));
+  assert.ok(ageGateScreen.text.includes('Beer'));
+
+  // User submits valid adult RSA ID (29 years old)
+  const checkoutScreen = await sessionEngine.handleIncomingMessage('27843333333', '9505125800088');
+  assert.equal(checkoutScreen.type, 'ONE_TAP_CHECKOUT_SCREEN');
+  assert.ok(checkoutScreen.text.includes('KFC, Flowers, Beer, R50 Airtime'));
+  assert.equal(checkoutScreen.text.includes('🏍️'), true, 'Light multi-item order must use BIKE');
 });

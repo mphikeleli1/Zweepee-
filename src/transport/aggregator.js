@@ -7,7 +7,6 @@ export const VEHICLE_CLASSES = {
 };
 
 export function classifyLoadVehicle({ items = [], totalWeightKg = 1 }) {
-  const hasFragile = items.some(i => ['Flowers', 'Cake', 'Glassware', 'Fragile'].includes(i.category) || (i.name || '').toLowerCase().includes('flower') || (i.name || '').toLowerCase().includes('bouquet'));
   const hasHeavy = totalWeightKg > 10 || items.some(i => ['Furniture', 'Appliances', 'Hardware', 'Heavy Groceries'].includes(i.category));
 
   if (totalWeightKg > 4000) {
@@ -16,11 +15,11 @@ export function classifyLoadVehicle({ items = [], totalWeightKg = 1 }) {
     return 'TRUCK_4TON';
   } else if (totalWeightKg > 1000) {
     return 'TRUCK_2TON';
-  } else if (hasHeavy || (hasFragile && totalWeightKg > 5)) {
-    // Fragile items mixed with heavy loads are upgraded to BAKKIE_1TON for cargo tie-down protection
+  } else if (hasHeavy) {
     return 'BAKKIE_1TON';
   }
 
+  // Light loads (<=10kg) including flowers, 6-pack beer, food, airtime vouchers are easily handled by BIKE top-box/top-bag
   return 'BIKE';
 }
 

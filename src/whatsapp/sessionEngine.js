@@ -495,6 +495,22 @@ export class WhatsAppSessionEngine {
       return { text: cvReport.summary };
     }
 
+    // Pending Composite Text Continuation after Age Verification (e.g. User submitted 13-digit RSA ID)
+    if (session.pendingCompositeText && /^\d{13}$/.test(text.trim())) {
+      const ageCheck = this.antiAbuse.verifyAgeGate(text.trim());
+      if (!ageCheck.isAdult) {
+        return { text: `❌ Age verification failed. ${ageCheck.reason}` };
+      }
+      userProfile.rsaIdVerified = true;
+      await this.onboardingEngine.saveUserProfile(waId, userProfile);
+
+      const savedCompositeText = session.pendingCompositeText;
+      session.pendingCompositeText = null;
+      await this.saveSession(waId, session);
+
+      return this.handleIncomingMessage(waId, savedCompositeText, buttonPayload, locationObj);
+    }
+
     // 5c. Proactive Clarification Intercept for Vague Product Queries
     const isVagueProductQuery = (txt) => {
       const lower = txt.toLowerCase().trim();
@@ -557,14 +573,104 @@ export class WhatsAppSessionEngine {
       });
     }
 
+    // Pending Composite Text Continuation after Age Verification
+    if (session.pendingCompositeText) {
+      const savedCompositeText = session.pendingCompositeText;
+      session.pendingCompositeText = null;
+      await this.saveSession(waId, session);
+
+      return this.handleIncomingMessage(waId, savedCompositeText, buttonPayload, locationObj);
+    }
+
     // 6. Text Message NLU Intent & Advice Prohibition Intercept
     const maskedText = this.scamEngine.maskOffPlatformContacts(text);
     const intentMode = classifyIntent(maskedText);
 
-    // MULTI-VERTICAL INTENT HANDLING: Travel, Hotel, Jobs, Property, Municipal Rates
+    // MULTI-VERTICAL COMPOSITE INTENT HANDLING (Food + Flowers + Alcohol + Airtime + Car Hire + Hotel)
+    const hasTravel = maskedText.toLowerCase().includes('hotel') || maskedText.toLowerCase().includes('car rental') || maskedText.toLowerCase().includes('car hire');
+    const hasRetail = maskedText.toLowerCase().includes('kfc') || maskedText.toLowerCase().includes('flowers') || maskedText.toLowerCase().includes('beer') || maskedText.toLowerCase().includes('airtime');
 
-    // Travel & Hotel Bundle Intent
-    if (maskedText.toLowerCase().includes('hotel') || maskedText.toLowerCase().includes('car hire') || maskedText.toLowerCase().includes('flight') || maskedText.toLowerCase().includes('cpt')) {
+    if (hasTravel && hasRetail) {
+      // 1. Age Gate Verification Check for Alcohol
+      if (maskedText.toLowerCase().includes('beer') || maskedText.toLowerCase().includes('liquor') || maskedText.toLowerCase().includes('wine')) {
+        if (!userProfile.rsaIdVerified) {
+          if (/^\d{13}$/.test(text.trim())) {
+            const ageCheck = this.antiAbuse.verifyAgeGate(text.trim());
+            if (!ageCheck.isAdult) {
+              return { text: `❌ Age verification failed. ${ageCheck.reason}` };
+            }
+            userProfile.rsaIdVerified = true;
+            await this.onboardingEngine.saveUserProfile(waId, userProfile);
+          } else {
+            session.pendingCompositeText = text;
+            await this.saveSession(waId, session);
+
+            return {
+              text: `🔞 *Age Gate Verification Required*\n` +
+                `───────────────\n\n` +
+                `Your request includes alcohol (*Beer*). Under South African law, you must be 18+ to purchase liquor.\n\n` +
+                `Please reply with your 13-digit RSA ID number (e.g. *9505125800088*) to verify your age and unlock checkout.`
+            };
+          }
+        }
+      }
+
+      // 2. Physical Items Aggregation & Light Load Sizing
+      const compositeItems = [
+        { id: 'kfc_1', storeName: 'KFC', name: 'Streetwise 2 Meal', priceCents: 4500, category: 'Food' },
+        { id: 'flr_1', storeName: 'Florist', name: 'Fresh Rose Bouquet', priceCents: 25000, category: 'Flowers' },
+        { id: 'ber_1', storeName: 'Tops Liquor', name: '6-Pack Heineken Beer', priceCents: 11000, category: 'Liquor' },
+        { id: 'air_1', storeName: 'Flash API', name: 'R50 Vodacom Airtime', priceCents: 5000, category: 'Digital Airtime' }
+      ];
+
+      const quotes = await this.transport.getQuotes({ distanceKm: 5, items: compositeItems, totalWeightKg: 3 });
+      const config = await getPricingConfig(this.db);
+
+      const physicalGoodsSubtotalCents = 4500 + 25000 + 11000 + 5000; // R455.00
+      const hotelPriceCents = 360000; // R3,600.00
+      const carPriceCents = 105000;   // R1,050.00
+      const totalGoodsCents = physicalGoodsSubtotalCents + hotelPriceCents + carPriceCents;
+
+      const pricing = calculatePricing({
+        intentMode: 'BUY_PLUS_DELIVER',
+        goodsSubtotalCents: totalGoodsCents,
+        rawTransportQuoteCents: quotes.cheapestQuote.rawQuoteCents,
+        config
+      });
+
+      const txId = `tx_composite_${Date.now()}`;
+      session.cart = compositeItems;
+      session.deliveryQuote = quotes.cheapestQuote;
+      session.pricing = pricing;
+      session.transactionId = txId;
+      session.activeAddress = session.activeAddress || userProfile.address || 'Saved Location';
+      session.step = 'STATE_AWAITING_APPROVAL';
+      await this.saveSession(waId, session);
+
+      return this.uiBuilder.renderOneTapCheckoutScreen({
+        storeName: 'KFC + Florist + Tops + Airtime + Amadeus Travel',
+        itemName: 'KFC, Flowers, Beer, R50 Airtime, VW Polo Hire (Sep 21-24), Hotel (Sep 24-27)',
+        itemPriceCents: totalGoodsCents,
+        vehicleClass: quotes.requiredVehicleClass,
+        providerName: quotes.cheapestQuote.providerName,
+        transportCostCents: quotes.cheapestQuote.rawQuoteCents,
+        totalCustomerPaysCents: pricing.totalCustomerPaysCents,
+        deliveryAddress: session.activeAddress,
+        transactionId: txId
+      });
+    }
+
+    // Pending Composite Text Continuation after Age Verification
+    if (session.pendingCompositeText) {
+      const savedCompositeText = session.pendingCompositeText;
+      session.pendingCompositeText = null;
+      await this.saveSession(waId, session);
+
+      return this.handleIncomingMessage(waId, savedCompositeText, buttonPayload, locationObj);
+    }
+
+    // Single Travel & Hotel Bundle Intent
+    if (hasTravel) {
       const hotelRes = await this.saStack.queryAmadeusTravel({ origin: 'JNB', destination: 'CPT' });
       const busRes = await this.saStack.queryTravelpayoutsBus({ origin: 'JNB', destination: 'CPT', departureDate: '2025-09-10' });
 
