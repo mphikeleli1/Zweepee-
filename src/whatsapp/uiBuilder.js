@@ -342,7 +342,10 @@ export class WhatsAppUIBuilder {
 
     if (isP2P) {
       text += `👤 *Seller Rating:* ${sellerBadge}\n\n` +
-        `🛡️ *Paystack 24-Hour Escrow Protection:* Money is safely held in escrow. You get a 24-hour inspection window after delivery before money is released to the seller.\n\n` +
+        `🛡️ *Paystack Pure Escrow Service:* Money is safely held in escrow.\n` +
+        `📍 *Safe Meeting Spot:* Meet at a Police Station or Shopping Mall.\n` +
+        `🔍 *Self-Collect Inspection:* Inspect item in-person before entering 6-Digit Escrow PIN or releasing funds.\n\n` +
+        `💡 *Post-Deal Transport:* After concluding the deal, tap below to request bakkie/courier transport as a separate service!\n\n` +
         `⚠️ Both buyer and seller must tap Approve below to authorize.`;
     } else {
       text += `🔒 *Secure Paystack Checkout:* Instant automated Click & Collect order processing with zero manual hassle.`;

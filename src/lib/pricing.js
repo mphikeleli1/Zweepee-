@@ -70,8 +70,11 @@ export function calculatePricing({
       transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.STORE_TRANSPORT_MARGIN_HIGH_PERCENT);
     }
   } else if (mode === 'P2P_SALE' || mode === 'A2A_SELL' || mode === 'A2A_BUY') {
+    // Pure P2P Match & Escrow: 5% Commission on goods value (transport unbundled as separate optional service)
     p2pCommissionCents = calculatePercentageCents(goodsSubtotalCents, cfg.P2P_GOODS_COMMISSION_PERCENT);
-    transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.P2P_TRANSPORT_MARGIN_PERCENT);
+    if (rawTransportQuoteCents > 0) {
+      transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.P2P_TRANSPORT_MARGIN_PERCENT);
+    }
   } else if (mode === 'TRANSPORT_ONLY') {
     transportMarginCents = calculatePercentageCents(rawTransportQuoteCents, cfg.TRANSPORT_ONLY_MARGIN_PERCENT);
   } else if (mode === 'JOB_MATCHING') {

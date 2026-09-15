@@ -65,7 +65,10 @@ export class P2PCommerceEngine {
       status: 'ESCROW_HELD',
       releaseTimestamp,
       inspectionWindowHours: holdHours,
-      noticeText: `🛡️ *Paystack Escrow Protection Active:* Your payment of R${(amountCents / 100).toFixed(2)} is held safely in escrow. Your secret 6-digit Escrow Unlock PIN is *${escrowPin}*. Hand this PIN to the seller face-to-face only when satisfied with the item!`
+      noticeText: `🛡️ *Paystack Pure Escrow Active:* Your payment of R${(amountCents / 100).toFixed(2)} is held safely in escrow.\n\n` +
+        `📍 *Safe Meeting Location:* Meet at a safe public spot (Police Station or Shopping Mall).\n` +
+        `🔍 *Self-Collect & Inspection:* Buyer inspects item in-person. Once satisfied, hand secret 6-digit Escrow PIN *${escrowPin}* or tap Release Funds to pay seller. If unsatisfied, cancel for 100% refund!\n\n` +
+        `💡 *Need Transport?* You can request separate courier transport after concluding the deal!`
     };
 
     this.escrowHolds.set(transactionId, hold);
