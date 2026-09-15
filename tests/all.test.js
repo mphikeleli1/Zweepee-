@@ -33,6 +33,8 @@ import { SAApiStackManager } from '../src/commerce/saApiStack.js';
 import { detectLanguage, translate, SUPPORTED_LANGUAGES } from '../src/lib/i18n.js';
 import { EmploymentReadinessEngine } from '../src/employment/readinessPack.js';
 import { SAJobAggregator } from '../src/employment/jobAggregator.js';
+import { JobSeekerOnboardingEngine } from '../src/employment/jobOnboarding.js';
+import { RecruitmentContractEngine } from '../src/employment/msaContract.js';
 
 test('1. Pricing Threshold Boundaries (R99.99, R100, R100.01)', () => {
   const rawTransport = 5000;
@@ -1157,4 +1159,50 @@ test('39. SA Job Board Aggregator, WhatsApp CV Forwarding & Reputation Graph', a
 
   const forwardResponse = await sessionEngine.handleIncomingMessage('27829998888', `Forward CV: ${rawCv}`);
   assert.ok(forwardResponse.text.includes('ATS Candidate Match Report'));
+});
+
+test('40. Intent-First & Constraint-First Job Seeker Onboarding (PAUSE/Resume Support)', async () => {
+  const onboarding = new JobSeekerOnboardingEngine();
+
+  // 1. Intent First Question
+  const q1 = await onboarding.handleJobSeekerMessage('27840001111', 'Code 10 Truck Driver looking for work');
+  assert.ok(q1.text.includes('Driver Profile Setup'));
+  assert.ok(q1.text.includes('license code'));
+
+  // 2. PAUSE Command
+  const pauseRes = await onboarding.handleJobSeekerMessage('27840001111', 'PAUSE');
+  assert.ok(pauseRes.text.includes('Onboarding Paused'));
+
+  // 3. Resume Command
+  await onboarding.handleJobSeekerMessage('27840001111', 'RESUME');
+
+  // 4. Continue Question Sequence
+  const q2 = await onboarding.handleJobSeekerMessage('27840001111', 'Code 10');
+  assert.ok(q2.text.includes('PDP'));
+
+  const q3 = await onboarding.handleJobSeekerMessage('27840001111', 'Yes');
+  assert.ok(q3.text.includes('located'));
+
+  const q4 = await onboarding.handleJobSeekerMessage('27840001111', 'Soweto, up to 20km');
+  assert.equal(q4.completed, true);
+  assert.equal(q4.seekerType, 'DRIVER');
+});
+
+test('41. 1-Click Master Service Agreement (MSA) Contract & Anti-Circumvention Enforcement', () => {
+  const contractEngine = new RecruitmentContractEngine();
+
+  const msaText = contractEngine.getContractText('Pick n Pay Sandton');
+  assert.ok(msaText.includes('12-MONTH NON-CIRCUMVENTION CLAUSE'));
+  assert.ok(msaText.includes('14-DAY FREE REPLACEMENT GUARANTEE'));
+
+  const acceptRes = contractEngine.acceptContract({
+    employerId: 'emp_pnp_sandton',
+    companyName: 'Pick n Pay Sandton',
+    candidateId: 'cand_sipho_101'
+  });
+
+  assert.equal(acceptRes.success, true);
+  assert.ok(acceptRes.contractId.startsWith('msa_'));
+  assert.equal(acceptRes.record.status, 'ACCEPTED_LEGAL_BINDING');
+  assert.ok(acceptRes.confirmationText.includes('Master Service Agreement Accepted'));
 });

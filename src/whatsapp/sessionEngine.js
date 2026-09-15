@@ -17,6 +17,8 @@ import { SAApiStackManager } from '../commerce/saApiStack.js';
 import { detectLanguage, translate } from '../lib/i18n.js';
 import { EmploymentReadinessEngine } from '../employment/readinessPack.js';
 import { SAJobAggregator } from '../employment/jobAggregator.js';
+import { JobSeekerOnboardingEngine } from '../employment/jobOnboarding.js';
+import { RecruitmentContractEngine } from '../employment/msaContract.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -40,6 +42,8 @@ export class WhatsAppSessionEngine {
     this.saStack = new SAApiStackManager();
     this.employmentEngine = new EmploymentReadinessEngine();
     this.jobAggregator = new SAJobAggregator();
+    this.jobOnboardingEngine = new JobSeekerOnboardingEngine(kvUsers);
+    this.contractEngine = new RecruitmentContractEngine(db);
     this.inMemorySessions = new Map();
   }
 
@@ -278,11 +282,29 @@ export class WhatsAppSessionEngine {
         });
       }
 
-      if (buttonPayload === 'connect_job_agent' || buttonPayload === 'connect_prop_agent') {
+      if (buttonPayload === 'connect_job_agent') {
+        const contractRes = this.contractEngine.acceptContract({
+          employerId: waId,
+          companyName: userProfile.name || 'Employer Company',
+          candidateId: 'cand_sipho_101'
+        });
+
+        const unlockRes = this.matchingEngine.jobEngine.unlockCandidateForEmployer({
+          candidateId: 'cand_sipho_101',
+          employerId: waId,
+          salaryCents: 500000
+        });
+
         return {
-          text: `🤝 *Agents Connected & Interview Scheduled!*\n\n` +
-            `Your Personal Agent has established a direct agent-to-agent recruitment channel on the myAI Network.\n\n` +
-            `📅 *Status:* Interview invitation sent directly to the candidate's Personal Agent!`
+          text: `${contractRes.confirmationText}\n\n${unlockRes.employerNotice}`
+        };
+      }
+
+      if (buttonPayload === 'connect_prop_agent') {
+        return {
+          text: `🤝 *Agents Connected & Property Viewing Scheduled!*\n\n` +
+            `Your Personal Agent has established a direct agent-to-agent channel on the myAI Network.\n\n` +
+            `📅 *Status:* Viewing request sent directly to the Property Agent!`
         };
       }
 
@@ -541,20 +563,19 @@ export class WhatsAppSessionEngine {
       };
     }
 
-    // Employment Readiness Pack & Z83 Form Intent
+    // Employment Readiness Pack & Intent-First Job Seeker Onboarding Intent
     if (intentMode === INTENT_MODES.EMPLOYMENT_PACK) {
       const candidateData = {
         fullName: userProfile.name,
         phone: waId,
         address: session.activeAddress || userProfile.address || 'Gauteng, South Africa',
-        positionAppliedFor: 'General / Admin / Retail Assistant'
+        positionAppliedFor: 'General Staff'
       };
 
       const pack = this.employmentEngine.assembleReadinessPack(candidateData);
       const txId = `tx_emp_${Date.now()}`;
       session.transactionId = txId;
       session.employmentPack = pack;
-      session.step = 'STATE_AWAITING_APPROVAL';
       await this.saveSession(waId, session);
 
       return this.uiBuilder.renderEmploymentPackScreen({

@@ -128,24 +128,38 @@ export class SuperiorJobMatchingEngine {
     return Math.round(R * c * 10) / 10;
   }
 
-  matchSuperiorCandidates({ jobRole, employerLocation, maxSalaryCents, requiredQualifications = [], maxDistanceKm = 15 }) {
+  /**
+   * 4-Level Matching Order:
+   * Level 1: Intent Match (Job role / industry)
+   * Level 2: Real-Life Constraints Match (Hours, shift willingness, days)
+   * Level 3: Skills & Education Match (Qualifications, Driver License, PDP)
+   * Level 4: Proximity Viability (< 5km Priority to minimize worker commute costs)
+   */
+  matchSuperiorCandidates({ jobRole, employerLocation, maxSalaryCents, requiredQualifications = [], maxDistanceKm = 15, constraints = {} }) {
     const roleQuery = (jobRole || '').toLowerCase().trim();
     const matches = [];
 
     for (const candidate of this.candidatePool.values()) {
-      // 1. Role / Skill Relevance Match
+      // LEVEL 1: INTENT MATCH
       const isRoleMatch = roleQuery === '' ||
         candidate.role.toLowerCase().includes(roleQuery) ||
         roleQuery.split(' ').some(word => word.length > 3 && candidate.role.toLowerCase().includes(word));
 
       if (!isRoleMatch) continue;
 
-      // 2. Budget / Salary Cap Filter
-      if (maxSalaryCents && candidate.salaryCents > maxSalaryCents) {
-        continue;
+      // LEVEL 2: CONSTRAINTS MATCH (Salary cap, weekend/shift willingness)
+      if (maxSalaryCents && candidate.salaryCents > maxSalaryCents) continue;
+      if (constraints.requireWeekends && candidate.workWeekends === false) continue;
+
+      // LEVEL 3: SKILLS & EDUCATION MATCH
+      if (requiredQualifications.length > 0) {
+        const hasReqQuals = requiredQualifications.every(rq =>
+          candidate.qualifications.some(cq => cq.toLowerCase().includes(rq.toLowerCase()))
+        );
+        if (!hasReqQuals) continue;
       }
 
-      // 3. Proximity Calculation (Prioritizes < 5km)
+      // LEVEL 4: PROXIMITY VIABILITY (< 5km Priority)
       let distanceKm = 3.0; // Default suburb proximity
       if (employerLocation && employerLocation.lat && candidate.location) {
         distanceKm = this.calculateDistanceKm(
@@ -156,7 +170,6 @@ export class SuperiorJobMatchingEngine {
 
       if (distanceKm > maxDistanceKm) continue;
 
-      // 4. Multi-Factor Match Score Calculation (0.0 to 1.0)
       const proximityScore = Math.max(0, 1 - (distanceKm / maxDistanceKm));
       const expScore = Math.min(1, candidate.experienceYears / 5);
       const ratingScore = candidate.referenceRatingStars / 5.0;
