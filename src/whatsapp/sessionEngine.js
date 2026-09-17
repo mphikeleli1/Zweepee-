@@ -674,9 +674,10 @@ export class WhatsAppSessionEngine {
       return { text: cvReport.summary };
     }
 
-    // Direct Flight Search Request Handler
+    // Direct Flight Search Request Handler with dynamic destination detection (e.g. Durban -> DUR)
     if (lowerText.includes('flight') || lowerText.includes('flysafair') || lowerText.includes('fly to') || lowerText.includes('book flight')) {
-      const flight = await this.duffelEngine.searchFlights({ origin: 'JNB', destination: 'CPT' });
+      const destinationCode = lowerText.includes('durban') || lowerText.includes('dur') ? 'DUR' : 'CPT';
+      const flight = await this.duffelEngine.searchFlights({ origin: 'JNB', destination: destinationCode });
       session.pendingFlight = flight;
       await this.saveSession(waId, session);
 

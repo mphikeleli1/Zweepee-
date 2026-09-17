@@ -1367,3 +1367,43 @@ test('45. Duffel Flight Engine, R350 Payment Orchestration & Failure Recovery', 
   const secureFormUrl = duffel.generateSecurePassengerFormUrl('27845555555', 'sess1');
   assert.ok(secureFormUrl.includes('secure-passenger-info'));
 });
+
+test('46. End-to-End Durban Flight Concierge Flow Screen Verification', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+
+  // Step 1: User Onboarding
+  await sessionEngine.handleIncomingMessage('27849990000', 'hi');
+  await sessionEngine.handleIncomingMessage('27849990000', 'Durban North');
+  await sessionEngine.handleIncomingMessage('27849990000', 'Bongani');
+
+  // Step 2: User requests flight to Durban -> Present Free vs Concierge Screen
+  const screen1 = await sessionEngine.handleIncomingMessage('27849990000', 'need flight to Durban');
+  assert.equal(screen1.type, 'FLIGHT_OPTIONS_SCREEN');
+  assert.ok(screen1.text.includes('FlySafair'));
+  assert.ok(screen1.text.includes('JNB → DUR'));
+  assert.ok(screen1.text.includes('Option 1: Free'));
+  assert.ok(screen1.text.includes('Option 2: Concierge (R350.00)'));
+  assert.equal(screen1.buttons.length, 2);
+
+  const offerId = screen1.buttons[1].reply.id.replace('flight_concierge_', '');
+
+  // Step 3: User taps Concierge -> Generate R350 Payment Link Screen & Duffel Hold
+  const screen2 = await sessionEngine.handleIncomingMessage('27849990000', '', `flight_concierge_${offerId}`);
+  assert.equal(screen2.type, 'FLIGHT_CONCIERGE_PAYMENT_SCREEN');
+  assert.ok(screen2.text.includes('Tap to pay R350.00 Concierge Fee: https://checkout.paystack.com'));
+  assert.ok(screen2.text.includes('This covers: error-proof booking, bag optimization, check-in'));
+  assert.ok(screen2.text.includes('Non-refundable once booking is initiated'));
+
+  // Step 4: Payment Webhook Confirms -> Execute Duffel Order & Display Booked Confirmation Screen
+  const screen3 = await sessionEngine.processConciergePaymentWebhook({
+    reference: `paystack_concierge_27849990000_1710000000_1710000001`,
+    amountCents: 35000,
+    gateway: 'PAYSTACK',
+    isSuccess: true
+  });
+
+  assert.equal(screen3.type, 'FLIGHT_BOOKED_SCREEN');
+  assert.ok(screen3.text.includes('Booked! Your reference is'));
+  assert.ok(screen3.text.includes('Check-in opens 24h before departure'));
+  assert.ok(screen3.text.includes('https://myai.co.za/etickets/'));
+});

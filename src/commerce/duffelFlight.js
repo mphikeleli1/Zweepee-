@@ -6,15 +6,20 @@ export class DuffelFlightEngine {
 
   async searchFlights({ origin = 'JNB', destination = 'CPT', departureDate = '2025-10-15', passengers = [{ type: 'adult' }] }) {
     if (this.apiToken === 'duffel_test_mock_token') {
+      const destCode = (destination || 'CPT').toUpperCase();
+      const airline = destCode === 'DUR' ? 'FlySafair' : 'Airlink';
+      const flightNum = destCode === 'DUR' ? 'FA282' : 'FA201';
+      const priceCents = destCode === 'DUR' ? 95000 : 125000; // R950.00 to Durban, R1,250.00 to Cape Town
+
       return {
         success: true,
-        offerId: `off_mock_${Date.now()}`,
-        airline: 'FlySafair',
-        flightNumber: 'FA201',
-        route: `${origin} → ${destination}`,
-        departureTime: '08:30 AM',
-        arrivalTime: '10:45 AM',
-        priceCents: 125000, // R1,250.00
+        offerId: `off_mock_${destCode.toLowerCase()}_${Date.now()}`,
+        airline,
+        flightNumber: flightNum,
+        route: `${origin} → ${destCode}`,
+        departureTime: '09:15 AM',
+        arrivalTime: '10:25 AM',
+        priceCents,
         currency: 'ZAR',
         holdSupported: true
       };
@@ -71,7 +76,7 @@ export class DuffelFlightEngine {
         type: 'hold',
         status: 'HOLD_ACTIVE',
         expiresAt: holdExpiryTime,
-        totalAmountCents: 125000,
+        totalAmountCents: 95000,
         currency: 'ZAR'
       };
     }
