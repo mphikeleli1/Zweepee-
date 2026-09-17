@@ -43,7 +43,7 @@ export class WhatsAppSessionEngine {
     this.employmentEngine = new EmploymentReadinessEngine();
     this.jobAggregator = new SAJobAggregator();
     this.jobOnboardingEngine = new JobSeekerOnboardingEngine(kvUsers);
-    this.contractEngine = new RecruitmentContractEngine(db);
+    this.contractEngine = new RecruitmentContractEngine(db, kvSessions);
     this.inMemorySessions = new Map();
   }
 
@@ -85,6 +85,58 @@ export class WhatsAppSessionEngine {
     }
 
     let session = await this.getSession(waId);
+
+    // 0b. Employer Legal Contracts Retrieval & Export Commands
+    const upperText = text.toUpperCase().trim();
+    if (upperText === 'MY CONTRACTS' || upperText === 'MY_CONTRACTS' || buttonPayload === 'view_my_contracts') {
+      const contracts = await this.contractEngine.getEmployerContracts(waId);
+      if (contracts.length === 0) {
+        return {
+          text: `📜 *Your Legal Contracts*\n` +
+            `───────────────\n\n` +
+            `No signed Master Service Agreements or recruitment contracts found under your account (*ID:* ${waId}).\n\n` +
+            `When you connect with candidate agents or hire staff, signed MSA contracts with cryptographic evidence trails will automatically appear here!`
+        };
+      }
+
+      let summaryText = `📜 *Your Signed Legal Contracts (${contracts.length})*\n` +
+        `───────────────\n\n`;
+
+      const buttons = [];
+      contracts.forEach((c, idx) => {
+        summaryText += `${idx + 1}️⃣ *Ref:* ${c.contractId}\n` +
+          `• Company: *${c.companyName}*\n` +
+          `• Status: *${c.status}*\n` +
+          `• Executed: *${c.isoDate ? c.isoDate.split('T')[0] : 'Today'}*\n` +
+          `• SHA-256 Sig: \`${c.sha256DigitalSignature ? c.sha256DigitalSignature.substring(0, 12) : 'Verified'}...\`\n\n`;
+
+        if (idx < 3) {
+          buttons.push({
+            type: 'reply',
+            reply: { id: `view_contract_${c.contractId}`, title: `📄 Evidence Bundle ${idx + 1}` }
+          });
+        }
+      });
+
+      summaryText += `Reply *EXPORT CONTRACT <Ref>* to receive court-admissible legal evidence trails for any agreement.`;
+
+      return {
+        text: summaryText,
+        buttons: buttons.length > 0 ? buttons : undefined
+      };
+    }
+
+    if (upperText.startsWith('VIEW_CONTRACT_') || upperText.startsWith('EXPORT CONTRACT') || upperText.startsWith('EXPORT_CONTRACT_') || upperText.startsWith('VIEW CONTRACT')) {
+      const match = text.match(/(msa_[a-zA-Z0-9_]+)/i);
+      const contractId = match ? match[1] : text.split(/\s+/).pop();
+      const bundle = await this.contractEngine.getContractEvidenceBundle(contractId);
+
+      if (!bundle.success) {
+        return { text: `❌ Contract reference *${contractId}* not found under your employer record.` };
+      }
+
+      return { text: bundle.evidenceText };
+    }
 
     // 1. GPS Location Pin Handler
     if (locationObj && locationObj.latitude && locationObj.longitude) {
@@ -283,7 +335,7 @@ export class WhatsAppSessionEngine {
       }
 
       if (buttonPayload === 'connect_job_agent') {
-        const contractRes = this.contractEngine.acceptContract({
+        const contractRes = await this.contractEngine.acceptContract({
           employerId: waId,
           companyName: userProfile.name || 'Employer Company',
           candidateId: 'cand_sipho_101'

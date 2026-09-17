@@ -1206,14 +1206,14 @@ test('40. Intent-First & Constraint-First Job Seeker Onboarding (PAUSE/Resume Su
   assert.equal(conv3.seekerType, 'PROFESSIONAL_CONVERSATIONAL');
 });
 
-test('41. 1-Click Master Service Agreement (MSA) Contract & Anti-Circumvention Enforcement', () => {
+test('41. 1-Click Master Service Agreement (MSA) Contract & Anti-Circumvention Enforcement', async () => {
   const contractEngine = new RecruitmentContractEngine();
 
   const msaText = contractEngine.getContractText('Pick n Pay Sandton');
   assert.ok(msaText.includes('12-MONTH NON-CIRCUMVENTION CLAUSE'));
   assert.ok(msaText.includes('14-DAY FREE REPLACEMENT GUARANTEE'));
 
-  const acceptRes = contractEngine.acceptContract({
+  const acceptRes = await contractEngine.acceptContract({
     employerId: 'emp_pnp_sandton',
     companyName: 'Pick n Pay Sandton',
     candidateId: 'cand_sipho_101'
@@ -1222,7 +1222,7 @@ test('41. 1-Click Master Service Agreement (MSA) Contract & Anti-Circumvention E
   assert.equal(acceptRes.success, true);
   assert.ok(acceptRes.contractId.startsWith('msa_'));
   assert.equal(acceptRes.record.status, 'ACCEPTED_LEGAL_BINDING');
-  assert.ok(acceptRes.confirmationText.includes('Master Service Agreement Accepted'));
+  assert.ok(acceptRes.confirmationText.includes('Master Service Agreement Signed & Recorded'));
 });
 
 test('42. Proactive Intelligent Sourcing Clarification Intercept', async () => {
@@ -1260,4 +1260,51 @@ test('43. Composite Multi-Intent Bundle & Age Gate Verification Intercept', asyn
   assert.equal(checkoutScreen.type, 'ONE_TAP_CHECKOUT_SCREEN');
   assert.ok(checkoutScreen.text.includes('KFC, Flowers, Beer, R50 Airtime'));
   assert.equal(checkoutScreen.text.includes('🏍️'), true, 'Light multi-item order must use BIKE');
+});
+
+test('44. Employer Legal Evidence Trail, SHA-256 Signatures & Contract Bundle Retrieval', async () => {
+  const contractEngine = new RecruitmentContractEngine();
+
+  // 1. Contract Acceptance with Client Metadata
+  const signRes = await contractEngine.acceptContract({
+    employerId: 'emp_woolies_sandton',
+    companyName: 'Woolworths Sandton',
+    candidateId: 'cand_lerato_808',
+    ipAddress: '102.165.20.1',
+    userAgent: 'WhatsApp/2.24.1'
+  });
+
+  assert.equal(signRes.success, true);
+  assert.ok(signRes.contractId.startsWith('msa_'));
+  assert.ok(signRes.record.sha256DigitalSignature.length === 64, 'Digital signature must be SHA-256 hash (64 hex chars)');
+  assert.equal(signRes.record.clientMetadata.ipAddress, '102.165.20.1');
+
+  // 2. Employer Contract History Retrieval
+  const employerContracts = await contractEngine.getEmployerContracts('emp_woolies_sandton');
+  assert.equal(employerContracts.length, 1);
+  assert.equal(employerContracts[0].contractId, signRes.contractId);
+
+  // 3. Court-Admissible Evidence Bundle Export
+  const bundle = await contractEngine.getContractEvidenceBundle(signRes.contractId);
+  assert.equal(bundle.success, true);
+  assert.ok(bundle.evidenceText.includes('COURT-ADMISSIBLE MSA LEGAL EVIDENCE BUNDLE'));
+  assert.ok(bundle.evidenceText.includes('ECTA Act 25 of 2002'));
+  assert.ok(bundle.evidenceText.includes(signRes.record.sha256DigitalSignature));
+
+  // 4. WhatsApp Session Engine "MY CONTRACTS" & "EXPORT CONTRACT" Commands
+  const sessionEngine = new WhatsAppSessionEngine();
+  await sessionEngine.handleIncomingMessage('emp_woolies_sandton', 'hi');
+  await sessionEngine.handleIncomingMessage('emp_woolies_sandton', 'Sandton');
+  await sessionEngine.handleIncomingMessage('emp_woolies_sandton', 'Woolworths Manager');
+
+  // Seed contract into session engine contract engine map
+  sessionEngine.contractEngine.acceptedContracts.set(signRes.contractId, signRes.record);
+
+  const listScreen = await sessionEngine.handleIncomingMessage('emp_woolies_sandton', 'MY CONTRACTS');
+  assert.ok(listScreen.text.includes('Signed Legal Contracts'));
+  assert.ok(listScreen.text.includes(signRes.contractId));
+
+  const exportScreen = await sessionEngine.handleIncomingMessage('emp_woolies_sandton', `EXPORT CONTRACT ${signRes.contractId}`);
+  assert.ok(exportScreen.text.includes('COURT-ADMISSIBLE MSA LEGAL EVIDENCE BUNDLE'));
+  assert.ok(exportScreen.text.includes('102.165.20.1'));
 });

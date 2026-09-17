@@ -20,6 +20,7 @@ import { NetworkDiscovery } from './network/discovery.js';
 import { MCPServerAdapter } from './network/mcpServer.js';
 import { P2PCommerceEngine } from './trust/p2pFeatures.js';
 import { A2ACommerceEngine } from './trust/a2aCommerce.js';
+import { RecruitmentContractEngine } from './employment/msaContract.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -31,6 +32,29 @@ export default {
       return new Response(JSON.stringify({ status: 'ok', service: 'myAI v25 Network Node' }), {
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // Route: Employer Contracts & Legal Evidence Bundles API
+    if (path === '/api/v25/employer/contracts' && method === 'GET') {
+      try {
+        const employerId = url.searchParams.get('employerId') || '27820000000';
+        const contractId = url.searchParams.get('contractId');
+        const contractEngine = new RecruitmentContractEngine(env?.DB, env?.SESSIONS_KV);
+
+        if (contractId) {
+          const bundle = await contractEngine.getContractEvidenceBundle(contractId);
+          return new Response(JSON.stringify(bundle), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        const contracts = await contractEngine.getEmployerContracts(employerId);
+        return new Response(JSON.stringify({ success: true, employerId, count: contracts.length, contracts }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+      }
     }
 
     // Route: Model Context Protocol (MCP) JSON-RPC 2.0 Endpoint
