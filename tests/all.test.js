@@ -1325,17 +1325,17 @@ test('45. Duffel Flight Engine, R350 Payment Orchestration & Failure Recovery', 
 
   // 2. R350 Payment Link Generation across Paystack, PayFast, and PayShap
   const paystack = new PaystackPaymentGateway();
-  const pstkReq = await paystack.createPaymentRequest({ waId: '27845555555', sessionRef: 'sess_1', amountCents: 35000 });
-  assert.equal(pstkReq.amountCents, 35000);
+  const pstkReq = await paystack.createPaymentRequest({ waId: '27845555555', sessionRef: 'sess_1', amountCents: 130000 });
+  assert.equal(pstkReq.amountCents, 130000);
   assert.ok(pstkReq.authorizationUrl.includes('checkout.paystack.com'));
 
   const payfast = new PayFastPaymentGateway();
-  const pfstReq = await payfast.createConciergePaymentUrl({ sessionRef: 'sess_1', amountCents: 35000 });
-  assert.equal(pfstReq.amountCents, 35000);
+  const pfstReq = await payfast.createConciergePaymentUrl({ sessionRef: 'sess_1', amountCents: 130000 });
+  assert.equal(pfstReq.amountCents, 130000);
   assert.ok(pfstReq.authorizationUrl.includes('payfast.co.za'));
 
   const payshap = new PayShapPaymentGateway();
-  const shapReq = await payshap.sendPayShapRequest({ waId: '27845555555', userBank: 'Capitec', sessionRef: 'sess_1', amountCents: 35000 });
+  const shapReq = await payshap.sendPayShapRequest({ waId: '27845555555', userBank: 'Capitec', sessionRef: 'sess_1', amountCents: 130000 });
   assert.equal(shapReq.success, true);
   assert.ok(shapReq.authorizationUrl.includes('stitch.money'));
 
@@ -1347,15 +1347,15 @@ test('45. Duffel Flight Engine, R350 Payment Orchestration & Failure Recovery', 
 
   const optionsScreen = await sessionEngine.handleIncomingMessage('27845555555', 'Book a flight from JNB to CPT');
   assert.equal(optionsScreen.type, 'FLIGHT_OPTIONS_SCREEN');
-  assert.ok(optionsScreen.text.includes('R350.00'));
+  assert.ok(optionsScreen.text.includes('Concierge (R1,600.00)'));
 
   const linkScreen = await sessionEngine.handleIncomingMessage('27845555555', '', `flight_concierge_${search.offerId}`);
   assert.equal(linkScreen.type, 'FLIGHT_CONCIERGE_PAYMENT_SCREEN');
-  assert.ok(linkScreen.text.includes('R350.00 Concierge Fee'));
+  assert.ok(linkScreen.text.includes('Flight & Concierge'));
 
   const bookedScreen = await sessionEngine.processConciergePaymentWebhook({
     reference: `paystack_concierge_sess1_27845555555`,
-    amountCents: 35000,
+    amountCents: 160000,
     gateway: 'PAYSTACK',
     isSuccess: true
   });
@@ -1368,7 +1368,7 @@ test('45. Duffel Flight Engine, R350 Payment Orchestration & Failure Recovery', 
   assert.ok(secureFormUrl.includes('secure-passenger-info'));
 });
 
-test('46. End-to-End Durban Flight Concierge Flow Screen Verification', async () => {
+test('46. End-to-End Durban Flight Concierge Flow Screen Verification (Single Total Payment)', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
 
   // Step 1: User Onboarding
@@ -1376,28 +1376,30 @@ test('46. End-to-End Durban Flight Concierge Flow Screen Verification', async ()
   await sessionEngine.handleIncomingMessage('27849990000', 'Durban North');
   await sessionEngine.handleIncomingMessage('27849990000', 'Bongani');
 
-  // Step 2: User requests flight to Durban -> Present Free vs Concierge Screen
+  // Step 2: User requests flight to Durban -> Present Free vs Concierge Screen with Single Total (R950 + R350 = R1,300)
   const screen1 = await sessionEngine.handleIncomingMessage('27849990000', 'need flight to Durban');
   assert.equal(screen1.type, 'FLIGHT_OPTIONS_SCREEN');
   assert.ok(screen1.text.includes('FlySafair'));
   assert.ok(screen1.text.includes('JNB → DUR'));
   assert.ok(screen1.text.includes('Option 1: Free'));
-  assert.ok(screen1.text.includes('Option 2: Concierge (R350.00)'));
+  assert.ok(screen1.text.includes('Option 2: Concierge (R1,300.00)'));
   assert.equal(screen1.buttons.length, 2);
 
   const offerId = screen1.buttons[1].reply.id.replace('flight_concierge_', '');
 
-  // Step 3: User taps Concierge -> Generate R350 Payment Link Screen & Duffel Hold
+  // Step 3: User taps Concierge -> Generate Single Total R1,300 Payment Link Screen & Duffel Hold
   const screen2 = await sessionEngine.handleIncomingMessage('27849990000', '', `flight_concierge_${offerId}`);
   assert.equal(screen2.type, 'FLIGHT_CONCIERGE_PAYMENT_SCREEN');
-  assert.ok(screen2.text.includes('Tap to pay R350.00 Concierge Fee: https://checkout.paystack.com'));
-  assert.ok(screen2.text.includes('This covers: error-proof booking, bag optimization, check-in'));
-  assert.ok(screen2.text.includes('Non-refundable once booking is initiated'));
+  assert.ok(screen2.text.includes('Tap to pay R1,300.00 Flight & Concierge: https://checkout.paystack.com'));
+  assert.ok(screen2.text.includes('Airline Ticket: R950.00'));
+  assert.ok(screen2.text.includes('Concierge Booking & Check-in Fee: R350.00'));
+  assert.ok(screen2.text.includes('ONE TOTAL YOU PAY:'));
+  assert.ok(screen2.text.includes('R1,300.00'));
 
-  // Step 4: Payment Webhook Confirms -> Execute Duffel Order & Display Booked Confirmation Screen
+  // Step 4: Webhook Confirms Single Total R1,300 -> Execute Duffel Order & Split Allocation in Background
   const screen3 = await sessionEngine.processConciergePaymentWebhook({
     reference: `paystack_concierge_27849990000_1710000000_1710000001`,
-    amountCents: 35000,
+    amountCents: 130000,
     gateway: 'PAYSTACK',
     isSuccess: true
   });

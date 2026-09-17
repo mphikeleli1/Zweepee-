@@ -3,34 +3,44 @@ import { translate } from '../lib/i18n.js';
 
 export class WhatsAppUIBuilder {
   /**
-   * FLIGHT OPTIONS SCREEN (FREE vs CONCIERGE R350)
+   * FLIGHT OPTIONS SCREEN (FREE vs CONCIERGE ALL-IN SINGLE TOTAL)
    */
   renderFlightOptionsScreen({ flight, feeCents = 35000 }) {
-    const feeRands = centsToRandsFormatted(feeCents);
+    const flightRands = centsToRandsFormatted(flight.priceCents);
+    const totalAllInCents = flight.priceCents + feeCents;
+    const totalAllInRands = centsToRandsFormatted(totalAllInCents);
+
     return {
       type: 'FLIGHT_OPTIONS_SCREEN',
       text: `✈️ *Flight Offer Found*\n` +
         `───────────────\n\n` +
         `Found *${flight.airline}* ${flight.route} at *${flight.departureTime}*\n` +
-        `💵 *Flight Price:* ${centsToRandsFormatted(flight.priceCents)}\n\n` +
+        `💵 *Flight Price:* ${flightRands}\n\n` +
         `Choose your booking preference:\n\n` +
-        `*Option 1: Free* — I'll send you a booking link\n` +
-        `*Option 2: Concierge (${feeRands})* — I book it, handle check-in, and manage changes`,
+        `*Option 1: Free* — I'll send you a booking link (${flightRands})\n` +
+        `*Option 2: Concierge (${totalAllInRands})* — I book it, handle check-in, and manage changes *(Flight + Concierge Included)*`,
       buttons: [
-        { type: 'reply', reply: { id: `flight_free_${flight.offerId}`, title: '🔗 Free Link' } },
-        { type: 'reply', reply: { id: `flight_concierge_${flight.offerId}`, title: `🛎️ Concierge (${feeRands})` } }
+        { type: 'reply', reply: { id: `flight_free_${flight.offerId}`, title: `🔗 Free (${flightRands})` } },
+        { type: 'reply', reply: { id: `flight_concierge_${flight.offerId}`, title: `🛎️ Concierge (${totalAllInRands})` } }
       ]
     };
   }
 
   /**
-   * FLIGHT CONCIERGE PAYMENT LINK SCREEN
+   * FLIGHT CONCIERGE PAYMENT LINK SCREEN - SINGLE ALL-IN TOTAL DISPLAY
    */
-  renderFlightConciergePaymentScreen({ paymentUrl, feeCents = 35000, expiryMins = 20 }) {
+  renderFlightConciergePaymentScreen({ paymentUrl, flightPriceCents = 95000, feeCents = 35000, totalAllInCents = 130000, expiryMins = 20 }) {
+    const totalRands = centsToRandsFormatted(totalAllInCents);
+    const flightRands = centsToRandsFormatted(flightPriceCents);
     const feeRands = centsToRandsFormatted(feeCents);
+
     return {
       type: 'FLIGHT_CONCIERGE_PAYMENT_SCREEN',
-      text: `Tap to pay ${feeRands} Concierge Fee: ${paymentUrl}\n\n` +
+      text: `Tap to pay ${totalRands} Flight & Concierge: ${paymentUrl}\n\n` +
+        `📋 *Price Breakdown (Combined into One Single Total):*\n` +
+        `• Airline Ticket: ${flightRands}\n` +
+        `• Concierge Booking & Check-in Fee: ${feeRands}\n` +
+        `💳 *ONE TOTAL YOU PAY:* *${totalRands}*\n\n` +
         `This covers: error-proof booking, bag optimization, check-in, boarding pass in WhatsApp, and change handling.\n\n` +
         `⚠️ *Terms:* Non-refundable once booking is initiated. Flight refund subject to airline fare rules. Seat hold expires in ${expiryMins} minutes.`
     };
