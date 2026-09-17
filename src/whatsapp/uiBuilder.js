@@ -8,40 +8,37 @@ export class WhatsAppUIBuilder {
   renderProactiveClarificationScreen({ query, productCategory = 'Product' }) {
     return {
       type: 'PROACTIVE_CLARIFICATION_SCREEN',
-      text: `🤖 *myAI™ Intelligent Sourcing Clarification*\n` +
+      text: `🔍 *myAI™ Intelligent Sourcing Clarification*\n` +
         `───────────────\n\n` +
-        `I noticed you are looking for *${query}*!\n\n` +
-        `To source the exact item for you with 0% store price markup, could you clarify a few details?\n\n` +
-        `1. 🏪 *Preferred Store:* (e.g., Takealot, Makro, HiFi Corp, Dischem, or local verified A2A seller)\n` +
-        `2. 🏷️ *Condition:* New or Pre-owned / Refurbished?\n` +
-        `3. 🎧 *Exact Model & Features:* (e.g. Over-Ear, In-Ear, Noise-Cancelling, Color)\n` +
-        `4. 💰 *Target Budget:* (e.g., Under R1,500)?\n` +
-        `5. 📝 *Additional Requirements:* (e.g., Warranty, specific brand/use case)\n\n` +
-        `───────────────\n` +
-        `Or tap one of the quick options below:`,
+        `Looking for *${query}*!\n\n` +
+        `To source your exact item with 0% store price markup, please specify:\n` +
+        `• *Preferred Store:* (e.g. Takealot, Makro, HiFi Corp, Dischem)\n` +
+        `• *Condition:* New or Pre-owned?\n` +
+        `• *Budget:* (e.g. Under R1,500)\n\n` +
+        `Or tap a quick option below:`,
       buttons: [
         { type: 'reply', reply: { id: 'clarify_new_budget', title: '🎧 New under R1,500' } },
-        { type: 'reply', reply: { id: 'clarify_premium_new', title: '🎧 Premium Brand (New)' } },
+        { type: 'reply', reply: { id: 'clarify_premium_new', title: '🎧 Premium Brand' } },
         { type: 'reply', reply: { id: 'clarify_any_deal', title: '🏷️ Best Value Deal' } }
       ]
     };
   }
 
   renderEmploymentPackScreen({ candidateName, packPriceCents = 0, transactionId, cvPreviewUrl, z83PreviewUrl }) {
-    const text = `💼 *myAI™ Employment Readiness Pack (100% FREE)* 💼\n` +
+    const text = `💼 *myAI™ Employment Readiness Pack (FREE)* 💼\n` +
       `───────────────\n\n` +
       `👤 *Candidate:* ${candidateName || 'Job Seeker'}\n\n` +
-      `*Included In Your Free Bundle (R0.00):*\n` +
-      `• 📄 *ATS-Optimized Professional CV* (Plain-text & PDF Download)\n` +
-      `• 📋 *Official Z83 Government Application Form* (Auto-Filled)\n` +
-      `• ✉️ *Tailored Cover Letter* (Government & Corporate)\n` +
-      `• 💡 *SA Interview Preparation Q&A Guide*\n` +
-      `• 🚀 *Auto-Broadcast to active employers on myAI Recruitment Network*\n\n` +
-      `🖼️ *CV PDF Link:* ${cvPreviewUrl || 'https://cdn.myai.co.za/cv/preview.pdf'}\n` +
-      `🖼️ *Z83 PDF Link:* ${z83PreviewUrl || 'https://cdn.myai.co.za/z83/preview.pdf'}\n\n` +
+      `*Included Free Bundle (R0.00):*\n` +
+      `• 📄 ATS Professional CV (Text & PDF)\n` +
+      `• 📋 Official Z83 Government Form (Auto-Filled)\n` +
+      `• ✉️ Tailored Cover Letter\n` +
+      `• 💡 SA Interview Preparation Guide\n` +
+      `• 🚀 Auto-Broadcast to Verified SA Employers\n\n` +
+      `🖼️ *CV PDF:* ${cvPreviewUrl || 'https://cdn.myai.co.za/cv/preview.pdf'}\n` +
+      `🖼️ *Z83 PDF:* ${z83PreviewUrl || 'https://cdn.myai.co.za/z83/preview.pdf'}\n\n` +
       `───────────────\n` +
-      `🎁 *BUNDLE TOTAL:* *FREE (R0.00)*\n` +
-      `Tap below to instantly unlock your complete Free Employment Readiness Pack!`;
+      `🎁 *TOTAL:* *FREE (R0.00)*\n` +
+      `Tap below to unlock your complete pack instantly!`;
 
     return {
       type: 'EMPLOYMENT_PACK_SCREEN',
@@ -61,22 +58,21 @@ export class WhatsAppUIBuilder {
     if (salaryCents > 2500000) {
       tierNotice = '12% Senior Placement Commission';
     } else if (salaryCents >= 800000) {
-      tierNotice = '8% Postgraduate / Mid-Tier Placement Commission';
+      tierNotice = '8% Mid-Tier Placement Commission';
     }
 
     return {
       type: 'JOBS_MATCH_SCREEN',
-      text: `👔 *Recruitment Matching Result*\n` +
+      text: `👔 *Candidate Match*\n` +
         `───────────────\n\n` +
         `💼 *Role:* ${jobTitle}\n` +
         `📍 *Location:* ${location}\n` +
         `👥 *Candidates Matched:* ${quantity}\n` +
-        `💵 *Salary Offered:* ${centsToRandsFormatted(salaryCents)}/month\n` +
-        `🛡️ *Employer Placement Fee:* ${tierNotice} *(100% Free for Candidates)*\n` +
-        `🔒 *Candidate Direct Contact Details:* Masked until placement fee authorization.\n\n` +
-        `🏢 *Matched Agent:* ${agentName}\n\n` +
+        `💵 *Salary:* ${centsToRandsFormatted(salaryCents)}/month\n` +
+        `🛡️ *Employer Fee:* ${tierNotice} *(Free for Candidates)*\n` +
+        `🏢 *Agent:* ${agentName}\n\n` +
         `───────────────\n` +
-        `Tap below to unlock direct candidate contact details and schedule your interview!`,
+        `Tap below to unlock candidate details and schedule an interview!`,
       buttons: [
         { type: 'reply', reply: { id: 'connect_job_agent', title: '🔓 Unlock Candidate & Interview' } }
       ]
@@ -87,21 +83,21 @@ export class WhatsAppUIBuilder {
    * PROPERTY / RENTALS MATCH SCREEN
    */
   renderPropertyMatchScreen({ title, location, rentCents, bedrooms, availableFrom, agentName, photoUrl }) {
-    let text = `🏡 *Property Rental Matching Result*\n` +
+    let text = `🏡 *Property Rental Match*\n` +
       `───────────────\n\n` +
       `🏠 *Property:* ${title}\n` +
       `📍 *Location:* ${location}\n` +
       `🛏️ *Bedrooms:* ${bedrooms}\n` +
-      `💵 *Monthly Rent:* ${centsToRandsFormatted(rentCents)}\n` +
-      `📅 *Move-in Date:* ${availableFrom}\n` +
-      `🏢 *Listing Agent:* ${agentName}\n`;
+      `💵 *Rent:* ${centsToRandsFormatted(rentCents)}/month\n` +
+      `📅 *Available:* ${availableFrom}\n` +
+      `🏢 *Agent:* ${agentName}\n`;
 
     if (photoUrl) {
       text += `🖼️ *Photo Preview:* ${photoUrl}\n`;
     }
 
     text += `\n───────────────\n` +
-      `Tap below to request a viewing or lock in Paystack lease deposit escrow!`;
+      `Tap below to request a viewing or lock deposit in Paystack escrow!`;
 
     return {
       type: 'PROPERTY_MATCH_SCREEN',
@@ -116,17 +112,17 @@ export class WhatsAppUIBuilder {
    * TRAVEL & HOTEL BUNDLE MATCH SCREEN WITH FULL VISUAL HOTEL PREVIEWS
    */
   renderTravelBundleScreen({ title, components = [], totalBundleCents, hotelImageUrl, hotelRating = '⭐⭐⭐⭐⭐', hotelAddress = 'Cape Town Beachfront' }) {
-    let text = `🌴 *Travel & Hotel Bundle Result*\n` +
+    let text = `🌴 *Travel & Hotel Package*\n` +
       `───────────────\n\n` +
-      `🏨 *Hotel Name:* ${title}\n` +
-      `⭐ *Hotel Rating:* ${hotelRating}\n` +
+      `🏨 *Hotel:* ${title}\n` +
+      `⭐ *Rating:* ${hotelRating}\n` +
       `📍 *Location:* ${hotelAddress}\n`;
 
     if (hotelImageUrl) {
-      text += `🖼️ *Hotel Photo Preview:* ${hotelImageUrl}\n`;
+      text += `🖼️ *Photo Preview:* ${hotelImageUrl}\n`;
     }
 
-    text += `\n*Included Package Components:*\n`;
+    text += `\n*Package Inclusions:*\n`;
 
     components.forEach((c, idx) => {
       text += `${idx + 1}️⃣ *${c.name}* — ${centsToRandsFormatted(c.priceCents)}\n`;
@@ -137,7 +133,7 @@ export class WhatsAppUIBuilder {
 
     text += `\n───────────────\n` +
       `💳 *PACKAGE TOTAL:* *${centsToRandsFormatted(totalBundleCents)}*\n` +
-      `💡 *Single Instant 1-Tap Booking with 0% Markup!*`;
+      `💡 *1-Tap Instant Booking (0% Markup)*`;
 
     return {
       type: 'BUNDLE_MATCH_SCREEN',
@@ -158,12 +154,12 @@ export class WhatsAppUIBuilder {
 
     const text = `${header}\n` +
       `───────────────\n\n` +
-      `🏬 *Merchant:* ${storeName}\n` +
-      `🛍️ *Item Selected:* *${itemName}* (${centsToRandsFormatted(itemPriceCents)})\n` +
+      `🏬 *Store:* ${storeName}\n` +
+      `🛍️ *Item:* *${itemName}* (${centsToRandsFormatted(itemPriceCents)})\n` +
       `${vehicleIcon} *Courier:* ${providerName} (${centsToRandsFormatted(transportCostCents)})\n` +
-      `📍 *Deliver To:* *${deliveryAddress || 'Saved GPS Location'}*\n\n` +
+      `📍 *Deliver To:* *${deliveryAddress || 'Saved GPS Pin'}*\n\n` +
       `───────────────\n` +
-      `💳 *ONE TOTAL:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n` +
+      `💳 *TOTAL:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n` +
       `🏷️ *0% Store Price Markup Guarantee*`;
 
     return {
@@ -181,17 +177,17 @@ export class WhatsAppUIBuilder {
    * Item Swapper Menu Screen
    */
   renderItemSwapperScreen({ storeName, items = [] }) {
-    let text = `🏬 *${storeName.toUpperCase()}* — Select Replacement Item\n` +
+    let text = `🏬 *${storeName.toUpperCase()}* — Select Item\n` +
       `───────────────\n\n`;
 
     const itemButtons = [];
 
     items.forEach((item, idx) => {
       text += `${idx + 1}️⃣ *${item.name}*\n` +
-        `   💵 *Price:* ${centsToRandsFormatted(item.priceCents)} *(In-Store Price)*\n`;
+        `   💵 *In-Store Price:* ${centsToRandsFormatted(item.priceCents)}\n`;
 
       if (item.image) {
-        text += `   🖼️ *Photo Preview:* ${item.image}\n`;
+        text += `   🖼️ *Preview:* ${item.image}\n`;
       }
 
       text += `\n`;
@@ -203,7 +199,7 @@ export class WhatsAppUIBuilder {
     });
 
     text += `───────────────\n` +
-      `💬 *Tap below to swap your item instantly!*`;
+      `💬 *Tap below to swap item instantly:*`;
 
     return {
       type: 'ITEM_SWAPPER_SCREEN',
@@ -218,9 +214,9 @@ export class WhatsAppUIBuilder {
   renderLocationPromptScreen() {
     return {
       type: 'LOCATION_PROMPT_SCREEN',
-      text: `📍 *Where should we deliver this order?*\n` +
+      text: `📍 *Delivery Address*\n` +
         `───────────────\n\n` +
-        `Please reply with your new delivery suburb/address (e.g. *Work: Rosebank*), or tap the attachment icon and send a 📍 *GPS Location Pin*!`
+        `Reply with your new delivery address (e.g. *Work: Rosebank*), or tap attachment and send a 📍 *GPS Pin*!`
     };
   }
 
@@ -230,12 +226,12 @@ export class WhatsAppUIBuilder {
   renderLocationPinCaptured({ lat, lng, addressName }) {
     return {
       type: 'LOCATION_PIN_SCREEN',
-      text: `📍 *GPS Delivery Pin Captured!*\n` +
+      text: `📍 *GPS Location Pin Saved*\n` +
         `───────────────\n\n` +
         `Latitude: *${lat.toFixed(4)}*\n` +
         `Longitude: *${lng.toFixed(4)}*\n` +
         `Address: *${addressName || 'Saved GPS Pin'}*\n\n` +
-        `✅ Your myAI™ courier will deliver directly to this exact GPS location!`
+        `✅ Your courier will deliver directly to this exact GPS location!`
     };
   }
 
@@ -243,9 +239,9 @@ export class WhatsAppUIBuilder {
    * SCREEN 1: DISCOVER STORES & MERCHANTS
    */
   renderDiscoverScreen({ stores = [] }) {
-    let text = `✨ *myAI™ Live Storefront* ✨\n` +
+    let text = `✨ *myAI™ Storefront* ✨\n` +
       `───────────────\n\n` +
-      `📍 *Nearby Partner Stores & Universal Click & Collect*\n\n`;
+      `📍 *Nearby Stores (0% Price Markup)*\n\n`;
 
     const storeButtons = [];
 
@@ -261,7 +257,7 @@ export class WhatsAppUIBuilder {
     });
 
     text += `───────────────\n` +
-      `💡 *0% Markup Guarantee:* You pay the exact same price as in-store across Makro, Dischem, Specsavers, Vets, and any local shop!`;
+      `💡 *0% Markup:* You pay exact in-store prices across all merchants!`;
 
     return {
       type: 'DISCOVER_SCREEN',
@@ -274,17 +270,17 @@ export class WhatsAppUIBuilder {
    * SCREEN 2: ELITE STOREFRONT / PRODUCT CATALOG
    */
   renderProductScreen({ storeName, items = [] }) {
-    let text = `🏬 *${storeName.toUpperCase()}* — Live Catalog\n` +
+    let text = `🏬 *${storeName.toUpperCase()}* — Catalog\n` +
       `───────────────\n\n`;
 
     const itemButtons = [];
 
     items.forEach((item, idx) => {
       text += `${idx + 1}️⃣ *${item.name}*\n` +
-        `   💵 *Price:* ${centsToRandsFormatted(item.priceCents)} *(In-Store Price)*\n`;
+        `   💵 *In-Store Price:* ${centsToRandsFormatted(item.priceCents)}\n`;
 
       if (item.image) {
-        text += `   🖼️ *Photo Preview:* ${item.image}\n`;
+        text += `   🖼️ *Preview:* ${item.image}\n`;
       }
 
       text += `\n`;
@@ -296,7 +292,7 @@ export class WhatsAppUIBuilder {
     });
 
     text += `───────────────\n` +
-      `💬 *Tap any button below to order instantly!*`;
+      `💬 *Tap any item below to order:*`;
 
     return {
       type: 'PRODUCT_SCREEN',
@@ -309,17 +305,16 @@ export class WhatsAppUIBuilder {
    * SCREEN 3: UNIFIED CART
    */
   renderCartScreen({ items = [], goodsSubtotalCents }) {
-    let text = `🛒 *Your Unified Shopping Cart*\n` +
+    let text = `🛒 *Your Shopping Cart*\n` +
       `───────────────\n\n`;
 
     items.forEach((item) => {
-      text += `• *${item.name}*\n` +
-        `  Qty: 1 × ${centsToRandsFormatted(item.priceCents)}\n`;
+      text += `• *${item.name}* — ${centsToRandsFormatted(item.priceCents)}\n`;
     });
 
     text += `\n───────────────\n` +
-      `🏷️ *Goods Subtotal:* ${centsToRandsFormatted(goodsSubtotalCents)} *(0% Markup)*\n\n` +
-      `Ready to arrange fast courier delivery to your GPS location?`;
+      `🏷️ *Subtotal:* ${centsToRandsFormatted(goodsSubtotalCents)} *(0% Markup)*\n\n` +
+      `Ready to arrange courier delivery?`;
 
     return {
       type: 'CART_SCREEN',
@@ -336,14 +331,14 @@ export class WhatsAppUIBuilder {
   renderDeliveryScreen({ vehicleClass, providerName, transportCostCents, etaMinutes }) {
     const vehicleIcon = vehicleClass === 'BIKE' ? '🏍️' : '🚛';
 
-    const text = `🚚 *Delivery & Transport Quote*\n` +
+    const text = `🚚 *Delivery Quote*\n` +
       `───────────────\n\n` +
-      `${vehicleIcon} *Vehicle Assigned:* ${vehicleClass}\n` +
-      `🏢 *Courier Provider:* ${providerName}\n` +
-      `💵 *Transport Cost:* ${centsToRandsFormatted(transportCostCents)}\n` +
-      `⏱️ *Estimated Delivery:* ~${etaMinutes} mins\n\n` +
+      `${vehicleIcon} *Vehicle:* ${vehicleClass}\n` +
+      `🏢 *Courier:* ${providerName}\n` +
+      `💵 *Delivery Cost:* ${centsToRandsFormatted(transportCostCents)}\n` +
+      `⏱️ *ETA:* ~${etaMinutes} mins\n\n` +
       `───────────────\n` +
-      `Tap below to lock in your delivery quote!`;
+      `Tap below to accept delivery quote:`;
 
     return {
       type: 'DELIVERY_SCREEN',
@@ -358,19 +353,17 @@ export class WhatsAppUIBuilder {
    * SCREEN 5 & 6: CONFIRM & PAY
    */
   renderConfirmScreen({ transactionId, totalCustomerPaysCents, isP2P = false, sellerBadge = '🛡️ VERIFIED TRUSTED SELLER' }) {
-    let text = `🧾 *Final Order Confirmation*\n` +
+    let text = `🧾 *Order Confirmation*\n` +
       `───────────────\n\n` +
-      `💳 *Total All-In Payable:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n\n`;
+      `💳 *Total Payable:* *${centsToRandsFormatted(totalCustomerPaysCents)}*\n\n`;
 
     if (isP2P) {
-      text += `👤 *Seller Rating:* ${sellerBadge}\n\n` +
-        `🛡️ *Paystack Pure Escrow Service:* Money is safely held in escrow.\n` +
-        `📍 *Safe Meeting Spot:* Meet at a Police Station or Shopping Mall.\n` +
-        `🔍 *Self-Collect Inspection:* Inspect item in-person before entering 6-Digit Escrow PIN or releasing funds.\n\n` +
-        `💡 *Post-Deal Transport:* After concluding the deal, tap below to request bakkie/courier transport as a separate service!\n\n` +
-        `⚠️ Both buyer and seller must tap Approve below to authorize.`;
+      text += `👤 *Seller:* ${sellerBadge}\n` +
+        `🛡️ *Paystack Escrow:* Funds held safely in escrow.\n` +
+        `🔍 *In-Person Verification:* Inspect item before sharing 6-Digit Escrow PIN.\n\n` +
+        `⚠️ Both buyer and seller must tap Approve to authorize.`;
     } else {
-      text += `🔒 *Secure Paystack Checkout:* Instant automated Click & Collect order processing with zero manual hassle.`;
+      text += `🔒 *Paystack Checkout:* Instant 0% markup order processing.`;
     }
 
     return {
@@ -389,12 +382,12 @@ export class WhatsAppUIBuilder {
   renderLiveOrderScreen({ orderId, status, courierName, driverName = 'Sipho', etaMinutes = 3 }) {
     const text = `📦 *Live Order Tracking*\n` +
       `───────────────\n\n` +
-      `🆔 *Order Reference:* ${orderId}\n` +
-      `🚦 *Current Status:* *${status}*\n` +
-      `🛵 *Your Courier Driver:* *${driverName}* (${courierName})\n\n` +
-      `📍 *LIVE DRIVER UPDATE:* Your driver ${driverName} is *${etaMinutes} mins away* from your door!\n\n` +
+      `🆔 *Ref:* ${orderId}\n` +
+      `🚦 *Status:* *${status}*\n` +
+      `🛵 *Driver:* *${driverName}* (${courierName})\n` +
+      `⏱️ *ETA:* *${etaMinutes} mins away*\n\n` +
       `───────────────\n` +
-      `You will receive a door photo proof upon arrival. Need help with this order? Reply *Help* or *Problem*.`;
+      `You will receive a photo proof upon door delivery.`;
 
     return {
       type: 'LIVE_ORDER_SCREEN',
@@ -411,13 +404,13 @@ export class WhatsAppUIBuilder {
   renderDeliveredScreen({ orderId, deliveryPhotoUrl }) {
     let text = `🎉 *Order Delivered!*\n` +
       `───────────────\n\n` +
-      `Order *${orderId}* has been successfully delivered to your door.\n\n`;
+      `Order *${orderId}* delivered successfully.\n\n`;
 
     if (deliveryPhotoUrl) {
-      text += `📷 *Door Delivery Photo Proof:* ${deliveryPhotoUrl}\n\n`;
+      text += `📷 *Door Photo Proof:* ${deliveryPhotoUrl}\n\n`;
     }
 
-    text += `How was your myAI™ experience today?`;
+    text += `How was your experience today?`;
 
     return {
       type: 'DELIVERED_SCREEN',
@@ -435,13 +428,13 @@ export class WhatsAppUIBuilder {
   renderDisputeOptionsScreen({ disputeId, vertical, issueTitle }) {
     return {
       type: 'DISPUTE_OPTIONS_SCREEN',
-      text: `🤝 *Universal Dispute Resolution Center*\n` +
+      text: `🤝 *Dispute Support*\n` +
         `───────────────\n\n` +
-        `🆔 *Dispute Reference:* ${disputeId}\n` +
+        `🆔 *Ref:* ${disputeId}\n` +
         `🏷️ *Category:* ${vertical}\n` +
         `⚠️ *Issue:* ${issueTitle}\n\n` +
-        `🔒 Payment to supplier/merchant has been *PAUSED* immediately for your protection.\n\n` +
-        `How would you like your Personal Agent to resolve this issue right now?`,
+        `🔒 Payment to supplier has been *PAUSED* for your protection.\n\n` +
+        `Select how you would like to resolve this:`,
       buttons: [
         { type: 'reply', reply: { id: `autoresolve_${disputeId}`, title: '⚡ Auto-Resolve Now' } },
         { type: 'reply', reply: { id: `refund_${disputeId}`, title: '💵 100% Full Refund' } }
@@ -455,12 +448,12 @@ export class WhatsAppUIBuilder {
   renderDisputeResolutionScreen({ disputeId, resolutionMessage }) {
     return {
       type: 'DISPUTE_RESOLUTION_SCREEN',
-      text: `🌸 *Dispute Resolution Summary*\n` +
+      text: `🌸 *Dispute Resolved*\n` +
         `───────────────\n\n` +
-        `🆔 *Reference:* ${disputeId}\n\n` +
+        `🆔 *Ref:* ${disputeId}\n\n` +
         `${resolutionMessage}\n\n` +
         `───────────────\n` +
-        `Thank you for using myAI™! Is there anything else I can help you with today?`
+        `Is there anything else I can help you with today?`
     };
   }
 }
