@@ -94,6 +94,17 @@ CREATE TABLE IF NOT EXISTS quotes (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS legal_contracts (
+  contract_id TEXT PRIMARY KEY,
+  employer_id TEXT NOT NULL,
+  company_name TEXT NOT NULL,
+  candidate_id TEXT NOT NULL,
+  accepted_at INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  sha256_sig TEXT NOT NULL,
+  evidence_json TEXT NOT NULL
+);
+
 -- Seed pricing parameters for ALL intent modes
 INSERT OR REPLACE INTO pricing_config (key, value, description, updated_at) VALUES
 ('STORE_GOODS_MARKUP_PERCENT', '0', 'Markup on goods for all stores (0%)', 1700000000000),
