@@ -11,6 +11,7 @@ export const DEFAULT_PRICING_CONFIG = {
   JOB_MATCHING_FLAT_FEE_CENTS: 50000, // R500.00 configurable flat rate
   SERVICE_REFERRAL_COMMISSION_PERCENT: 5, // Default 5% affiliate referral commission
   NON_AFFILIATE_SERVICE_FEE_CENTS: 1000, // R10.00 transparent service fee for municipal bills/fines where no provider affiliate rebate exists
+  CONCIERGE_FLIGHT_FEE_CENTS: 35000, // R350.00 configurable flight concierge fee
   PAYMENT_PROCESSING_FEE_CENTS: 250,
   PAYFAST_ZERO_FEE_THRESHOLD_CENTS: 300000 // R3,000.00 zero payment processing fee threshold for PayFast Instant EFT
 };

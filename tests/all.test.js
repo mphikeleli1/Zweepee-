@@ -15,6 +15,8 @@ import { ScamPreventionEngine } from '../src/trust/scamPrevention.js';
 import { WhatsAppSessionEngine } from '../src/whatsapp/sessionEngine.js';
 import { PaystackPaymentGateway } from '../src/payments/paystack.js';
 import { PayFastPaymentGateway } from '../src/payments/payfast.js';
+import { PayShapPaymentGateway } from '../src/payments/payshap.js';
+import { DuffelFlightEngine } from '../src/commerce/duffelFlight.js';
 import { SentinelSelfHealingMonitor } from '../src/sentinel/sentinel.js';
 import { ExternalAgentInteropAdapter } from '../src/network/interop.js';
 import { AgentMatchingEngine } from '../src/network/matching.js';
@@ -1307,4 +1309,61 @@ test('44. Employer Legal Evidence Trail, SHA-256 Signatures & Contract Bundle Re
   const exportScreen = await sessionEngine.handleIncomingMessage('emp_woolies_sandton', `EXPORT CONTRACT ${signRes.contractId}`);
   assert.ok(exportScreen.text.includes('COURT-ADMISSIBLE MSA LEGAL EVIDENCE BUNDLE'));
   assert.ok(exportScreen.text.includes('102.165.20.1'));
+});
+
+test('45. Duffel Flight Engine, R350 Payment Orchestration & Failure Recovery', async () => {
+  const duffel = new DuffelFlightEngine();
+
+  // 1. Flight Search & Hold Order Creation
+  const search = await duffel.searchFlights({ origin: 'JNB', destination: 'CPT' });
+  assert.equal(search.success, true);
+  assert.ok(search.offerId.startsWith('off_'));
+
+  const hold = await duffel.createHoldOrder({ offerId: search.offerId });
+  assert.equal(hold.success, true);
+  assert.equal(hold.type, 'hold');
+
+  // 2. R350 Payment Link Generation across Paystack, PayFast, and PayShap
+  const paystack = new PaystackPaymentGateway();
+  const pstkReq = await paystack.createPaymentRequest({ waId: '27845555555', sessionRef: 'sess_1', amountCents: 35000 });
+  assert.equal(pstkReq.amountCents, 35000);
+  assert.ok(pstkReq.authorizationUrl.includes('checkout.paystack.com'));
+
+  const payfast = new PayFastPaymentGateway();
+  const pfstReq = await payfast.createConciergePaymentUrl({ sessionRef: 'sess_1', amountCents: 35000 });
+  assert.equal(pfstReq.amountCents, 35000);
+  assert.ok(pfstReq.authorizationUrl.includes('payfast.co.za'));
+
+  const payshap = new PayShapPaymentGateway();
+  const shapReq = await payshap.sendPayShapRequest({ waId: '27845555555', userBank: 'Capitec', sessionRef: 'sess_1', amountCents: 35000 });
+  assert.equal(shapReq.success, true);
+  assert.ok(shapReq.authorizationUrl.includes('stitch.money'));
+
+  // 3. Automated Webhook Confirmation & Duffel Order Execution
+  const sessionEngine = new WhatsAppSessionEngine();
+  await sessionEngine.handleIncomingMessage('27845555555', 'hi');
+  await sessionEngine.handleIncomingMessage('27845555555', 'Sandton');
+  await sessionEngine.handleIncomingMessage('27845555555', 'John');
+
+  const optionsScreen = await sessionEngine.handleIncomingMessage('27845555555', 'Book a flight from JNB to CPT');
+  assert.equal(optionsScreen.type, 'FLIGHT_OPTIONS_SCREEN');
+  assert.ok(optionsScreen.text.includes('R350.00'));
+
+  const linkScreen = await sessionEngine.handleIncomingMessage('27845555555', '', `flight_concierge_${search.offerId}`);
+  assert.equal(linkScreen.type, 'FLIGHT_CONCIERGE_PAYMENT_SCREEN');
+  assert.ok(linkScreen.text.includes('R350.00 Concierge Fee'));
+
+  const bookedScreen = await sessionEngine.processConciergePaymentWebhook({
+    reference: `paystack_concierge_sess1_27845555555`,
+    amountCents: 35000,
+    gateway: 'PAYSTACK',
+    isSuccess: true
+  });
+
+  assert.equal(bookedScreen.type, 'FLIGHT_BOOKED_SCREEN');
+  assert.ok(bookedScreen.text.includes('Booked! Your reference is'));
+
+  // 4. POPIA Compliance Check (Secure Passenger Link generation without in-chat passport logging)
+  const secureFormUrl = duffel.generateSecurePassengerFormUrl('27845555555', 'sess1');
+  assert.ok(secureFormUrl.includes('secure-passenger-info'));
 });

@@ -19,6 +19,10 @@ import { EmploymentReadinessEngine } from '../employment/readinessPack.js';
 import { SAJobAggregator } from '../employment/jobAggregator.js';
 import { JobSeekerOnboardingEngine } from '../employment/jobOnboarding.js';
 import { RecruitmentContractEngine } from '../employment/msaContract.js';
+import { DuffelFlightEngine } from '../commerce/duffelFlight.js';
+import { PaystackPaymentGateway } from '../payments/paystack.js';
+import { PayFastPaymentGateway } from '../payments/payfast.js';
+import { PayShapPaymentGateway } from '../payments/payshap.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -44,6 +48,10 @@ export class WhatsAppSessionEngine {
     this.jobAggregator = new SAJobAggregator();
     this.jobOnboardingEngine = new JobSeekerOnboardingEngine(kvUsers);
     this.contractEngine = new RecruitmentContractEngine(db, kvSessions);
+    this.duffelEngine = new DuffelFlightEngine();
+    this.paystack = new PaystackPaymentGateway();
+    this.payfast = new PayFastPaymentGateway();
+    this.payshap = new PayShapPaymentGateway();
     this.inMemorySessions = new Map();
   }
 
@@ -75,6 +83,76 @@ export class WhatsAppSessionEngine {
     }
   }
 
+  async processConciergePaymentWebhook({ reference, amountCents = 35000, gateway = 'PAYSTACK', isSuccess = true }) {
+    // Extract waId robustly from reference (e.g. paystack_concierge_27845555555_1710000000_1710000001 or paystack_concierge_sess1_27845555555)
+    const refParts = reference.split('_');
+    let waId = '27820000000';
+
+    // Find the part that looks like a phone number (e.g., 27845555555)
+    const foundPhone = refParts.find(p => /^27\d{9,}$/.test(p));
+    if (foundPhone) {
+      waId = foundPhone;
+    } else if (refParts[2] && /^27\d{9,}$/.test(refParts[2])) {
+      waId = refParts[2];
+    } else if (refParts[3] && /^27\d{9,}$/.test(refParts[3])) {
+      waId = refParts[3];
+    } else if (refParts[2]) {
+      waId = refParts[2];
+    }
+
+    let session = await this.getSession(waId);
+
+    if (!isSuccess) {
+      if (session.duffelHoldOrderId) {
+        await this.duffelEngine.releaseHoldOrder(session.duffelHoldOrderId);
+      }
+      return this.uiBuilder.renderFlightHoldExpiredScreen();
+    }
+
+    // Amount verification (must be R350 / 35,000 cents)
+    const config = await getPricingConfig(this.db);
+    const expectedFeeCents = config.CONCIERGE_FLIGHT_FEE_CENTS || 35000;
+    if (amountCents !== expectedFeeCents) {
+      return { text: `❌ Payment amount mismatch. Expected R${(expectedFeeCents / 100).toFixed(2)}` };
+    }
+
+    session.conciergePaid = true;
+    session.conciergePaymentRef = reference;
+
+    // Trigger Duffel Pay & Confirm automatically
+    const duffelPayRes = await this.duffelEngine.payAndConfirmOrder({
+      orderId: session.duffelHoldOrderId || `ord_hold_${Date.now()}`
+    });
+
+    if (!duffelPayRes.success) {
+      // Booking failure after payment -> Autonomous Refund
+      let refundRes;
+      if (gateway === 'PAYFAST') {
+        refundRes = await this.payfast.processRefund({ reference, amountCents: expectedFeeCents });
+      } else if (gateway === 'PAYSHAP_STITCH') {
+        refundRes = await this.payshap.processRefund({ reference, amountCents: expectedFeeCents });
+      } else {
+        refundRes = await this.paystack.processRefund({ reference, amountCents: expectedFeeCents });
+      }
+
+      session.conciergePaid = false;
+      session.duffelHoldOrderId = null;
+      await this.saveSession(waId, session);
+
+      return this.uiBuilder.renderFlightBookingFailedRefundedScreen({ feeCents: expectedFeeCents });
+    }
+
+    session.flightConfirmed = true;
+    session.pnr = duffelPayRes.bookingReference;
+    session.step = 'STATE_LIVE_ORDER';
+    await this.saveSession(waId, session);
+
+    return this.uiBuilder.renderFlightBookedScreen({
+      pnr: duffelPayRes.bookingReference,
+      eTicketUrl: duffelPayRes.eTicketPdfUrl
+    });
+  }
+
   async handleIncomingMessage(waId, incomingText, buttonPayload = null, locationObj = null) {
     const text = (incomingText || buttonPayload || '').trim();
 
@@ -85,6 +163,14 @@ export class WhatsAppSessionEngine {
     }
 
     let session = await this.getSession(waId);
+
+    // Flight search retry command
+    if (text === 'search_flights_retry' || buttonPayload === 'search_flights_retry') {
+      const flight = await this.duffelEngine.searchFlights({ origin: 'JNB', destination: 'CPT' });
+      session.pendingFlight = flight;
+      await this.saveSession(waId, session);
+      return this.uiBuilder.renderFlightOptionsScreen({ flight });
+    }
 
     // 0b. Employer Legal Contracts Retrieval & Export Commands
     const upperText = text.toUpperCase().trim();
@@ -320,6 +406,47 @@ export class WhatsAppSessionEngine {
 
     // 5. Interactive Button Tap Handlers
     if (buttonPayload) {
+      if (buttonPayload.startsWith('flight_free_')) {
+        const offerId = buttonPayload.replace('flight_free_', '');
+        return {
+          text: `🔗 *Direct Airline Booking Link*\n\n` +
+            `Here is your direct booking link for FlySafair:\n` +
+            `https://www.flysafair.co.za/book?offerId=${encodeURIComponent(offerId)}\n\n` +
+            `💡 Select Concierge anytime if you would like me to manage your check-in and WhatsApp boarding pass!`
+        };
+      }
+
+      if (buttonPayload.startsWith('flight_concierge_')) {
+        const offerId = buttonPayload.replace('flight_concierge_', '');
+        const config = await getPricingConfig(this.db);
+        const feeCents = config.CONCIERGE_FLIGHT_FEE_CENTS || 35000;
+
+        // Create Duffel Hold Order first to lock seat & price for 20 minutes
+        const holdOrder = await this.duffelEngine.createHoldOrder({ offerId, passengers: [{ type: 'adult' }] });
+        session.duffelHoldOrderId = holdOrder.orderId;
+        session.flightHoldExpiresAt = holdOrder.expiresAt;
+
+        const sessionRef = waId;
+        session.flightSessionRef = sessionRef;
+
+        // Generate R350 Payment Link via Paystack
+        const payRequest = await this.paystack.createPaymentRequest({
+          waId,
+          sessionRef,
+          amountCents: feeCents,
+          description: 'mrAI Concierge Service - Flight Booking'
+        });
+
+        session.conciergePaymentRef = payRequest.reference;
+        await this.saveSession(waId, session);
+
+        return this.uiBuilder.renderFlightConciergePaymentScreen({
+          paymentUrl: payRequest.authorizationUrl,
+          feeCents,
+          expiryMins: 20
+        });
+      }
+
       if (buttonPayload === 'book_travel_bundle') {
         const txId = `tx_bundle_${Date.now()}`;
         session.step = 'STATE_LIVE_ORDER';
@@ -545,6 +672,19 @@ export class WhatsAppSessionEngine {
       });
 
       return { text: cvReport.summary };
+    }
+
+    // Direct Flight Search Request Handler
+    if (lowerText.includes('flight') || lowerText.includes('flysafair') || lowerText.includes('fly to') || lowerText.includes('book flight')) {
+      const flight = await this.duffelEngine.searchFlights({ origin: 'JNB', destination: 'CPT' });
+      session.pendingFlight = flight;
+      await this.saveSession(waId, session);
+
+      const config = await getPricingConfig(this.db);
+      return this.uiBuilder.renderFlightOptionsScreen({
+        flight,
+        feeCents: config.CONCIERGE_FLIGHT_FEE_CENTS || 35000
+      });
     }
 
     // Pending Composite Text Continuation after Age Verification (e.g. User submitted 13-digit RSA ID)

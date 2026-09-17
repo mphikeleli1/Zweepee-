@@ -3,6 +3,84 @@ import { translate } from '../lib/i18n.js';
 
 export class WhatsAppUIBuilder {
   /**
+   * FLIGHT OPTIONS SCREEN (FREE vs CONCIERGE R350)
+   */
+  renderFlightOptionsScreen({ flight, feeCents = 35000 }) {
+    const feeRands = centsToRandsFormatted(feeCents);
+    return {
+      type: 'FLIGHT_OPTIONS_SCREEN',
+      text: `✈️ *Flight Offer Found*\n` +
+        `───────────────\n\n` +
+        `Found *${flight.airline}* ${flight.route} at *${flight.departureTime}*\n` +
+        `💵 *Flight Price:* ${centsToRandsFormatted(flight.priceCents)}\n\n` +
+        `Choose your booking preference:\n\n` +
+        `*Option 1: Free* — I'll send you a booking link\n` +
+        `*Option 2: Concierge (${feeRands})* — I book it, handle check-in, and manage changes`,
+      buttons: [
+        { type: 'reply', reply: { id: `flight_free_${flight.offerId}`, title: '🔗 Free Link' } },
+        { type: 'reply', reply: { id: `flight_concierge_${flight.offerId}`, title: `🛎️ Concierge (${feeRands})` } }
+      ]
+    };
+  }
+
+  /**
+   * FLIGHT CONCIERGE PAYMENT LINK SCREEN
+   */
+  renderFlightConciergePaymentScreen({ paymentUrl, feeCents = 35000, expiryMins = 20 }) {
+    const feeRands = centsToRandsFormatted(feeCents);
+    return {
+      type: 'FLIGHT_CONCIERGE_PAYMENT_SCREEN',
+      text: `Tap to pay ${feeRands} Concierge Fee: ${paymentUrl}\n\n` +
+        `This covers: error-proof booking, bag optimization, check-in, boarding pass in WhatsApp, and change handling.\n\n` +
+        `⚠️ *Terms:* Non-refundable once booking is initiated. Flight refund subject to airline fare rules. Seat hold expires in ${expiryMins} minutes.`
+    };
+  }
+
+  /**
+   * FLIGHT BOOKED CONFIRMATION SCREEN
+   */
+  renderFlightBookedScreen({ pnr, eTicketUrl }) {
+    let text = `Booked! Your reference is *${pnr}*.\n\n` +
+      `Check-in opens 24h before departure — I'll send your boarding pass then.`;
+
+    if (eTicketUrl) {
+      text += `\n\n📄 *E-ticket Attached:* ${eTicketUrl}`;
+    }
+
+    return {
+      type: 'FLIGHT_BOOKED_SCREEN',
+      text
+    };
+  }
+
+  /**
+   * FLIGHT PAYMENT TIMEOUT / EXPIRED SCREEN
+   */
+  renderFlightHoldExpiredScreen() {
+    return {
+      type: 'FLIGHT_HOLD_EXPIRED_SCREEN',
+      text: `Payment not received. Your seat hold has expired. Tap here to try again or choose the free option.`,
+      buttons: [
+        { type: 'reply', reply: { id: 'search_flights_retry', title: '🔄 Search Flights Again' } }
+      ]
+    };
+  }
+
+  /**
+   * FLIGHT BOOKING FAILED & REFUNDED SCREEN
+   */
+  renderFlightBookingFailedRefundedScreen({ feeCents = 35000 }) {
+    const feeRands = centsToRandsFormatted(feeCents);
+    return {
+      type: 'FLIGHT_BOOKING_FAILED_REFUNDED_SCREEN',
+      text: `Booking failed due to airline system error. Your ${feeRands} concierge fee has been refunded. Tap here to try another flight.`,
+      buttons: [
+        { type: 'reply', reply: { id: 'search_flights_retry', title: '✈️ Try Another Flight' } }
+      ]
+    };
+  }
+
+  /**
    * PROACTIVE INTELLIGENT SOURCING CLARIFICATION SCREEN
    */
   renderProactiveClarificationScreen({ query, productCategory = 'Product' }) {

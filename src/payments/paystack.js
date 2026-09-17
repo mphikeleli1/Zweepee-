@@ -49,6 +49,34 @@ export class PaystackPaymentGateway {
     };
   }
 
+  async createPaymentRequest({ waId, sessionRef, amountCents = 35000, description = 'mrAI Concierge Service - Flight Booking' }) {
+    const reference = `paystack_concierge_${sessionRef}_${Date.now()}`;
+    const paymentUrl = `https://checkout.paystack.com/pay/${reference}`;
+
+    return {
+      success: true,
+      gateway: 'PAYSTACK',
+      reference,
+      waId,
+      amountCents,
+      description,
+      authorizationUrl: paymentUrl,
+      status: 'PENDING'
+    };
+  }
+
+  async processRefund({ reference, amountCents = 35000, reason = 'Airline system error' }) {
+    return {
+      success: true,
+      refundId: `rf_pstk_${Date.now()}`,
+      reference,
+      amountCents,
+      status: 'REFUNDED',
+      reason,
+      refundedAt: new Date().toISOString()
+    };
+  }
+
   async processSplitSettlement({ transactionId, merchantAmountCents, courierAmountCents, platformMarginCents }) {
     return {
       success: true,

@@ -40,4 +40,31 @@ export class PayFastPaymentGateway {
         : 'PayFast standard payment session created.'
     };
   }
+
+  async createConciergePaymentUrl({ sessionRef, amountCents = 35000, paymentMethod = 'eft', notifyUrl = 'https://myai.co.za/api/v25/webhook/payfast' }) {
+    const rands = (amountCents / 100).toFixed(2);
+    const mPaymentId = `payfast_concierge_${sessionRef}_${Date.now()}`;
+    const paymentUrl = `https://www.payfast.co.za/eng/process?cmd=_paynow&receiver=${this.merchantId}&item_name=mrAI_Concierge_Service_Flight_Booking&amount=${rands}&m_payment_id=${mPaymentId}&notify_url=${encodeURIComponent(notifyUrl)}&payment_method=${paymentMethod}`;
+
+    return {
+      success: true,
+      gateway: 'PAYFAST',
+      reference: mPaymentId,
+      authorizationUrl: paymentUrl,
+      amountCents,
+      status: 'PENDING'
+    };
+  }
+
+  async processRefund({ reference, amountCents = 35000, reason = 'Airline system error' }) {
+    return {
+      success: true,
+      refundId: `rf_pfst_${Date.now()}`,
+      reference,
+      amountCents,
+      status: 'REFUNDED',
+      reason,
+      refundedAt: new Date().toISOString()
+    };
+  }
 }

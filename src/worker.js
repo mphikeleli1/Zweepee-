@@ -174,6 +174,20 @@ export default {
           ],
           description: 'Paystack Charge Success Payment Webhook Settlement'
         });
+
+        // Check if reference is a R350 flight concierge fee
+        if (txId.includes('concierge')) {
+          const sessionEngine = new WhatsAppSessionEngine(env?.SESSIONS_KV, env?.USERS_KV, env?.CATALOG_CACHE_KV, env?.DB);
+          const flightScreen = await sessionEngine.processConciergePaymentWebhook({
+            reference: txId,
+            amountCents: amountCents || 35000,
+            gateway: 'PAYSTACK',
+            isSuccess: true
+          });
+
+          await idempotency.complete(`paystack_${eventId}`, { processed: true, flightScreen });
+          return new Response(JSON.stringify({ status: 'success', eventProcessed: eventType, flightScreen }), { headers: { 'Content-Type': 'application/json' } });
+        }
       }
 
       await idempotency.complete(`paystack_${eventId}`, { processed: true });
@@ -202,6 +216,18 @@ export default {
         ],
         description: 'PayFast Instant EFT Webhook Settlement'
       });
+
+      if (txId.includes('concierge')) {
+        const sessionEngine = new WhatsAppSessionEngine(env?.SESSIONS_KV, env?.USERS_KV, env?.CATALOG_CACHE_KV, env?.DB);
+        const flightScreen = await sessionEngine.processConciergePaymentWebhook({
+          reference: txId,
+          amountCents: amountCents || 35000,
+          gateway: 'PAYFAST',
+          isSuccess: true
+        });
+
+        return new Response(JSON.stringify({ status: 'success', transactionId: txId, flightScreen }), { headers: { 'Content-Type': 'application/json' } });
+      }
 
       return new Response(JSON.stringify({ status: 'success', transactionId: txId }), { headers: { 'Content-Type': 'application/json' } });
     }
