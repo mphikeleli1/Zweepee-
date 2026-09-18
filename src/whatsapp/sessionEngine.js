@@ -19,10 +19,15 @@ import { EmploymentReadinessEngine } from '../employment/readinessPack.js';
 import { SAJobAggregator } from '../employment/jobAggregator.js';
 import { JobSeekerOnboardingEngine } from '../employment/jobOnboarding.js';
 import { RecruitmentContractEngine } from '../employment/msaContract.js';
-import { DuffelFlightEngine } from '../commerce/duffelFlight.js';
+import { ConsortiumFlightEngine } from '../commerce/consortiumFlight.js';
+import { FlightIssuer } from '../commerce/flightIssue.js';
+import { CheckinWorker } from '../commerce/checkinWorker.js';
+import { FlightChangeHandler } from '../commerce/changeHandler.js';
+import { FlightDisruptionMonitor } from '../commerce/disruptionMonitor.js';
 import { PaystackPaymentGateway } from '../payments/paystack.js';
 import { PayFastPaymentGateway } from '../payments/payfast.js';
 import { PayShapPaymentGateway } from '../payments/payshap.js';
+import { TripManagementEngine } from '../commerce/tripManagement.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -48,7 +53,12 @@ export class WhatsAppSessionEngine {
     this.jobAggregator = new SAJobAggregator();
     this.jobOnboardingEngine = new JobSeekerOnboardingEngine(kvUsers);
     this.contractEngine = new RecruitmentContractEngine(db, kvSessions);
-    this.duffelEngine = new DuffelFlightEngine();
+    this.consortiumEngine = new ConsortiumFlightEngine();
+    this.flightIssuer = new FlightIssuer(this.consortiumEngine);
+    this.checkinWorker = new CheckinWorker(this.flightIssuer, this.consortiumEngine);
+    this.changeHandler = new FlightChangeHandler(this.flightIssuer, this.consortiumEngine);
+    this.disruptionMonitor = new FlightDisruptionMonitor(this.flightIssuer, this.consortiumEngine);
+    this.tripManager = new TripManagementEngine(this.consortiumEngine, this.saStack);
     this.paystack = new PaystackPaymentGateway();
     this.payfast = new PayFastPaymentGateway();
     this.payshap = new PayShapPaymentGateway();
@@ -102,9 +112,6 @@ export class WhatsAppSessionEngine {
     let session = await this.getSession(waId);
 
     if (!isSuccess) {
-      if (session.duffelHoldOrderId) {
-        await this.duffelEngine.releaseHoldOrder(session.duffelHoldOrderId);
-      }
       return this.uiBuilder.renderFlightHoldExpiredScreen();
     }
 
@@ -120,19 +127,22 @@ export class WhatsAppSessionEngine {
     session.conciergePaid = true;
     session.conciergePaymentRef = reference;
 
-    // Background Split Allocation: Flight Ticket Cost -> Duffel, Concierge Fee -> myAI Platform Revenue
+    // Background Split Allocation: Flight Ticket Cost -> Consortium BSP, Concierge Fee -> myAI Platform Revenue
     session.backgroundPaymentSplit = {
-      duffelTicketAmountCents: flightPriceCents,
+      consortiumTicketAmountCents: flightPriceCents,
       platformFeeAmountCents: feeCents,
       totalCustomerPaidCents: expectedTotalAllInCents
     };
 
-    // Trigger Duffel Pay & Confirm automatically in background
-    const duffelPayRes = await this.duffelEngine.payAndConfirmOrder({
-      orderId: session.duffelHoldOrderId || `ord_hold_${Date.now()}`
+    // Trigger Consortium NDC Ticket Issuance automatically in background (Full PNR Ownership)
+    const issueRes = await this.flightIssuer.processAndIssueTicket({
+      offerId: session.consortiumOfferId || `ndc_offer_${Date.now()}`,
+      passengerDetails: { firstName: session.draftName || 'Bongani', lastName: 'Dlamini' },
+      paymentReference: reference,
+      splitAllocation: session.backgroundPaymentSplit
     });
 
-    if (!duffelPayRes.success) {
+    if (!issueRes.success) {
       // Booking failure after payment -> Autonomous Refund of full customer payment
       let refundRes;
       if (gateway === 'PAYFAST') {
@@ -144,20 +154,27 @@ export class WhatsAppSessionEngine {
       }
 
       session.conciergePaid = false;
-      session.duffelHoldOrderId = null;
       await this.saveSession(waId, session);
 
       return this.uiBuilder.renderFlightBookingFailedRefundedScreen({ feeCents: expectedTotalAllInCents });
     }
 
     session.flightConfirmed = true;
-    session.pnr = duffelPayRes.bookingReference;
+    session.pnr = issueRes.pnr;
     session.step = 'STATE_LIVE_ORDER';
+
+    // Auto check-in via direct Consortium NDC API
+    const checkInRes = await this.tripManager.executeAutoCheckIn({
+      pnr: session.pnr,
+      passengerLastName: session.draftName || 'Passenger'
+    });
+    session.checkInRecord = checkInRes;
+
     await this.saveSession(waId, session);
 
     return this.uiBuilder.renderFlightBookedScreen({
-      pnr: duffelPayRes.bookingReference,
-      eTicketUrl: duffelPayRes.eTicketPdfUrl
+      pnr: issueRes.pnr,
+      eTicketUrl: issueRes.eTicketPdfUrl
     });
   }
 
@@ -174,7 +191,7 @@ export class WhatsAppSessionEngine {
 
     // Flight search retry command
     if (text === 'search_flights_retry' || buttonPayload === 'search_flights_retry') {
-      const flight = await this.duffelEngine.searchFlights({ origin: 'JNB', destination: 'CPT' });
+      const flight = await this.tripManager.searchMultiAirlineFlights({ origin: 'JNB', destination: 'CPT' });
       session.pendingFlight = flight;
       await this.saveSession(waId, session);
       return this.uiBuilder.renderFlightOptionsScreen({ flight });
@@ -414,13 +431,43 @@ export class WhatsAppSessionEngine {
 
     // 5. Interactive Button Tap Handlers
     if (buttonPayload) {
+      if (buttonPayload.startsWith('request_ground_transfer_')) {
+        const pnr = buttonPayload.replace('request_ground_transfer_', '');
+        const transfer = await this.tripManager.arrangeGroundTransfer({
+          airport: 'DUR',
+          dropoffAddress: session.activeAddress || 'Umhlanga, Durban',
+          transferType: 'UBER_VOUCHER'
+        });
+
+        return this.uiBuilder.renderGroundTransferScreen({ transfer });
+      }
+
+      if (buttonPayload.startsWith('request_tax_invoice_')) {
+        const pnr = buttonPayload.replace('request_tax_invoice_', '');
+        const config = await getPricingConfig(this.db);
+        const feeCents = config.CONCIERGE_FLIGHT_FEE_CENTS || 35000;
+        const flightPriceCents = session.pendingFlight?.priceCents || 95000;
+        const totalPaidCents = flightPriceCents + feeCents;
+
+        const invoice = this.tripManager.generateTaxInvoice({
+          invoiceNumber: `INV-${pnr}-${Date.now().toString().substring(8)}`,
+          customerName: userProfile.name || 'Business Traveler',
+          customerVatNumber: '4001928374',
+          totalPaidCents,
+          flightPriceCents,
+          conciergeFeeCents: feeCents
+        });
+
+        return { text: invoice.invoiceText };
+      }
+
       if (buttonPayload.startsWith('flight_free_')) {
-        const offerId = buttonPayload.replace('flight_free_', '');
+        const travelstartUrl = session.pendingFlight?.tier1TravelstartUrl || 'https://www.travelstart.co.za/?affId=mrai_ts_aff_99';
         return {
-          text: `🔗 *Direct Airline Booking Link*\n\n` +
-            `Here is your direct booking link for FlySafair:\n` +
-            `https://www.flysafair.co.za/book?offerId=${encodeURIComponent(offerId)}\n\n` +
-            `💡 Select Concierge anytime if you would like me to manage your check-in and WhatsApp boarding pass!`
+          text: `🔗 *Direct Travelstart Booking Link*\n\n` +
+            `Here is your direct Travelstart booking link:\n` +
+            `${travelstartUrl}\n\n` +
+            `💡 Select Concierge anytime if you would like me to manage your check-in, PNR servicing, and WhatsApp boarding pass!`
         };
       }
 
@@ -431,10 +478,8 @@ export class WhatsAppSessionEngine {
         const flightPriceCents = session.pendingFlight?.priceCents || 95000;
         const totalAllInCents = flightPriceCents + feeCents;
 
-        // Create Duffel Hold Order first to lock seat & price for 20 minutes
-        const holdOrder = await this.duffelEngine.createHoldOrder({ offerId, passengers: [{ type: 'adult' }] });
-        session.duffelHoldOrderId = holdOrder.orderId;
-        session.flightHoldExpiresAt = holdOrder.expiresAt;
+        session.consortiumOfferId = offerId;
+        session.flightHoldExpiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
         session.flightTotalAllInCents = totalAllInCents;
 
         const sessionRef = waId;
@@ -687,10 +732,14 @@ export class WhatsAppSessionEngine {
       return { text: cvReport.summary };
     }
 
-    // Direct Flight Search Request Handler with dynamic destination detection (e.g. Durban -> DUR)
-    if (lowerText.includes('flight') || lowerText.includes('flysafair') || lowerText.includes('fly to') || lowerText.includes('book flight')) {
-      const destinationCode = lowerText.includes('durban') || lowerText.includes('dur') ? 'DUR' : 'CPT';
-      const flight = await this.duffelEngine.searchFlights({ origin: 'JNB', destination: destinationCode });
+    // Direct Flight Search Request Handler with multi-airline support & regional route parsing
+    if (lowerText.includes('flight') || lowerText.includes('flysafair') || lowerText.includes('fly to') || lowerText.includes('book flight') || lowerText.includes('airlink')) {
+      let destinationCode = 'CPT';
+      if (lowerText.includes('durban') || lowerText.includes('dur')) destinationCode = 'DUR';
+      if (lowerText.includes('skukuza') || lowerText.includes('szk') || lowerText.includes('kruger')) destinationCode = 'SZK';
+      if (lowerText.includes('hoedspruit') || lowerText.includes('hds')) destinationCode = 'HDS';
+
+      const flight = await this.tripManager.searchMultiAirlineFlights({ origin: 'JNB', destination: destinationCode });
       session.pendingFlight = flight;
       await this.saveSession(waId, session);
 

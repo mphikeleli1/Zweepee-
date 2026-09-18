@@ -47,7 +47,7 @@ export class WhatsAppUIBuilder {
   }
 
   /**
-   * FLIGHT BOOKED CONFIRMATION SCREEN
+   * FLIGHT BOOKED CONFIRMATION SCREEN WITH TAX INVOICE & GROUND TRANSFER BUTTONS
    */
   renderFlightBookedScreen({ pnr, eTicketUrl }) {
     let text = `Booked! Your reference is *${pnr}*.\n\n` +
@@ -59,7 +59,28 @@ export class WhatsAppUIBuilder {
 
     return {
       type: 'FLIGHT_BOOKED_SCREEN',
-      text
+      text,
+      buttons: [
+        { type: 'reply', reply: { id: `request_ground_transfer_${pnr}`, title: '🚗 Airport Transfer' } },
+        { type: 'reply', reply: { id: `request_tax_invoice_${pnr}`, title: '🧾 Tax Invoice' } }
+      ]
+    };
+  }
+
+  /**
+   * GROUND TRANSFER SCREEN
+   */
+  renderGroundTransferScreen({ transfer }) {
+    return {
+      type: 'GROUND_TRANSFER_SCREEN',
+      text: `🚗 *Airport Transfer Arranged*\n` +
+        `───────────────\n\n` +
+        `🏢 *Provider:* ${transfer.provider}\n` +
+        `🎟️ *Voucher Code:* *${transfer.voucherCode}*\n` +
+        `📍 *Pickup Point:* ${transfer.pickupPoint}\n` +
+        `📍 *Dropoff Address:* ${transfer.dropoffAddress}\n` +
+        `🚦 *Status:* *${transfer.driverStatus}*\n\n` +
+        `📱 *Access Voucher:* ${transfer.voucherLink}`
     };
   }
 

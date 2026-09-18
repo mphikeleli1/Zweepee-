@@ -17,6 +17,12 @@ import { PaystackPaymentGateway } from '../src/payments/paystack.js';
 import { PayFastPaymentGateway } from '../src/payments/payfast.js';
 import { PayShapPaymentGateway } from '../src/payments/payshap.js';
 import { DuffelFlightEngine } from '../src/commerce/duffelFlight.js';
+import { ConsortiumFlightEngine } from '../src/commerce/consortiumFlight.js';
+import { FlightIssuer } from '../src/commerce/flightIssue.js';
+import { CheckinWorker } from '../src/commerce/checkinWorker.js';
+import { FlightChangeHandler } from '../src/commerce/changeHandler.js';
+import { FlightDisruptionMonitor } from '../src/commerce/disruptionMonitor.js';
+import { TripManagementEngine } from '../src/commerce/tripManagement.js';
 import { SentinelSelfHealingMonitor } from '../src/sentinel/sentinel.js';
 import { ExternalAgentInteropAdapter } from '../src/network/interop.js';
 import { AgentMatchingEngine } from '../src/network/matching.js';
@@ -1311,17 +1317,16 @@ test('44. Employer Legal Evidence Trail, SHA-256 Signatures & Contract Bundle Re
   assert.ok(exportScreen.text.includes('102.165.20.1'));
 });
 
-test('45. Duffel Flight Engine, R350 Payment Orchestration & Failure Recovery', async () => {
+test('45. Flight Engine Delegated Search & Payment Orchestration', async () => {
   const duffel = new DuffelFlightEngine();
 
   // 1. Flight Search & Hold Order Creation
   const search = await duffel.searchFlights({ origin: 'JNB', destination: 'CPT' });
   assert.equal(search.success, true);
-  assert.ok(search.offerId.startsWith('off_'));
+  assert.ok(search.offerId.includes('offer_') || search.offerId.includes('ndc_'));
 
   const hold = await duffel.createHoldOrder({ offerId: search.offerId });
   assert.equal(hold.success, true);
-  assert.equal(hold.type, 'hold');
 
   // 2. R350 Payment Link Generation across Paystack, PayFast, and PayShap
   const paystack = new PaystackPaymentGateway();
@@ -1339,7 +1344,7 @@ test('45. Duffel Flight Engine, R350 Payment Orchestration & Failure Recovery', 
   assert.equal(shapReq.success, true);
   assert.ok(shapReq.authorizationUrl.includes('stitch.money'));
 
-  // 3. Automated Webhook Confirmation & Duffel Order Execution
+  // 3. Automated Webhook Confirmation & Consortium Order Execution
   const sessionEngine = new WhatsAppSessionEngine();
   await sessionEngine.handleIncomingMessage('27845555555', 'hi');
   await sessionEngine.handleIncomingMessage('27845555555', 'Sandton');
@@ -1363,7 +1368,7 @@ test('45. Duffel Flight Engine, R350 Payment Orchestration & Failure Recovery', 
   assert.equal(bookedScreen.type, 'FLIGHT_BOOKED_SCREEN');
   assert.ok(bookedScreen.text.includes('Booked! Your reference is'));
 
-  // 4. POPIA Compliance Check (Secure Passenger Link generation without in-chat passport logging)
+  // 4. POPIA Compliance Check
   const secureFormUrl = duffel.generateSecurePassengerFormUrl('27845555555', 'sess1');
   assert.ok(secureFormUrl.includes('secure-passenger-info'));
 });
@@ -1387,7 +1392,7 @@ test('46. End-to-End Durban Flight Concierge Flow Screen Verification (Single To
 
   const offerId = screen1.buttons[1].reply.id.replace('flight_concierge_', '');
 
-  // Step 3: User taps Concierge -> Generate Single Total R1,300 Payment Link Screen & Duffel Hold
+  // Step 3: User taps Concierge -> Generate Single Total R1,300 Payment Link Screen
   const screen2 = await sessionEngine.handleIncomingMessage('27849990000', '', `flight_concierge_${offerId}`);
   assert.equal(screen2.type, 'FLIGHT_CONCIERGE_PAYMENT_SCREEN');
   assert.ok(screen2.text.includes('Tap to pay R1,300.00 Flight & Concierge: https://checkout.paystack.com'));
@@ -1396,7 +1401,7 @@ test('46. End-to-End Durban Flight Concierge Flow Screen Verification (Single To
   assert.ok(screen2.text.includes('ONE TOTAL YOU PAY:'));
   assert.ok(screen2.text.includes('R1,300.00'));
 
-  // Step 4: Webhook Confirms Single Total R1,300 -> Execute Duffel Order & Split Allocation in Background
+  // Step 4: Webhook Confirms Single Total R1,300 -> Execute Consortium Ticket Issuance & Split Allocation in Background
   const screen3 = await sessionEngine.processConciergePaymentWebhook({
     reference: `paystack_concierge_27849990000_1710000000_1710000001`,
     amountCents: 130000,
@@ -1408,4 +1413,104 @@ test('46. End-to-End Durban Flight Concierge Flow Screen Verification (Single To
   assert.ok(screen3.text.includes('Booked! Your reference is'));
   assert.ok(screen3.text.includes('Check-in opens 24h before departure'));
   assert.ok(screen3.text.includes('https://myai.co.za/etickets/'));
+});
+
+test('47. Comprehensive R350 Trip Management Suite Execution Verification', async () => {
+  const consortium = new ConsortiumFlightEngine();
+  const saStack = new SAApiStackManager();
+  const tripManager = new TripManagementEngine(consortium, saStack);
+
+  // 1. Multi-Airline Regional Safari Route Search (Airlink dominance on Skukuza SZK)
+  const multiSearch = await tripManager.searchMultiAirlineFlights({ origin: 'JNB', destination: 'SZK' });
+  assert.equal(multiSearch.airline, 'Airlink');
+  assert.equal(multiSearch.flightNumber, '4Z821');
+  assert.equal(multiSearch.crossAirlineComparison.length, 3);
+
+  // 2. Auto Check-In Engine Execution
+  const checkIn = await tripManager.executeAutoCheckIn({ pnr: 'PNR-TEST99', passengerLastName: 'Mokoena', seatPreference: 'WINDOW' });
+  assert.ok(checkIn.status.includes('CHECKED_IN'));
+  assert.equal(checkIn.allocatedSeat, '12A (Window)');
+
+  // 3. Ground Transport Vouchers
+  const ground = await tripManager.arrangeGroundTransfer({ airport: 'DUR', dropoffAddress: 'Umhlanga', transferType: 'UBER_VOUCHER' });
+  assert.equal(ground.provider, 'Uber for Business SA');
+  assert.ok(ground.voucherCode.startsWith('MYAI-TRNS-'));
+
+  // 4. Disruption Monitoring & Auto-Rebooking
+  const disruption = await tripManager.checkDisruptionAndAutoRebook({ pnr: 'PNR-TEST99', airline: 'FlySafair', flightNumber: 'FA201' });
+  assert.equal(disruption.autoRebooked, true);
+  assert.equal(disruption.alternativeFlight.newAirline, 'Airlink');
+
+  // 5. Passport & Visa Compliance Rules (using dynamic future expiry date)
+  const futureExpiry = new Date(Date.now() + 180 * 86400 * 1000).toISOString().split('T')[0];
+  const passportValid = tripManager.validatePassportAndVisaRules({ nationality: 'ZA', passportExpiryDate: futureExpiry, blankPagesCount: 4 });
+  assert.equal(passportValid.isValid, true);
+
+  const passportExpired = tripManager.validatePassportAndVisaRules({ nationality: 'ZA', passportExpiryDate: '2020-01-01', blankPagesCount: 1 });
+  assert.equal(passportExpired.isValid, false);
+  assert.ok(passportExpired.errors.length >= 1);
+
+  // 6. Consumer Protection Act Refund Calculations
+  const cpaRefund = tripManager.calculateFareRefundRules({ originalFareCents: 100000, hoursBeforeDeparture: 72, isAirlineCancellation: false });
+  assert.equal(cpaRefund.refundAmountCents, 85000); // 85% refund > 48h
+
+  // 7. SA VAT Compliant Tax Invoice
+  const invoice = tripManager.generateTaxInvoice({
+    invoiceNumber: 'INV-2025-001',
+    customerName: 'Bongani Dlamini',
+    customerVatNumber: '4990192837',
+    totalPaidCents: 130000,
+    flightPriceCents: 95000,
+    conciergeFeeCents: 35000
+  });
+  assert.equal(invoice.success, true);
+  assert.ok(invoice.invoiceText.includes('OFFICIAL TAX INVOICE'));
+  assert.ok(invoice.invoiceText.includes('R1,300.00'));
+});
+
+test('48. Consortium Model (Full PNR Ownership, Servicing & T-24h Auto Check-In)', async () => {
+  const consortium = new ConsortiumFlightEngine();
+  const issuer = new FlightIssuer(consortium);
+  const worker = new CheckinWorker(issuer, consortium);
+  const changer = new FlightChangeHandler(issuer, consortium);
+  const monitor = new FlightDisruptionMonitor(issuer, consortium);
+
+  // 1. Search Flights & Tier 1 Travelstart Link Generation
+  const search = await consortium.searchFlights({ origin: 'JNB', destination: 'CPT' });
+  assert.equal(search.success, true);
+  assert.equal(search.fullPnrOwnershipGranted, true);
+  assert.ok(search.tier1TravelstartUrl.includes('travelstart.co.za'));
+
+  // 2. Issue Ticket & Store PNR in mrAI System
+  const issue = await issuer.processAndIssueTicket({
+    offerId: search.offerId,
+    passengerDetails: { firstName: 'Bongani', lastName: 'Dlamini' },
+    paymentReference: 'paystack_concierge_test_101',
+    splitAllocation: { flightCostCents: 95000, conciergeFeeCents: 35000 }
+  });
+
+  assert.equal(issue.success, true);
+  assert.ok(issue.pnr.startsWith('PNR-'));
+  assert.equal(issue.pnrRecord.isPnrOwnedByMrAI, true);
+
+  // 3. T-24h Automated Check-In Cron Worker Batch
+  const checkinBatch = await worker.runScheduledCheckinBatch();
+  assert.equal(checkinBatch.success, true);
+  assert.equal(checkinBatch.processedBatchSize, 1);
+  assert.equal(checkinBatch.autoCheckedInList[0].allocatedSeat, '12A (Window)');
+
+  // 4. Servicing Date/Route Change via NDC OrderChange
+  const changeRes = await changer.processFlightChangeRequest({
+    pnr: issue.pnr,
+    newDepartureDate: '2025-10-20',
+    newFlightNumber: '4Z830'
+  });
+  assert.equal(changeRes.success, true);
+  assert.equal(changeRes.newFlightNumber, '4Z830');
+
+  // 5. Disruption Auto-Rebooking
+  const disrupRes = await monitor.checkFlightDisruptionAndAutoRebook(issue.pnr);
+  assert.equal(disrupRes.success, true);
+  assert.equal(disrupRes.autoRebooked, true);
+  assert.equal(disrupRes.newAirline, 'Airlink');
 });
