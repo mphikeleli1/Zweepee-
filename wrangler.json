@@ -1,0 +1,57 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "myai-v25",
+  "main": "src/worker.js",
+  "compatibility_date": "2024-03-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "myai-v25-db",
+      "database_id": "myai-v25-db-id"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "USERS_KV",
+      "id": "MYAI_V25_USERS"
+    },
+    {
+      "binding": "SESSIONS_KV",
+      "id": "MYAI_V25_SESSIONS"
+    },
+    {
+      "binding": "CATALOG_CACHE_KV",
+      "id": "MYAI_V25_CATALOG_CACHE"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ASSETS_BUCKET",
+      "bucket_name": "myai-v25-assets"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "ORDERS_QUEUE",
+        "queue": "myai-v25-orders"
+      },
+      {
+        "binding": "TRANSPORT_QUEUE",
+        "queue": "myai-v25-transport"
+      },
+      {
+        "binding": "SETTLEMENTS_QUEUE",
+        "queue": "myai-v25-settlements"
+      },
+      {
+        "binding": "DLQ_QUEUE",
+        "queue": "myai-v25-dlq"
+      }
+    ]
+  },
+  "triggers": {
+    "crons": ["0 0 * * *"]
+  }
+}
