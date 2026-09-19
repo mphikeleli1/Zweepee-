@@ -1,23 +1,17 @@
 import { centsToRandsFormatted } from '../lib/money.js';
+import { AeronologyAdapter } from './aeronologyAdapter.js';
+import { CheckinAdapter } from './checkinAdapter.js';
 
 export class TripManagementEngine {
-  constructor(duffelEngine, saStack) {
-    this.duffelEngine = duffelEngine;
+  constructor(flightEngine, saStack) {
+    this.aeronology = new AeronologyAdapter();
+    this.checkin = new CheckinAdapter();
     this.saStack = saStack;
   }
 
-  // 1. FLIGHT & BOOKING AUTOMATION: Multi-Airline Search (Airlink, Lift, CemAir, SAA, FlySafair)
+  // 1. FLIGHT & BOOKING AUTOMATION: Multi-Airline Search via Aeronology SA
   async searchMultiAirlineFlights({ origin = 'JNB', destination = 'SZK', departureDate = '2025-10-15' }) {
     const destUpper = (destination || 'CPT').toUpperCase();
-
-    // Multi-airline inventory routing for SA Regional & Golden Triangle routes
-    const supportedCarriers = [
-      { code: '4Z', name: 'Airlink', hub: 'JNB', regionalDominance: ['SZK', 'HDS', 'PHW', 'MQP', 'UTN', 'GRJ'] },
-      { id: 'GE', name: 'FlySafair', hub: 'JNB', GoldenTriangle: ['CPT', 'DUR', 'PLZ', 'ELS'] },
-      { code: 'LIFT', name: 'Lift', GoldenTriangle: ['CPT', 'DUR'] },
-      { code: '5Z', name: 'CemAir', regionalDominance: ['PBZ', 'KIM', 'NTY', 'SIS'] },
-      { code: 'SA', name: 'South African Airways', hubs: ['JNB', 'CPT'] }
-    ];
 
     let primaryCarrier = 'FlySafair';
     let flightNum = 'FA201';
@@ -26,7 +20,7 @@ export class TripManagementEngine {
     if (['SZK', 'HDS', 'PHW', 'MQP'].includes(destUpper)) {
       primaryCarrier = 'Airlink';
       flightNum = '4Z821';
-      priceCents = 185000; // R1,850.00 regional safari route
+      priceCents = 185000;
     } else if (destUpper === 'DUR') {
       primaryCarrier = 'FlySafair';
       flightNum = 'FA282';
@@ -37,9 +31,12 @@ export class TripManagementEngine {
       priceCents = 165000;
     }
 
+    const travelstartUrl = `https://www.travelstart.co.za/?affId=mrai_ts_aff_99&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destUpper)}&date=${encodeURIComponent(departureDate)}`;
+
     return {
       success: true,
-      offerId: `off_multi_${destUpper.toLowerCase()}_${Date.now()}`,
+      provider: 'AERONOLOGY_SA',
+      offerId: `aero_multi_${destUpper.toLowerCase()}_${Date.now()}`,
       airline: primaryCarrier,
       flightNumber: flightNum,
       route: `${origin} → ${destUpper}`,
@@ -47,6 +44,8 @@ export class TripManagementEngine {
       arrivalTime: '10:30 AM',
       priceCents,
       currency: 'ZAR',
+      tier1TravelstartUrl: travelstartUrl,
+      tier1EstCommissionCents: 15500,
       crossAirlineComparison: [
         { airline: primaryCarrier, priceCents, flightNumber: flightNum },
         { airline: 'Lift', priceCents: priceCents + 15000, flightNumber: 'LIFT402' },
@@ -55,16 +54,20 @@ export class TripManagementEngine {
     };
   }
 
-  // 2. AUTOMATED CHECK-IN API (Flyo / Travelfusion integration interface)
+  // 2. AUTOMATED CHECK-IN API via 1Checkin Adapter
   async executeAutoCheckIn({ pnr, passengerLastName, seatPreference = 'WINDOW', extraBaggageKg = 20 }) {
+    const reg = await this.checkin.registerPassengerForAutoCheckin({ pnr, passengerLastName, seatPreference, extraBaggageKg });
+    const status = await this.checkin.getCheckinStatus({ pnr, onecheckinRef: reg.onecheckinRef });
+
     return {
       success: true,
       pnr,
+      onecheckinRef: reg.onecheckinRef,
       passengerLastName,
       status: 'CHECKED_IN_24H_AUTOMATED',
-      allocatedSeat: seatPreference === 'WINDOW' ? '12A (Window)' : '12C (Aisle)',
+      allocatedSeat: status.allocatedSeat || '12A (Window)',
       baggageAllowance: `${extraBaggageKg}kg Included`,
-      boardingPassPdfUrl: `https://myai.co.za/boarding-passes/${pnr}.pdf`,
+      boardingPassPdfUrl: status.boardingPassPdfUrl || `https://myai.co.za/boarding-passes/${pnr}.pdf`,
       qrCodeUrl: `https://myai.co.za/boarding-passes/${pnr}-qr.png`,
       checkInTimestamp: new Date().toISOString()
     };
@@ -101,7 +104,6 @@ export class TripManagementEngine {
 
   // 5. REAL-TIME FLIGHT STATUS MONITORING & AUTOMATED REBOOKING
   async checkDisruptionAndAutoRebook({ pnr, airline, flightNumber }) {
-    // Simulated flight status query
     const statusReport = {
       pnr,
       airline,
@@ -112,23 +114,22 @@ export class TripManagementEngine {
     };
 
     if (statusReport.status.includes('CANCELLED') || statusReport.delayMinutes > 120) {
-      // Auto-rebook across alternative airline
-      const alternativeFlight = {
-        newAirline: 'Airlink',
-        newFlightNumber: '4Z825',
-        newDepartureTime: '11:45 AM',
-        newPnr: `PNR-REBOOK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-      };
+      const rebookRes = await this.aeronology.rebookFlight({ pnr, newDepartureDate: '2025-10-15', newFlightNumber: '4Z825' });
 
       return {
         success: true,
         isDisrupted: true,
         statusReport,
         autoRebooked: true,
-        alternativeFlight,
+        alternativeFlight: {
+          newAirline: 'Airlink',
+          newFlightNumber: rebookRes.newFlightNumber,
+          newDepartureTime: '11:45 AM',
+          newPnr: pnr
+        },
         noticeMessage: `🚨 *Flight Disruption Alert (${flightNumber})*\n\n` +
-          `Original flight was cancelled due to weather. Your myAI™ Personal Concierge has *AUTOMATICALLY REBOOKED* you on ${alternativeFlight.newAirline} (${alternativeFlight.newFlightNumber}) at ${alternativeFlight.newDepartureTime}.\n\n` +
-          `🎟️ *New PNR:* ${alternativeFlight.newPnr} (Zero extra cost under R350 Trip Management coverage)`
+          `Original flight was cancelled due to weather. Your myAI™ Personal Concierge has *AUTOMATICALLY REBOOKED* you via Aeronology SA on Airlink (${rebookRes.newFlightNumber}) at 11:45 AM.\n\n` +
+          `🎟️ *PNR:* ${pnr} (Zero extra cost under R350 Trip Management coverage)`
       };
     }
 
@@ -140,7 +141,6 @@ export class TripManagementEngine {
     const errors = [];
     const warnings = [];
 
-    // Rule 1: Passport Expiry (30 days beyond departure for SA, 6 months for international)
     if (passportExpiryDate) {
       const expiry = new Date(passportExpiryDate);
       const now = new Date();
@@ -150,12 +150,10 @@ export class TripManagementEngine {
       }
     }
 
-    // Rule 2: Blank Page Requirement
     if (blankPagesCount < 2) {
       errors.push('At least 2 consecutive blank visa pages required in passport.');
     }
 
-    // Rule 3: SA Child Travel Rules (Unabridged Birth Certificate + Affidavit)
     if (isChild) {
       if (!childDocuments.hasUnabridgedBirthCertificate) {
         warnings.push('Under SA Law, children under 18 require an Unabridged Birth Certificate when crossing borders.');
@@ -186,9 +184,8 @@ export class TripManagementEngine {
       };
     }
 
-    // Consumer Protection Act (CPA) Transport Date Rule (CPA cooling off excludes specific date transport)
     if (hoursBeforeDeparture > 48) {
-      const feeCents = Math.round(originalFareCents * 0.15); // 15% cancellation penalty > 48h
+      const feeCents = Math.round(originalFareCents * 0.15);
       return {
         fullRefundEligible: false,
         refundAmountCents: originalFareCents - feeCents,
@@ -196,7 +193,7 @@ export class TripManagementEngine {
         explanation: 'Cancellation requested >48h prior: 85% refund issued per fare rules.'
       };
     } else {
-      const feeCents = Math.round(originalFareCents * 0.50); // 50% penalty < 48h
+      const feeCents = Math.round(originalFareCents * 0.50);
       return {
         fullRefundEligible: false,
         refundAmountCents: originalFareCents - feeCents,

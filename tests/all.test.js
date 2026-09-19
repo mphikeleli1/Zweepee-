@@ -17,7 +17,8 @@ import { PaystackPaymentGateway } from '../src/payments/paystack.js';
 import { PayFastPaymentGateway } from '../src/payments/payfast.js';
 import { PayShapPaymentGateway } from '../src/payments/payshap.js';
 import { DuffelFlightEngine } from '../src/commerce/duffelFlight.js';
-import { ConsortiumFlightEngine } from '../src/commerce/consortiumFlight.js';
+import { AeronologyAdapter } from '../src/commerce/aeronologyAdapter.js';
+import { CheckinAdapter } from '../src/commerce/checkinAdapter.js';
 import { FlightIssuer } from '../src/commerce/flightIssue.js';
 import { CheckinWorker } from '../src/commerce/checkinWorker.js';
 import { FlightChangeHandler } from '../src/commerce/changeHandler.js';
@@ -1323,7 +1324,7 @@ test('45. Flight Engine Delegated Search & Payment Orchestration', async () => {
   // 1. Flight Search & Hold Order Creation
   const search = await duffel.searchFlights({ origin: 'JNB', destination: 'CPT' });
   assert.equal(search.success, true);
-  assert.ok(search.offerId.includes('offer_') || search.offerId.includes('ndc_'));
+  assert.ok(search.offerId.includes('offer_') || search.offerId.includes('aero_'));
 
   const hold = await duffel.createHoldOrder({ offerId: search.offerId });
   assert.equal(hold.success, true);
@@ -1344,7 +1345,7 @@ test('45. Flight Engine Delegated Search & Payment Orchestration', async () => {
   assert.equal(shapReq.success, true);
   assert.ok(shapReq.authorizationUrl.includes('stitch.money'));
 
-  // 3. Automated Webhook Confirmation & Consortium Order Execution
+  // 3. Automated Webhook Confirmation & Aeronology Order Execution
   const sessionEngine = new WhatsAppSessionEngine();
   await sessionEngine.handleIncomingMessage('27845555555', 'hi');
   await sessionEngine.handleIncomingMessage('27845555555', 'Sandton');
@@ -1401,7 +1402,7 @@ test('46. End-to-End Durban Flight Concierge Flow Screen Verification (Single To
   assert.ok(screen2.text.includes('ONE TOTAL YOU PAY:'));
   assert.ok(screen2.text.includes('R1,300.00'));
 
-  // Step 4: Webhook Confirms Single Total R1,300 -> Execute Consortium Ticket Issuance & Split Allocation in Background
+  // Step 4: Webhook Confirms Single Total R1,300 -> Execute Aeronology Ticket Issuance & Split Allocation in Background
   const screen3 = await sessionEngine.processConciergePaymentWebhook({
     reference: `paystack_concierge_27849990000_1710000000_1710000001`,
     amountCents: 130000,
@@ -1416,9 +1417,9 @@ test('46. End-to-End Durban Flight Concierge Flow Screen Verification (Single To
 });
 
 test('47. Comprehensive R350 Trip Management Suite Execution Verification', async () => {
-  const consortium = new ConsortiumFlightEngine();
+  const aeronology = new AeronologyAdapter();
   const saStack = new SAApiStackManager();
-  const tripManager = new TripManagementEngine(consortium, saStack);
+  const tripManager = new TripManagementEngine(aeronology, saStack);
 
   // 1. Multi-Airline Regional Safari Route Search (Airlink dominance on Skukuza SZK)
   const multiSearch = await tripManager.searchMultiAirlineFlights({ origin: 'JNB', destination: 'SZK' });
@@ -1468,20 +1469,21 @@ test('47. Comprehensive R350 Trip Management Suite Execution Verification', asyn
   assert.ok(invoice.invoiceText.includes('R1,300.00'));
 });
 
-test('48. Consortium Model (Full PNR Ownership, Servicing & T-24h Auto Check-In)', async () => {
-  const consortium = new ConsortiumFlightEngine();
-  const issuer = new FlightIssuer(consortium);
-  const worker = new CheckinWorker(issuer, consortium);
-  const changer = new FlightChangeHandler(issuer, consortium);
-  const monitor = new FlightDisruptionMonitor(issuer, consortium);
+test('48. Turnkey Aeronology SA & 1Checkin Model (Search, Book, Ticket, T-24h Auto Check-In)', async () => {
+  const aeronology = new AeronologyAdapter();
+  const checkin = new CheckinAdapter();
+  const issuer = new FlightIssuer(aeronology, checkin);
+  const worker = new CheckinWorker(issuer, checkin);
+  const changer = new FlightChangeHandler(issuer, aeronology);
+  const monitor = new FlightDisruptionMonitor(issuer, aeronology);
 
   // 1. Search Flights & Tier 1 Travelstart Link Generation
-  const search = await consortium.searchFlights({ origin: 'JNB', destination: 'CPT' });
+  const search = await aeronology.searchFlights({ origin: 'JNB', destination: 'CPT' });
   assert.equal(search.success, true);
   assert.equal(search.fullPnrOwnershipGranted, true);
   assert.ok(search.tier1TravelstartUrl.includes('travelstart.co.za'));
 
-  // 2. Issue Ticket & Store PNR in mrAI System
+  // 2. Issue Ticket & Store PNR in mrAI System via Aeronology SA Host IATA
   const issue = await issuer.processAndIssueTicket({
     offerId: search.offerId,
     passengerDetails: { firstName: 'Bongani', lastName: 'Dlamini' },
@@ -1491,15 +1493,16 @@ test('48. Consortium Model (Full PNR Ownership, Servicing & T-24h Auto Check-In)
 
   assert.equal(issue.success, true);
   assert.ok(issue.pnr.startsWith('PNR-'));
-  assert.equal(issue.pnrRecord.isPnrOwnedByMrAI, true);
+  assert.ok(issue.aeronologyRef.startsWith('AERO-REF-'));
+  assert.ok(issue.onecheckinRef.startsWith('1CHK-'));
 
-  // 3. T-24h Automated Check-In Cron Worker Batch
+  // 3. T-24h Automated Check-In via 1Checkin Adapter Batch
   const checkinBatch = await worker.runScheduledCheckinBatch();
   assert.equal(checkinBatch.success, true);
   assert.equal(checkinBatch.processedBatchSize, 1);
   assert.equal(checkinBatch.autoCheckedInList[0].allocatedSeat, '12A (Window)');
 
-  // 4. Servicing Date/Route Change via NDC OrderChange
+  // 4. Servicing Date/Route Change via Aeronology SA
   const changeRes = await changer.processFlightChangeRequest({
     pnr: issue.pnr,
     newDepartureDate: '2025-10-20',

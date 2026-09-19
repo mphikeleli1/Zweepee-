@@ -19,7 +19,8 @@ import { EmploymentReadinessEngine } from '../employment/readinessPack.js';
 import { SAJobAggregator } from '../employment/jobAggregator.js';
 import { JobSeekerOnboardingEngine } from '../employment/jobOnboarding.js';
 import { RecruitmentContractEngine } from '../employment/msaContract.js';
-import { ConsortiumFlightEngine } from '../commerce/consortiumFlight.js';
+import { AeronologyAdapter } from '../commerce/aeronologyAdapter.js';
+import { CheckinAdapter } from '../commerce/checkinAdapter.js';
 import { FlightIssuer } from '../commerce/flightIssue.js';
 import { CheckinWorker } from '../commerce/checkinWorker.js';
 import { FlightChangeHandler } from '../commerce/changeHandler.js';
@@ -53,12 +54,13 @@ export class WhatsAppSessionEngine {
     this.jobAggregator = new SAJobAggregator();
     this.jobOnboardingEngine = new JobSeekerOnboardingEngine(kvUsers);
     this.contractEngine = new RecruitmentContractEngine(db, kvSessions);
-    this.consortiumEngine = new ConsortiumFlightEngine();
-    this.flightIssuer = new FlightIssuer(this.consortiumEngine);
-    this.checkinWorker = new CheckinWorker(this.flightIssuer, this.consortiumEngine);
-    this.changeHandler = new FlightChangeHandler(this.flightIssuer, this.consortiumEngine);
-    this.disruptionMonitor = new FlightDisruptionMonitor(this.flightIssuer, this.consortiumEngine);
-    this.tripManager = new TripManagementEngine(this.consortiumEngine, this.saStack);
+    this.aeronologyAdapter = new AeronologyAdapter();
+    this.checkinAdapter = new CheckinAdapter();
+    this.flightIssuer = new FlightIssuer(this.aeronologyAdapter, this.checkinAdapter);
+    this.checkinWorker = new CheckinWorker(this.flightIssuer, this.checkinAdapter);
+    this.changeHandler = new FlightChangeHandler(this.flightIssuer, this.aeronologyAdapter);
+    this.disruptionMonitor = new FlightDisruptionMonitor(this.flightIssuer, this.aeronologyAdapter);
+    this.tripManager = new TripManagementEngine(this.aeronologyAdapter, this.saStack);
     this.paystack = new PaystackPaymentGateway();
     this.payfast = new PayFastPaymentGateway();
     this.payshap = new PayShapPaymentGateway();
@@ -94,7 +96,6 @@ export class WhatsAppSessionEngine {
   }
 
   async processConciergePaymentWebhook({ reference, amountCents = 130000, gateway = 'PAYSTACK', isSuccess = true }) {
-    // Extract waId robustly from reference
     const refParts = reference.split('_');
     let waId = '27820000000';
 
@@ -127,23 +128,22 @@ export class WhatsAppSessionEngine {
     session.conciergePaid = true;
     session.conciergePaymentRef = reference;
 
-    // Background Split Allocation: Flight Ticket Cost -> Consortium BSP, Concierge Fee -> myAI Platform Revenue
+    // Background Split Allocation: Flight Cost -> Aeronology SA, Concierge Fee -> myAI Platform Revenue
     session.backgroundPaymentSplit = {
-      consortiumTicketAmountCents: flightPriceCents,
+      aeronologyFlightAmountCents: flightPriceCents,
       platformFeeAmountCents: feeCents,
       totalCustomerPaidCents: expectedTotalAllInCents
     };
 
-    // Trigger Consortium NDC Ticket Issuance automatically in background (Full PNR Ownership)
+    // Issue ticket via Aeronology SA Host IATA & Register for 1Checkin Auto Check-In
     const issueRes = await this.flightIssuer.processAndIssueTicket({
-      offerId: session.consortiumOfferId || `ndc_offer_${Date.now()}`,
+      offerId: session.aeronologyOfferId || `aero_offer_${Date.now()}`,
       passengerDetails: { firstName: session.draftName || 'Bongani', lastName: 'Dlamini' },
       paymentReference: reference,
       splitAllocation: session.backgroundPaymentSplit
     });
 
     if (!issueRes.success) {
-      // Booking failure after payment -> Autonomous Refund of full customer payment
       let refundRes;
       if (gateway === 'PAYFAST') {
         refundRes = await this.payfast.processRefund({ reference, amountCents: expectedTotalAllInCents });
@@ -161,9 +161,11 @@ export class WhatsAppSessionEngine {
 
     session.flightConfirmed = true;
     session.pnr = issueRes.pnr;
+    session.aeronologyRef = issueRes.aeronologyRef;
+    session.onecheckinRef = issueRes.onecheckinRef;
     session.step = 'STATE_LIVE_ORDER';
 
-    // Auto check-in via direct Consortium NDC API
+    // Execute T-24h Auto Check-In via 1Checkin Adapter
     const checkInRes = await this.tripManager.executeAutoCheckIn({
       pnr: session.pnr,
       passengerLastName: session.draftName || 'Passenger'
@@ -478,8 +480,7 @@ export class WhatsAppSessionEngine {
         const flightPriceCents = session.pendingFlight?.priceCents || 95000;
         const totalAllInCents = flightPriceCents + feeCents;
 
-        session.consortiumOfferId = offerId;
-        session.flightHoldExpiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+        session.aeronologyOfferId = offerId;
         session.flightTotalAllInCents = totalAllInCents;
 
         const sessionRef = waId;
@@ -881,9 +882,9 @@ export class WhatsAppSessionEngine {
       const quotes = await this.transport.getQuotes({ distanceKm: 5, items: compositeItems, totalWeightKg: 3 });
       const config = await getPricingConfig(this.db);
 
-      const physicalGoodsSubtotalCents = 4500 + 25000 + 11000 + 5000; // R455.00
-      const hotelPriceCents = 360000; // R3,600.00
-      const carPriceCents = 105000;   // R1,050.00
+      const physicalGoodsSubtotalCents = 4500 + 25000 + 11000 + 5000;
+      const hotelPriceCents = 360000;
+      const carPriceCents = 105000;
       const totalGoodsCents = physicalGoodsSubtotalCents + hotelPriceCents + carPriceCents;
 
       const pricing = calculatePricing({
@@ -929,8 +930,8 @@ export class WhatsAppSessionEngine {
       const hotelRes = await this.saStack.queryAmadeusTravel({ origin: 'JNB', destination: 'CPT' });
       const busRes = await this.saStack.queryTravelpayoutsBus({ origin: 'JNB', destination: 'CPT', departureDate: '2025-09-10' });
 
-      const hotelPriceCents = 925000; // R9,250.00
-      const carPriceCents = 175000;   // R1,750.00
+      const hotelPriceCents = 925000;
+      const carPriceCents = 175000;
       const bundleTotalCents = hotelPriceCents + carPriceCents;
 
       return this.uiBuilder.renderTravelBundleScreen({
@@ -952,7 +953,7 @@ export class WhatsAppSessionEngine {
         municipality: 'City of Tshwane',
         billType: 'RATES_AND_TAXES',
         accountOrNoticeNumber: 'TSH_998821',
-        amountCents: 150000 // R1,500
+        amountCents: 150000
       });
 
       const config = await getPricingConfig(this.db);

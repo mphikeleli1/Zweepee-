@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS legal_contracts (
   evidence_json TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS flight_bookings (
+  id TEXT PRIMARY KEY,
+  pnr TEXT UNIQUE NOT NULL,
+  e_ticket_url TEXT NOT NULL,
+  aeronology_ref TEXT NOT NULL,
+  onecheckin_ref TEXT,
+  checkin_status TEXT NOT NULL,
+  boarding_pass_url TEXT,
+  created_at INTEGER NOT NULL
+);
+
 -- Seed pricing parameters for ALL intent modes
 INSERT OR REPLACE INTO pricing_config (key, value, description, updated_at) VALUES
 ('STORE_GOODS_MARKUP_PERCENT', '0', 'Markup on goods for all stores (0%)', 1700000000000),

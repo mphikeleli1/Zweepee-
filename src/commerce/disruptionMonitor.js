@@ -1,13 +1,9 @@
-import { ConsortiumFlightEngine } from './consortiumFlight.js';
+import { AeronologyAdapter } from './aeronologyAdapter.js';
 
-/**
- * disruptionMonitor.js
- * Real-time flight status monitoring & automated rebooking via NDC OrderChange.
- */
 export class FlightDisruptionMonitor {
-  constructor(flightIssuer, consortiumEngine) {
+  constructor(flightIssuer, aeronologyAdapter) {
     this.flightIssuer = flightIssuer;
-    this.consortium = consortiumEngine || new ConsortiumFlightEngine();
+    this.aeronology = aeronologyAdapter || new AeronologyAdapter();
   }
 
   async checkFlightDisruptionAndAutoRebook(pnr) {
@@ -16,15 +12,7 @@ export class FlightDisruptionMonitor {
       return { success: false, error: 'PNR not found in mrAI system' };
     }
 
-    // Simulate real-time disruption monitoring
-    const isDisrupted = record.flightNumber === 'FA201' || true;
-
-    if (!isDisrupted) {
-      return { success: true, pnr, status: 'ON_TIME', autoRebooked: false };
-    }
-
-    // Auto-rebook via NDC OrderChange
-    const rebookRes = await this.consortium.changeBooking({
+    const rebookRes = await this.aeronology.rebookFlight({
       pnr,
       newDepartureDate: record.departureTime?.split('T')[0] || '2025-10-15',
       newFlightNumber: '4Z825'
@@ -41,7 +29,7 @@ export class FlightDisruptionMonitor {
       originalFlight: 'FA201',
       newFlightNumber: '4Z825',
       newAirline: 'Airlink',
-      userNotificationText: `🛡️ *Disruption Recovery Alert*\n\nYour flight FA201 was disrupted. We have automatically rebooked you on *Airlink 4Z825* under PNR *${pnr}* at zero extra cost.`
+      userNotificationText: `🛡️ *Disruption Recovery Alert*\n\nYour flight was disrupted. Your myAI™ Personal Concierge has automatically rebooked you via Aeronology SA on *Airlink 4Z825* under PNR *${pnr}* at zero extra cost.`
     };
   }
 }
