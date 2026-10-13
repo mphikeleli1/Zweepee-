@@ -1554,6 +1554,57 @@ test('49. Verification of the 15 Heavyweight Request Render Shapes', async () =>
   }
 });
 
+test('51. Verification of 30 Additional Complex Request Flows (Requests 31-60)', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+  const waId = '27829990000';
+
+  const requests = [
+    { name: 'Request 31: Government Tender Submission & CSD Verification', input: 'Government tender bid submission CSD verification' },
+    { name: 'Request 32: Prospecting Right & Mining Permit Application', input: 'DMRE section 27 mining permit prospecting right' },
+    { name: 'Request 33: CIDB Contractor Registration & Grading Upgrade', input: 'CIDB contractor grading upgrade 4GB CE' },
+    { name: 'Request 34: SARS Tax Audit Defense & Voluntary Disclosure Program (VDP)', input: 'SARS tax audit response VDP affidavit' },
+    { name: 'Request 35: Liquor License Application & Provincial Board Hearing', input: 'Provincial liquor license board application' },
+    { name: 'Request 36: Estate Late Deceased Estate & Master of High Court Reporting', input: 'Estate late deceased estate reporting master of the high court' },
+    { name: 'Request 37: CCMA Arbitration & Formal Rescission Application', input: 'CCMA arbitration rule 31 rescission application' },
+    { name: 'Request 38: SASSA Disability Grant Medical Assessment Appeal', input: 'SASSA disability grant medical assessment appeal' },
+    { name: 'Request 39: Municipal Water Connection & Excessive Billing Dispute', input: 'Municipal water connection high water bill dispute' },
+    { name: 'Request 40: SARS Import/Export Customs Trader Registration', input: 'SARS customs trader DA 185 exporter code' },
+    { name: 'Request 41: Property Transfer Duty Clearance & SARS eFiling TDI', input: 'Property transfer duty clearance SARS TDI' },
+    { name: 'Request 42: Artisan QCTO Red Seal Trade Test Registration', input: 'Artisan QCTO red seal trade test ARPL' },
+    { name: 'Request 43: Commercial Agribusiness Crop Offtake & Harvest Insurance', input: 'Agribusiness crop offtake harvest insurance' },
+    { name: 'Request 44: SACAA Commercial Drone Remote Pilot License (RPL) & ROC', input: 'SACAA commercial drone license RPL ROC' },
+    { name: 'Request 45: Private Security Industry (PSIRA) Business Registration', input: 'PSIRA security company registration' },
+    { name: 'Request 46: Cross-Border Transit Permit & SADC Freight Customs Clearance', input: 'SADC cross-border freight transit permit C-BRTA' },
+    { name: 'Request 47: SASSA Foster Child & Child Support Grant Application', input: 'SASSA foster child grant child support grant' },
+    { name: 'Request 48: NPO / NPC Non-Profit Organization Registration & Section 18A Tax', input: 'NPO registration section 18a tax exemption' },
+    { name: 'Request 49: Commercial Water Use License Application (WULA) & DWS Permit', input: 'Commercial water use license WULA DWS permit' },
+    { name: 'Request 50: Environmental Impact Assessment (EIA) & NEMA Clearance', input: 'NEMA environmental impact assessment EIA BAR' },
+    { name: 'Request 51: Municipal Zoning & Land Use Town Planning Scheme', input: 'Municipal SPLUMA zoning town planning scheme' },
+    { name: 'Request 52: National Credit Regulator (NCR) Credit Provider Registration', input: 'NCR credit provider registration section 40' },
+    { name: 'Request 53: Medical Scheme Registration & CMS Broker Accreditation', input: 'CMS broker accreditation medical scheme section 65' },
+    { name: 'Request 54: SASSA Old Age Pension & War Veterans Grant', input: 'SASSA old age pension grant means test' },
+    { name: 'Request 55: High Court Antenuptial Contract (ANC) & Notarial Execution', input: 'High Court antenuptial ANC contract notarial' },
+    { name: 'Request 56: Export Credit Insurance & ECIC Guarantee', input: 'ECIC export credit insurance risk cover' },
+    { name: 'Request 57: SASSA Care Dependency Grant Application', input: 'SASSA care dependency grant child disability' },
+    { name: 'Request 58: SARS Secondary Tax Exemption & Double Taxation Agreement (DTA)', input: 'SARS double taxation DTA exemption declaration' },
+    { name: 'Request 59: Municipal Electrical Substation Connection & Bulk Supply', input: 'Municipal bulk electrical connection substation 3-phase' },
+    { name: 'Request 60: High Court Motion for Rescission of Judgment & Credit Bureau Removal', input: 'High Court rescission of judgment credit judgment removal' }
+  ];
+
+  for (const req of requests) {
+    const res = await sessionEngine.processHeavyweightRuleBookRequest(waId, req.input, {}, { name: 'Test User' });
+    assert.ok(res !== null, `${req.name} must match a rule book dispatcher`);
+    assert.ok(res.ruleBooksLoaded.length > 0, `${req.name} must report rule books loaded`);
+    assert.ok(res.compilerCard.COMPLAINT === req.input, `${req.name} compiler card complaint must match`);
+    assert.ok(res.fourVerbs.understand, `${req.name} four verbs must be run`);
+    assert.ok(res.sentinelPause === 'Y' || res.sentinelPause === 'N', `${req.name} sentinel pause must be reported`);
+    assert.ok(res.fetcherOutputOrGap, `${req.name} fetcher output or gap must be reported`);
+    assert.ok(res.finalRenderText, `${req.name} final render text must exist`);
+    assert.equal(res.matchesDeclaredShape, true, `${req.name} render must match declared shape`);
+    assert.equal(res.defaultCartFallback, 'N', `${req.name} default cart fallback must be N`);
+  }
+});
+
 test('50. Verification of 15 Additional Complex Request Flows (Requests 16-30)', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
   const waId = '27829990000';
