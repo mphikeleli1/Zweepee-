@@ -1,9 +1,53 @@
 import { BusinessAgent } from './businessAgent.js';
 
+export class RuleBookDataLoader {
+  static createRuleBookDeclaration(code, name, options = {}) {
+    return Object.freeze({
+      code,
+      name,
+      depth_layer_under: options.depth_layer_under || [],
+      serves: options.serves || 'All users',
+      problem: options.problem || '',
+      core_functions: options.core_functions || [],
+      price_fetchers: options.price_fetchers || [],
+      boundary: options.boundary || 'mrAI prepares, routes, evidences. Registered professional certifies/advises.',
+      monetisation: options.monetisation || 'free or flat preparation fee',
+      line: options.line || '',
+      evidence_chain: options.evidence_chain || [],
+      escalation_ladder: options.escalation_ladder || [],
+      regulators: options.regulators || [],
+      binding_threshold: options.binding_threshold || 'user_approval',
+      failure_mode: options.failure_mode || 'gap_declaration',
+      memory_scope: options.memory_scope || [],
+      metrics: options.metrics || [],
+      handoff_triggers: options.handoff_triggers || [],
+      consent_class: options.consent_class || 'per_purpose',
+      retention: options.retention || '7_years',
+      data_sources_freshness: options.data_sources_freshness || 'daily',
+      kill_switch: options.kill_switch || 'per_user',
+      audit_surface: options.audit_surface || [],
+      currency: options.currency || 'ZAR',
+      language_scope: options.language_scope || ['en', 'zu', 'xh', 'af'],
+      accessibility_scope: options.accessibility_scope || ['voice', 'text'],
+      dependencies: options.dependencies || [],
+      version: '1.0.0'
+    });
+  }
+}
+
 export class AgentFactory {
   constructor(db) {
     this.db = db;
     this.drafts = new Map();
+    this.ruleBooks = new Map();
+  }
+
+  registerRuleBook(code, declaration) {
+    this.ruleBooks.set(code, declaration);
+  }
+
+  getRuleBook(code) {
+    return this.ruleBooks.get(code);
   }
 
   createDraft(ownerUserId, businessName, category) {

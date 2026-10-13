@@ -1,5 +1,47 @@
 import { detectLanguage, translate } from '../lib/i18n.js';
 
+export class UniversalPassportEngine {
+  static FIXED_PASSPORT_FIELDS = Object.freeze([
+    'name',
+    'id_number',
+    'address',
+    'intent',
+    'contact'
+  ]);
+
+  static DYNAMIC_PASSPORT_FIELDS = Object.freeze([
+    'qualifications',
+    'work_history',
+    'skills',
+    'licences',
+    'references'
+  ]);
+
+  static resolveNextPassportQuestion(profile = {}, requestedService = '') {
+    // 1. Check fixed fields first (5 fixed)
+    for (const field of UniversalPassportEngine.FIXED_PASSPORT_FIELDS) {
+      if (!profile[field]) {
+        return {
+          field,
+          type: 'FIXED',
+          prompt: `What is your ${field.replace('_', ' ')}?`
+        };
+      }
+    }
+
+    // 2. Check dynamic fields (lazy build per service)
+    const serviceLower = requestedService.toLowerCase();
+    if (serviceLower.includes('driver') && !profile.licences) {
+      return { field: 'licences', type: 'DYNAMIC', prompt: 'What driver licence code do you have?' };
+    }
+    if ((serviceLower.includes('job') || serviceLower.includes('hire')) && !profile.qualifications) {
+      return { field: 'qualifications', type: 'DYNAMIC', prompt: 'What are your highest qualifications or certificates?' };
+    }
+
+    return null; // All required fields known for this step
+  }
+}
+
 export class UserOnboardingEngine {
   constructor(kvUsers) {
     this.kvUsers = kvUsers;

@@ -9,6 +9,99 @@ export const INTENT_MODES = {
   EMPLOYMENT_PACK: 'EMPLOYMENT_PACK'
 };
 
+export const TRIGGER_GRAMMAR = {
+  SIGNAL: 'signal',
+  CONDITION: 'condition',
+  SCHEDULE: 'schedule',
+  PLACE: 'place',
+  PATTERN: 'pattern',
+  SILENCE: 'silence'
+};
+
+export const COMPILER_CARD_SCHEMA = Object.freeze({
+  COMPLAINT: 'string', // User's own complaint or goal phrasing
+  TRIGGER: Object.values(TRIGGER_GRAMMAR),
+  MEMORY: 'array', // Declared record types
+  TOOLS: 'array', // Declared fetchers, primitives, providers
+  UNTIL: ['revoked', 'goal_achieved', 'date_reached', 'condition_false', 'silent_failure']
+});
+
+export const SERVICE_REGISTRY_SCHEMA = Object.freeze({
+  name: 'string',
+  reachable_from: 'array',
+  complaint_form: 'string',
+  trigger: Object.values(TRIGGER_GRAMMAR),
+  fetchers: 'array',
+  boundary: 'string',
+  price_mode: ['free', 'per_action', 'subscription', 'pass_through', 'percentage'],
+  terminal_condition: 'array',
+  evidence_required: 'array',
+  regulators: 'array',
+  escalation: 'array',
+  consent_class: 'string',
+  retention: 'string',
+  audit_surface: 'array',
+  currency: 'string',
+  language_scope: 'array',
+  accessibility: 'array',
+  dependencies: 'array',
+  version: 'string'
+});
+
+export class CompilerEngine {
+  static compileCard(complaint, trigger = TRIGGER_GRAMMAR.SIGNAL, memory = [], tools = [], until = 'revoked') {
+    if (!complaint || typeof complaint !== 'string') {
+      throw new Error('Compiler Card requires a valid string COMPLAINT.');
+    }
+    const triggerType = Object.values(TRIGGER_GRAMMAR).includes(trigger) ? trigger : TRIGGER_GRAMMAR.SIGNAL;
+    return Object.freeze({
+      COMPLAINT: complaint,
+      TRIGGER: triggerType,
+      MEMORY: Array.isArray(memory) ? memory : [memory],
+      TOOLS: Array.isArray(tools) ? tools : [tools],
+      UNTIL: until
+    });
+  }
+
+  static executeFourVerbsLoop(card, userRecord = {}) {
+    // 1. Understand
+    const understanding = {
+      complaint: card.COMPLAINT,
+      intentMode: classifyIntent(card.COMPLAINT),
+      trigger: card.TRIGGER
+    };
+
+    // 2. Locate
+    const location = {
+      destinations: card.TOOLS || [],
+      regulators: ['FSCA', 'CIPC', 'SARS', 'DEL', 'HPCSA'].filter(r =>
+        card.COMPLAINT.toLowerCase().includes(r.toLowerCase())
+      )
+    };
+
+    // 3. Prepare
+    const preparation = {
+      packAssembled: true,
+      dataSources: card.MEMORY || [],
+      requiresApproval: true
+    };
+
+    // 4. Track
+    const tracking = {
+      status: 'EXECUTED_AND_LOGGED',
+      timestamp: Date.now(),
+      until: card.UNTIL
+    };
+
+    return {
+      understanding,
+      location,
+      preparation,
+      tracking
+    };
+  }
+}
+
 export function classifyIntent(messageText, metadata = {}) {
   if (metadata.explicitIntent) {
     return metadata.explicitIntent;

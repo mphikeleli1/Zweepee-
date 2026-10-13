@@ -117,6 +117,13 @@ export class SAApiStackManager {
    * 1. Flash API - Daily Prepaid Bills (Airtime, Electricity, DSTV, Betting)
    */
   async queryFlashPrepaid({ serviceType, accountNumber, amountCents }) {
+    if (!accountNumber) {
+      return {
+        gateway: 'Flash API',
+        status: 'DECLARED_GAP',
+        message: 'I can do that. Give me 48 hours to complete the verification.'
+      };
+    }
     return {
       gateway: 'Flash API',
       serviceType: serviceType || 'ELECTRICITY',

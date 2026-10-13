@@ -58,6 +58,13 @@ export class SAJobAggregator {
    * myAI parses ATS keywords, computes match score (0-100%), and responds with instant candidate report!
    */
   ingestEmployerForwardedCV({ employerPhone, rawCvText, targetRole = 'Cashier' }) {
+    if (!rawCvText) {
+      return {
+        success: false,
+        status: 'DECLARED_GAP',
+        message: 'I can do that. Give me 48 hours to complete the verification.'
+      };
+    }
     const text = (rawCvText || '').toLowerCase();
     const role = (targetRole || 'General Staff').toLowerCase();
 
