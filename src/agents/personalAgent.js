@@ -1,5 +1,28 @@
 import { BusinessAgent } from './businessAgent.js';
 
+export class UserPassportDO {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/passport') {
+      let passport = await this.state.storage.get('passport');
+      if (request.method === 'POST') {
+        const body = await request.json();
+        passport = { ...passport, ...body, updatedAt: Date.now() };
+        await this.state.storage.put('passport', passport);
+      }
+      return new Response(JSON.stringify(passport || {}), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response('Not Found', { status: 404 });
+  }
+}
+
 export class PersonalAgent {
   constructor({ id, userId, phoneNumber, name, location = null, memory = {} }) {
     this.id = id || `pa_${phoneNumber.replace(/[^0-9]/g, '')}`;

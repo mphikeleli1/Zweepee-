@@ -31,6 +31,14 @@
       "bucket_name": "myai-v25-assets"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "USER_PASSPORT_DO",
+        "class_name": "UserPassportDO"
+      }
+    ]
+  },
   "queues": {
     "producers": [
       {

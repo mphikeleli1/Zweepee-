@@ -116,6 +116,117 @@ CREATE TABLE IF NOT EXISTS flight_bookings (
   created_at INTEGER NOT NULL
 );
 
+-- Platform Storage Tables
+CREATE TABLE IF NOT EXISTS passport_index (
+  user_id TEXT PRIMARY KEY,
+  passport_do_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS consent (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  granted INTEGER DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_ledger (
+  id TEXT PRIMARY KEY,
+  action TEXT NOT NULL,
+  parent_hash TEXT,
+  child_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS vault_index (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  r2_key TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trail_index (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  r2_key TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS compiler_cards (
+  id TEXT PRIMARY KEY,
+  complaint TEXT NOT NULL,
+  trigger_type TEXT NOT NULL,
+  card_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS service_registry (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  boundary TEXT NOT NULL,
+  registry_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fetcher_cache (
+  id TEXT PRIMARY KEY,
+  fetcher_name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  response_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pulse_lines (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  line_text TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gaps (
+  id TEXT PRIMARY KEY,
+  request_text TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS evidence_chains (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL,
+  evidence_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS regulator_routes (
+  id TEXT PRIMARY KEY,
+  domain TEXT NOT NULL,
+  regulator_name TEXT NOT NULL,
+  route_url TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS life_stage_handoffs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  stage_from TEXT NOT NULL,
+  stage_to TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS human_handoff_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  target TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS observability_targets (
+  id TEXT PRIMARY KEY,
+  target_name TEXT NOT NULL,
+  config_json TEXT NOT NULL
+);
+
 -- Seed pricing parameters for ALL intent modes
 INSERT OR REPLACE INTO pricing_config (key, value, description, updated_at) VALUES
 ('STORE_GOODS_MARKUP_PERCENT', '0', 'Markup on goods for all stores (0%)', 1700000000000),
