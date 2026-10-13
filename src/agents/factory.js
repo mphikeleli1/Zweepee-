@@ -5,6 +5,8 @@ export class RuleBookDataLoader {
     return Object.freeze({
       code,
       name,
+      render_shape: options.render_shape || 'FLOW_STEPPER',
+      is_purchase_rule_book: options.is_purchase_rule_book || false,
       depth_layer_under: options.depth_layer_under || [],
       serves: options.serves || 'All users',
       problem: options.problem || '',

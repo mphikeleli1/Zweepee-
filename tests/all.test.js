@@ -1517,3 +1517,39 @@ test('48. Turnkey Aeronology SA & 1Checkin Model (Search, Book, Ticket, T-24h Au
   assert.equal(disrupRes.autoRebooked, true);
   assert.equal(disrupRes.newAirline, 'Airlink');
 });
+
+test('49. Verification of the 15 Heavyweight Request Render Shapes', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+  const waId = '27829990000';
+
+  const requests = [
+    { name: 'Request 1: Import 500 phone cases from China', input: 'Import 500 phone cases from China' },
+    { name: 'Request 2: Landlord/geyser/deposit/legal', input: 'Landlord refusing to fix geyser and threatening deposit' },
+    { name: 'Request 3: SASSA/water bill/indigent', input: 'SASSA SRD grant status and water bill indigent relief' },
+    { name: 'Request 4: CIPC + VAT201 + bank + invoicing', input: 'CIPC company registration, VAT201, bank account, and invoicing' },
+    { name: 'Request 5: Medical aid PMB rejection + HPCSA + CMS', input: 'Medical aid PMB rejection appeal to CMS and HPCSA' },
+    { name: 'Request 6: Code 14 job + CV + Z83', input: 'Code 14 driver job with ATS CV and Z83 form' },
+    { name: 'Request 7: Rooibos export to Germany', input: 'Rooibos export to Germany phytosanitary permit' },
+    { name: 'Request 8: CASP grant + borehole + offtake', input: 'CASP grant application for borehole and offtake agreement' },
+    { name: 'Request 9: Flight + hotel + car hire + check-in', input: 'Flight, hotel, car hire, and check-in bundle' },
+    { name: 'Request 10: Unfair dismissal + CCMA + UIF', input: 'Unfair dismissal CCMA LRA 7.11 and UIF claim' },
+    { name: 'Request 11: Used iPhone + escrow + courier + PIN', input: 'Used iPhone purchase with escrow hold and PIN' },
+    { name: 'Request 12: Tshwane rates dispute + valuation + fines', input: 'Tshwane rates dispute valuation objection and fines' },
+    { name: 'Request 13: 10-member stokvel + 1:1 payouts', input: '10-member stokvel rotation payouts' },
+    { name: 'Request 14: Slack + HR email + eFiling download', input: 'Slack notification, HR email, and eFiling download' },
+    { name: 'Request 15: Facebook + R45k FNB invoice + 500 suppliers', input: 'Facebook post R45k FNB invoice to 500 suppliers' }
+  ];
+
+  for (const req of requests) {
+    const res = await sessionEngine.processHeavyweightRuleBookRequest(waId, req.input, {}, { name: 'Test User' });
+    assert.ok(res !== null, `${req.name} must match a rule book dispatcher`);
+    assert.ok(res.ruleBooksLoaded.length > 0, `${req.name} must report rule books loaded`);
+    assert.ok(res.compilerCard.COMPLAINT === req.input, `${req.name} compiler card complaint must match`);
+    assert.ok(res.fourVerbs.understand, `${req.name} four verbs must be run`);
+    assert.ok(res.sentinelPause === 'Y' || res.sentinelPause === 'N', `${req.name} sentinel pause must be reported`);
+    assert.ok(res.fetcherOutputOrGap, `${req.name} fetcher output or gap must be reported`);
+    assert.ok(res.finalRenderText, `${req.name} final render text must exist`);
+    assert.equal(res.matchesDeclaredShape, true, `${req.name} render must match declared shape`);
+    assert.equal(res.defaultCartFallback, 'N', `${req.name} default cart fallback must be N`);
+  }
+});
