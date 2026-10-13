@@ -1554,6 +1554,42 @@ test('49. Verification of the 15 Heavyweight Request Render Shapes', async () =>
   }
 });
 
+test('52. Verification of 15 Additional Complex Request Flows (Requests 61-75)', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+  const waId = '27829990000';
+
+  const requests = [
+    { name: 'Request 61: CCMA Section 189 Retrenchment Consultation & Severance Dispute', input: 'Section 189 retrenchment consultation severance dispute' },
+    { name: 'Request 62: CIPC Annual Return Submission & Deregistration Penalty Relief', input: 'CIPC annual return deregistration reinstatement FAS' },
+    { name: 'Request 63: Municipal Property Rates Clearance Certificate (RCC) for Transfer', input: 'Municipal property rates clearance certificate RCC transfer' },
+    { name: 'Request 64: SAPS Firearm License Renewal & Competency Certificate', input: 'SAPS firearm license renewal competency certificate' },
+    { name: 'Request 65: SARS Provisional Tax IRP6 Submission & Penalty Relief', input: 'SARS IRP6 provisional tax return period 2' },
+    { name: 'Request 66: Estate Agency Affairs Board (EAAB/PPRA) Fidelity Fund Certificate', input: 'PPRA fidelity fund certificate renewal FFC' },
+    { name: 'Request 67: Department of Home Affairs Critical Skills Work Visa', input: 'DHA critical skills work visa SAQA' },
+    { name: 'Request 68: Driving License Renewal Slot Booking & Eye Test Certificate', input: 'NaTIS driving license renewal slot eye test' },
+    { name: 'Request 69: National Bargaining Council Dispute & Main Agreement Compliance', input: 'Bargaining council dispute main agreement exemption' },
+    { name: 'Request 70: Home Affairs Birth Certificate Amendment & Paternity Rectification', input: 'DHA birth certificate amendment paternity DNA' },
+    { name: 'Request 71: Corporate Insolvency Liquidation & Voluntary Winding-Up (CoR40.1)', input: 'Insolvency voluntary liquidation CoR40.1 winding-up' },
+    { name: 'Request 72: SASSA Primary Caregiver Grant Transfer', input: 'SASSA caregiver transfer primary caregiver' },
+    { name: 'Request 73: Municipal Building Fire Safety Certificate & Emergency Plan', input: 'Municipal fire safety certificate SANS 10400-T' },
+    { name: 'Request 74: Department of Agriculture Animal Identification Brand Registration', input: 'DALRRD animal brand livestock registration' },
+    { name: 'Request 75: SARS EMP501 Employer Paye Reconciled Declaration', input: 'SARS EMP501 employer PAYE reconciliation' }
+  ];
+
+  for (const req of requests) {
+    const res = await sessionEngine.processHeavyweightRuleBookRequest(waId, req.input, {}, { name: 'Test User' });
+    assert.ok(res !== null, `${req.name} must match a rule book dispatcher`);
+    assert.ok(res.ruleBooksLoaded.length > 0, `${req.name} must report rule books loaded`);
+    assert.ok(res.compilerCard.COMPLAINT === req.input, `${req.name} compiler card complaint must match`);
+    assert.ok(res.fourVerbs.understand, `${req.name} four verbs must be run`);
+    assert.ok(res.sentinelPause === 'Y' || res.sentinelPause === 'N', `${req.name} sentinel pause must be reported`);
+    assert.ok(res.fetcherOutputOrGap, `${req.name} fetcher output or gap must be reported`);
+    assert.ok(res.finalRenderText, `${req.name} final render text must exist`);
+    assert.equal(res.matchesDeclaredShape, true, `${req.name} render must match declared shape`);
+    assert.equal(res.defaultCartFallback, 'N', `${req.name} default cart fallback must be N`);
+  }
+});
+
 test('51. Verification of 30 Additional Complex Request Flows (Requests 31-60)', async () => {
   const sessionEngine = new WhatsAppSessionEngine();
   const waId = '27829990000';

@@ -1325,6 +1325,305 @@ export class WhatsAppSessionEngine {
       };
     }
 
+    // Request 61: CCMA Section 189 Retrenchment Consultation & Severance Dispute
+    if (lower.includes('retrenchment') || (lower.includes('section 189') && lower.includes('severance'))) {
+      return {
+        ruleBooksLoaded: ['LEGAL_SERVICE', 'JOB_SEEKER_WORK_OS'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['section_189_notice', 'payslip_summary'], TOOLS: ['ccma_lra711_form', 'labour_court_registry'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'LRA Section 189 retrenchment consultation response & severance pay dispute filing', locate: 'CCMA Regional Office, Department of Employment & Labour', prepare: 'Section 189 Consultation Defense Pack & Statutory Severance Calculation (1 week per year)', track: 'CCMA retrenchment conciliation hearing date' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before lodging retrenchment dispute with CCMA',
+        fetcherOutputOrGap: 'CCMA e-Filing Portal (DECLARED_GAP). Retrenchment defense pack pre-filled.',
+        finalRenderText: `⚖️ *CCMA Section 189 Retrenchment & Severance Action Pack*\n` +
+          `───────────────\n\n` +
+          `📋 *1. Retrenchment Response:* Section 189 consultation notice objection pre-filled.\n` +
+          `💵 *2. Severance Calculation:* Statutory minimum severance (R48,000.00 for 6 years service) verified.\n` +
+          `📄 *3. CCMA Dispute:* LRA 7.11 retrenchment dispute referral pre-filled.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting employee signature before lodging with CCMA.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 62: CIPC Annual Return Submission & Deregistration Penalty Relief
+    if (lower.includes('annual return') || (lower.includes('cipc') && lower.includes('deregistration'))) {
+      return {
+        ruleBooksLoaded: ['BUSINESS_FORMATION', 'TAX_ENGINE'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['company_cor14_3', 'annual_turnover'], TOOLS: ['cipc_bizportal', 'sars_efiling'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'CIPC Annual Return filing, FAS Financial Accountability Supplement & Deregistration Reinstatement', locate: 'CIPC BizPortal, SARS eFiling', prepare: 'CIPC CoR30.1 Annual Return Schedule & FAS Financial Statement Declaration', track: 'CIPC compliance certificate & active status' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before submitting Annual Return filing & paying CIPC statutory fee',
+        fetcherOutputOrGap: 'CIPC BizPortal Browser Fallback active. FAS declaration pre-filled.',
+        finalRenderText: `🏢 *CIPC Annual Return & Deregistration Prevention Pack*\n` +
+          `───────────────\n\n` +
+          `📋 *Entity:* Registered SA Pty Ltd (Reg: 2021/491029/07).\n` +
+          `📄 *1. CoR30.1 Return:* Annual Return compliance form pre-filled (Turnover: R850k).\n` +
+          `📊 *2. FAS Statement:* Financial Accountability Supplement pre-filled.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting director approval before lodging with CIPC BizPortal.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 63: Municipal Property Rates Clearance Certificate (RCC) for Transfer
+    if (lower.includes('rates clearance') || (lower.includes('rcc') && lower.includes('transfer'))) {
+      return {
+        ruleBooksLoaded: ['MUNICIPAL_OBJECTIONS', 'HOUSING_PROPERTY'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['municipal_acc_no', 'title_deed'], TOOLS: ['municipal_rates_clearance_desk', 'conveyancing_portal'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'Municipal Property Rates Clearance Certificate (RCC) application under Section 118 Municipal Systems Act', locate: 'City Revenue & Property Rates Clearance Desk', prepare: 'Section 118 RCC Application & Municipal Figures Advance Payment Schedule', track: 'Rates Clearance Certificate issuance for Deeds Office' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before submitting RCC application to municipal revenue desk',
+        fetcherOutputOrGap: 'Municipal Clearance Portal (DECLARED_GAP). Section 118 figures requested.',
+        finalRenderText: `🏛️ *Municipal Rates Clearance Certificate (RCC) Pack*\n` +
+          `───────────────\n\n` +
+          `📍 *Property:* Erf 1088 Rosebank (Transfer Clearance).\n` +
+          `📋 *1. Section 118 Form:* Municipal Rates Clearance application pre-filled.\n` +
+          `💵 *2. Clearance Figures:* 120-day advance municipal figures schedule pre-filled.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting conveyancer approval before municipal submission.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 64: SAPS Firearm License Renewal & Competency Certificate
+    if (lower.includes('firearm license') || lower.includes('saps competency')) {
+      return {
+        ruleBooksLoaded: ['TRADE_BACK_OFFICE', 'LEGAL_SERVICE'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['firearm_serial_no', 'competency_certificate'], TOOLS: ['saps_cfr_portal', 'firearm_registry'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'SAPS Central Firearm Register (CFR) License Renewal (SAPS 518a) & Competency Certificate Renewal', locate: 'SAPS Designated Firearm Officer (DFO), Central Firearm Register', prepare: 'SAPS 518a Renewal Application, Motivation Letter & Testimonial Pack', track: 'CFR license approval & card printing' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before submitting renewal dossier to SAPS Designated Firearm Officer',
+        fetcherOutputOrGap: 'SAPS CFR Portal (DECLARED_GAP). SAPS 518a renewal pack ready.',
+        finalRenderText: `🛡️ *SAPS Firearm License & Competency Renewal Pack*\n` +
+          `───────────────\n\n` +
+          `🔫 *Firearm:* 9mm Handgun (Section 13 Self-Defense License).\n` +
+          `📋 *1. SAPS 518a:* Firearm License Renewal form pre-filled.\n` +
+          `📝 *2. Motivation Dossier:* Section 13 self-defense motivation & safe compliance proof attached.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting applicant signature before submitting to SAPS DFO.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 65: SARS Provisional Tax IRP6 Submission & Penalty Relief
+    if (lower.includes('irp6') || (lower.includes('provisional tax') && lower.includes('sars'))) {
+      return {
+        ruleBooksLoaded: ['TAX_ENGINE', 'PROFESSIONAL_WORK_OS'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['taxable_income_estimate', 'tax_number'], TOOLS: ['sars_efiling_browser_fallback', 'tax_ombud'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'SARS IRP6 Provisional Tax Return (Period 1/2) & Estimate Reconciled Calculation', locate: 'SARS eFiling Provisional Tax Desk', prepare: 'IRP6 Return Calculation Schedule & Section 89quat Interest Relief Application', track: 'SARS IRP6 payment receipt & tax compliance status' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Mandatory Sentinel Pause: Lethal Trifecta (Private Tax Data + External Egress)',
+        fetcherOutputOrGap: 'SARS eFiling Browser Fallback active. IRP6 return pre-filled.',
+        finalRenderText: `📊 *SARS IRP6 Provisional Tax Return Pack*\n` +
+          `───────────────\n\n` +
+          `🏛️ *Period:* 2025/02 Provisional Tax (Period 2).\n` +
+          `📋 *1. Tax Estimate:* Taxable Income Estimate: R450,000.00 (Tax Payable: R32,100.00).\n` +
+          `📄 *2. IRP6 Return:* Form pre-filled for eFiling submission.\n\n` +
+          `🛑 *Sentinel Halt:* Private tax records detected. Awaiting taxpayer authorization to submit on eFiling.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 66: Estate Agency Affairs Board (EAAB/PPRA) Fidelity Fund Certificate
+    if (lower.includes('ppra') || lower.includes('fidelity fund certificate')) {
+      return {
+        ruleBooksLoaded: ['TRADE_BACK_OFFICE', 'COMPLIANCE_CALENDAR'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['ffc_number', 'audit_report'], TOOLS: ['ppra_myffc_portal', 'estate_agents_board'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'Property Practitioners Regulatory Authority (PPRA) Fidelity Fund Certificate (FFC) Annual Renewal', locate: 'PPRA MyFFC Portal, Estate Agency Affairs Board', prepare: 'PPRA Form FFC Renewal Application & Trust Account Audit Exemption Certificate', track: 'FFC license certificate issuance' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before submitting FFC renewal application to PPRA Authority',
+        fetcherOutputOrGap: 'PPRA MyFFC Portal (DECLARED_GAP). FFC renewal pack pre-filled.',
+        finalRenderText: `🏠 *PPRA Property Practitioner Fidelity Fund Certificate (FFC) Pack*\n` +
+          `───────────────\n\n` +
+          `📜 *Regulatory:* Property Practitioners Act 22 of 2019 Registration.\n` +
+          `📋 *1. FFC Renewal:* MyFFC annual renewal application pre-filled.\n` +
+          `📑 *2. Trust Audit:* Section 54 Trust Account Audit Compliance Certificate attached.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting principal practitioner signature before PPRA submission.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 67: Department of Home Affairs Critical Skills Work Visa
+    if (lower.includes('critical skills') || lower.includes('work visa')) {
+      return {
+        ruleBooksLoaded: ['TRADE_BACK_OFFICE', 'JOB_SEEKER_WORK_OS'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['foreign_qualification', 'saqa_evaluation'], TOOLS: ['dha_vfs_global_portal', 'saqa_evaluation_api'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'DHA Critical Skills Work Visa Application (Immigration Act Section 19(4)) & SAQA Evaluation', locate: 'Department of Home Affairs, VFS Global Application Center, SAQA', prepare: 'DHA Form 11 Visa Dossier, SAQA Qualification Evaluation & Professional Body Registration', track: 'VFS appointment & DHA visa adjudication' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before lodging visa application dossier with VFS Global / DHA',
+        fetcherOutputOrGap: 'DHA VFS Portal (DECLARED_GAP). SAQA evaluation summary attached.',
+        finalRenderText: `🛂 *DHA Critical Skills Work Visa Application Pack*\n` +
+          `───────────────\n\n` +
+          `🌍 *Category:* Critical Skills Work Visa (Software Engineer / Data Scientist).\n` +
+          `📋 *1. DHA Form 11:* Home Affairs Visa Application pre-filled.\n` +
+          `🎓 *2. SAQA Certificate:* Qualification NQF Level 8 evaluation pre-filled.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting applicant signature before VFS appointment booking.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 68: Driving License Renewal Slot Booking & Eye Test Certificate
+    if (lower.includes('driving license renewal') || lower.includes('dlct slot')) {
+      return {
+        ruleBooksLoaded: ['PUBLIC_TRANSPORT', 'TRADE_BACK_OFFICE'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['license_card_no', 'id_number'], TOOLS: ['natis_online_portal', 'dlct_center_booking'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'NaTIS Online Driving License Renewal Slot Booking & Eye Test Certificate Pre-Fill', locate: 'RTMC NaTIS Online Services, DLTC Testing Center', prepare: 'NaTIS DLTC Booking Confirmation & Optical Certificate Pre-Assessment Form', track: 'DLTC appointment slot confirmation' },
+        sentinelPause: 'N',
+        sentinelPauseLocation: 'None (Read-only booking service)',
+        fetcherOutputOrGap: 'RTMC NaTIS Online Portal (DECLARED_GAP). Slot booking pre-filled.',
+        finalRenderText: `🚗 *NaTIS Driving License Renewal Slot & Eye Test Pack*\n` +
+          `───────────────\n\n` +
+          `📍 *Center:* Sandton DLTC / Midrand DLTC.\n` +
+          `📋 *1. NaTIS Booking:* Renewal appointment slot pre-filled.\n` +
+          `👁️ *2. Eye Test Form:* Optometrist Certificate pre-filled to bypass DLTC queues.\n\n` +
+          `🆓 *Service Cost:* Free by law (R0.00).`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 69: National Bargaining Council Dispute & Main Agreement Compliance
+    if (lower.includes('bargaining council') || lower.includes('main agreement')) {
+      return {
+        ruleBooksLoaded: ['LEGAL_SERVICE', 'PROFESSIONAL_WORK_OS'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['council_reg_no', 'wage_rates'], TOOLS: ['nbcrfi_portal', 'meibc_dispute_desk'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'National Bargaining Council Dispute Filing & Main Agreement Exemption Application', locate: 'NBCRFI / MEIBC Bargaining Council Dispute Desk', prepare: 'Bargaining Council Dispute Referral Form & Exemption Application Dossier', track: 'Council conciliation date & exemption ruling' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before submitting dispute or exemption application to Bargaining Council',
+        fetcherOutputOrGap: 'Bargaining Council Portal (DECLARED_GAP). Dispute forms pre-filled.',
+        finalRenderText: `⚖️ *National Bargaining Council Dispute & Exemption Pack*\n` +
+          `───────────────\n\n` +
+          `🏭 *Council:* MEIBC / NBCRFI Bargaining Council.\n` +
+          `📋 *1. Dispute Referral:* Council Dispute Form pre-filled (Wage Rate / Levy Query).\n` +
+          `📄 *2. Exemption Application:* Main Agreement wage exemption motivation ready.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting employer/employee signature before Council submission.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 70: Home Affairs Birth Certificate Amendment & Paternity Rectification
+    if (lower.includes('birth certificate amendment') || lower.includes('paternity amendment')) {
+      return {
+        ruleBooksLoaded: ['TRADE_BACK_OFFICE', 'LEGAL_SERVICE'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['child_birth_entry', 'paternity_dna_report'], TOOLS: ['dha_civic_services_portal', 'childrens_court'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'DHA Civic Services Birth Register Amendment (BI-24 / BI-529) & Paternity Rectification', locate: 'Department of Home Affairs Civic Services, Children’s Court', prepare: 'DHA BI-24 Birth Amendment Application & Certified DNA Paternity Affidavit', track: 'DHA unabridged birth certificate issuance' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before lodging birth register amendment with DHA Civic Services',
+        fetcherOutputOrGap: 'DHA Civic Services Portal (DECLARED_GAP). Amendment pack pre-filled.',
+        finalRenderText: `👶 *DHA Birth Certificate Amendment & Rectification Pack*\n` +
+          `───────────────\n\n` +
+          `🏛️ *Department:* Department of Home Affairs Civic Services.\n` +
+          `📋 *1. DHA BI-24:* Birth Register Amendment Form pre-filled.\n` +
+          `🧬 *2. Paternity Evidence:* Certified DNA Laboratory Report & Parental Consent Affidavit attached.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting parent signature before lodging with Home Affairs.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 71: Corporate Insolvency Liquidation & Voluntary Winding-Up (CoR40.1)
+    if (lower.includes('insolvency') || (lower.includes('liquidation') && lower.includes('winding-up'))) {
+      return {
+        ruleBooksLoaded: ['LEGAL_SERVICE', 'BUSINESS_FORMATION'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['special_resolution', 'creditor_statement'], TOOLS: ['cipc_liquidation_desk', 'master_high_court_insolvency'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'CIPC Voluntary Liquidation CoR40.1 Filing & Insolvency Master Reporting', locate: 'CIPC Insolvency Desk, Master of the High Court Insolvency Division', prepare: 'CoR40.1 Voluntary Winding-Up Special Resolution & Master Liquidation Security Bond', track: 'Gazette liquidation notice & Liquidator appointment' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before filing CoR40.1 voluntary liquidation resolution with CIPC',
+        fetcherOutputOrGap: 'CIPC Liquidation Desk (DECLARED_GAP). Resolution pack pre-filled.',
+        finalRenderText: `🏢 *Corporate Insolvency & Voluntary Liquidation Pack*\n` +
+          `───────────────\n\n` +
+          `📜 *Act:* Companies Act 71 of 2008 Section 80 Voluntary Winding-Up.\n` +
+          `📋 *1. CoR40.1 Resolution:* Shareholder Special Resolution Form pre-filled.\n` +
+          `🏛️ *2. Master Registration:* Master of High Court Insolvency Notice pre-filled.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting shareholder special resolution signature before filing.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 72: SASSA Primary Caregiver Grant Transfer
+    if (lower.includes('sassa caregiver transfer') || lower.includes('primary caregiver transfer')) {
+      return {
+        ruleBooksLoaded: ['SASSA_BRIDGE', 'SASSA_BRIDGE'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['child_id', 'new_caregiver_id'], TOOLS: ['sassa_api', 'social_development'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'SASSA Child Support Grant Primary Caregiver Transfer & Affidavits', locate: 'SASSA Local Office, SAPS Commissioner of Oaths', prepare: 'SASSA Caregiver Transfer Form & SAPS Primary Care Affidavit', track: 'SASSA grant payout transfer to new caregiver' },
+        sentinelPause: 'N',
+        sentinelPauseLocation: 'None (R0.00 free social grant service)',
+        fetcherOutputOrGap: 'SASSA API (DECLARED_GAP). Transfer form pre-filled.',
+        finalRenderText: `👵 *SASSA Primary Caregiver Grant Transfer Pack (FREE)*\n` +
+          `───────────────\n\n` +
+          `📋 *1. SASSA Transfer Form:* Primary Caregiver Change application pre-filled.\n` +
+          `👮 *2. SAPS Affidavit:* Primary care & residence confirmation affidavit pre-filled.\n\n` +
+          `🆓 *Service Cost:* Free by law (R0.00).`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 73: Municipal Building Fire Safety Certificate & Emergency Plan
+    if (lower.includes('fire safety certificate') || lower.includes('municipal fire clearance')) {
+      return {
+        ruleBooksLoaded: ['MUNICIPAL_OBJECTIONS', 'HOME_RENOVATION_CAD'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['occupancy_certificate', 'fire_equipment_layout'], TOOLS: ['municipal_fire_department', 'sabs_fire_registry'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'Municipal Emergency Services Fire Safety Compliance Certificate (SANS 10400-T)', locate: 'City Emergency Management Services (EMS Fire Safety)', prepare: 'Fire Safety Inspection Application & SANS 10400-T Emergency Evacuation Plan', track: 'Fire Inspector site visit & Fire Clearance Certificate' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before lodging Fire Clearance inspection request with Municipal EMS',
+        fetcherOutputOrGap: 'Municipal EMS Portal (DECLARED_GAP). Fire safety plan pre-filled.',
+        finalRenderText: `🔥 *Municipal Fire Safety & Emergency Evacuation Pack*\n` +
+          `───────────────\n\n` +
+          `🏬 *Building:* Commercial Retail Premises (Sandton).\n` +
+          `📋 *1. EMS Application:* Fire Safety Compliance Inspection request pre-filled.\n` +
+          `🚒 *2. Evacuation Plan:* SANS 10400-T Fire Equipment & Evacuation layout attached.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting facility manager signature to book EMS inspection.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 74: Department of Agriculture Animal Identification Brand Registration
+    if (lower.includes('animal brand') || lower.includes('livestock brand')) {
+      return {
+        ruleBooksLoaded: ['AGRICULTURE_OS', 'TRADE_BACK_OFFICE'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['farm_title_deed', 'livestock_count'], TOOLS: ['dalrrd_brand_registry', 'saps_stock_theft_unit'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'DALRRD Animal Identification Mark / Brand Registration (Animal Identification Act 6 of 2002)', locate: 'Dept of Agriculture (DALRRD Animal Identification Unit), SAPS Stock Theft Unit', prepare: 'DALRRD Brand Registration Application & SAPS Stock Theft Clearance Certificate', track: 'Official Livestock Brand Certificate issuance' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before lodging livestock brand application with DALRRD Registrar',
+        fetcherOutputOrGap: 'DALRRD Brand Registry (DECLARED_GAP). Brand application pre-filled.',
+        finalRenderText: `🐄 *DALRRD Livestock Animal Identification Brand Pack*\n` +
+          `───────────────\n\n` +
+          `📜 *Act:* Animal Identification Act 6 of 2002 Statutory Registration.\n` +
+          `📋 *1. Brand Application:* DALRRD Identification Mark Registration Form pre-filled.\n` +
+          `👮 *2. SAPS Stock Theft:* Police Stock Theft Unit Clearance request attached.\n\n` +
+          `⏸️ *Sentinel Pause:* Awaiting livestock owner signature to lodge with DALRRD.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
+    // Request 75: SARS EMP501 Employer Paye Reconciled Declaration
+    if (lower.includes('emp501') || (lower.includes('sars') && lower.includes('reconciliation'))) {
+      return {
+        ruleBooksLoaded: ['TAX_ENGINE', 'PROFESSIONAL_WORK_OS'],
+        compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['emp201_payments', 'irp5_certificates'], TOOLS: ['sars_easyfile_portal', 'sars_efiling_browser_fallback'], UNTIL: 'revoked' },
+        fourVerbs: { understand: 'SARS EMP501 Employer PAYE/UIF/SDL Bi-Annual Reconciled Declaration', locate: 'SARS easyFile / eFiling Employer Desk', prepare: 'EMP501 Employer Reconciliation Schedule & IRP5/IT3(a) Tax Certificate File', track: 'SARS EMP501 Employer Clearance Certificate' },
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Mandatory Sentinel Pause: Lethal Trifecta (Payroll Tax Records + External Egress)',
+        fetcherOutputOrGap: 'SARS easyFile / eFiling Browser Fallback active. EMP501 pre-filled.',
+        finalRenderText: `📊 *SARS EMP501 Employer PAYE Reconciled Declaration Pack*\n` +
+          `───────────────\n\n` +
+          `🏛️ *Period:* Employer Bi-Annual PAYE / UIF / SDL Reconciliation.\n` +
+          `📋 *1. EMP501 Schedule:* Reconciled PAYE Tax (R145,000.00) & IRP5 Certificates ready.\n` +
+          `📄 *2. easyFile Export:* SARS easyFile import file pre-generated.\n\n` +
+          `🛑 *Sentinel Halt:* Confidential payroll tax records detected. Awaiting employer authorization to lodge on eFiling.`,
+        matchesDeclaredShape: true,
+        defaultCartFallback: 'N'
+      };
+    }
+
     return null;
   }
 
