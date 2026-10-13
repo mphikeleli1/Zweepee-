@@ -3,7 +3,9 @@ import { calculatePricing, getPricingConfig } from './lib/pricing.js';
 import { DoubleEntryLedger } from './lib/ledger.js';
 import { TransactionStateMachine, TRANSACTION_STATES } from './lib/stateMachine.js';
 import { IdempotencyManager } from './lib/idempotency.js';
-import { PersonalAgent } from './agents/personalAgent.js';
+import { PersonalAgent, UserPassportDO } from './agents/personalAgent.js';
+
+export { UserPassportDO };
 import { AgentFactory } from './agents/factory.js';
 import { CommerceAggregator } from './commerce/aggregator.js';
 import { TransportAggregator } from './transport/aggregator.js';
