@@ -1553,3 +1553,39 @@ test('49. Verification of the 15 Heavyweight Request Render Shapes', async () =>
     assert.equal(res.defaultCartFallback, 'N', `${req.name} default cart fallback must be N`);
   }
 });
+
+test('50. Verification of 15 Additional Complex Request Flows (Requests 16-30)', async () => {
+  const sessionEngine = new WhatsAppSessionEngine();
+  const waId = '27829990000';
+
+  const requests = [
+    { name: 'Request 16: Home Renovation CAD & Municipal Plan Approval', input: 'Home renovation architectural CAD drafting and plan approval' },
+    { name: 'Request 17: One-Tap Commercial Insurance Policy & Claim', input: 'Commercial property insurance policy schedule and claim' },
+    { name: 'Request 18: Foreign Business Formation in SA & FinSurv Direct Investment', input: 'Foreign business formation and FinSurv direct investment clearance' },
+    { name: 'Request 19: Creator Content Licensing, SAMRO & Copyright', input: 'Creator content licensing SAMRO registration and copyright' },
+    { name: 'Request 20: Corporate Compliance Calendar, COIDA & BBBEE Certificate', input: 'Corporate compliance calendar COIDA return of earnings and BBBEE' },
+    { name: 'Request 21: SETA Learnership Grant & Work Experience Coordination', input: 'SETA learnership grant application and WSP' },
+    { name: 'Request 22: Traditional Health Practitioner Registration & Plant Conservation Permit', input: 'Traditional practitioner registration and herbal plant permit' },
+    { name: 'Request 23: Public Transport Commuter Subsidy & Taxi Rank Route Association', input: 'Public transport taxi rank route operating license' },
+    { name: 'Request 24: Vehicle Finance Approval, TransUnion Credit Score & Dealer Licensing', input: 'Vehicle finance pre-approval TransUnion credit score' },
+    { name: 'Request 25: Spaza Shop Bulk FMCG Consortium Sourcing & Direct Delivery', input: 'Spaza shop bulk FMCG consortium order' },
+    { name: 'Request 26: Solar PV Net-Metering Registration & Municipal Grid Feed-In', input: 'Solar PV net-metering grid feed-in application' },
+    { name: 'Request 27: High Court Civil Summons & Eviction Order Defense', input: 'High Court summons unlawful eviction defense' },
+    { name: 'Request 28: School Exemption Subsidy & National Student Financial Aid (NSFAS) Appeal', input: 'NSFAS appeal and school exemption subsidy' },
+    { name: 'Request 29: Cross-Border Remittance, SADC Customs & Mukuru Transfer', input: 'Cross-border Mukuru cash remittance' },
+    { name: 'Request 30: E-Hailing Fleet Vehicle Operator License & OLTT Permit Application', input: 'E-hailing Bolt permit operating license' }
+  ];
+
+  for (const req of requests) {
+    const res = await sessionEngine.processHeavyweightRuleBookRequest(waId, req.input, {}, { name: 'Test User' });
+    assert.ok(res !== null, `${req.name} must match a rule book dispatcher`);
+    assert.ok(res.ruleBooksLoaded.length > 0, `${req.name} must report rule books loaded`);
+    assert.ok(res.compilerCard.COMPLAINT === req.input, `${req.name} compiler card complaint must match`);
+    assert.ok(res.fourVerbs.understand, `${req.name} four verbs must be run`);
+    assert.ok(res.sentinelPause === 'Y' || res.sentinelPause === 'N', `${req.name} sentinel pause must be reported`);
+    assert.ok(res.fetcherOutputOrGap, `${req.name} fetcher output or gap must be reported`);
+    assert.ok(res.finalRenderText, `${req.name} final render text must exist`);
+    assert.equal(res.matchesDeclaredShape, true, `${req.name} render must match declared shape`);
+    assert.equal(res.defaultCartFallback, 'N', `${req.name} default cart fallback must be N`);
+  }
+});
