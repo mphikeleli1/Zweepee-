@@ -78,6 +78,16 @@ export class AntiAbuseGuardEngine {
   /**
    * RSA ID Age Gate Verification (Extracts DOB from 13-digit RSA ID Number)
    */
+  getPopiaInformationOfficerStatus() {
+    return {
+      status: 'REGISTRATION_STUB_READY',
+      templateName: 'POPIA_INFORMATION_OFFICER_FORM_1',
+      regulator: 'Information Regulator South Africa',
+      registered: false,
+      stubReady: true
+    };
+  }
+
   verifyAgeGate(rsaIdNumber) {
     const cleaned = String(rsaIdNumber || '').replace(/[^0-9]/g, '');
     if (cleaned.length !== 13) {

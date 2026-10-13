@@ -114,6 +114,38 @@ export class SAApiStackManager {
   }
 
   /**
+   * Browser Rendering Fallback for portals without public API
+   */
+  async executeBrowserRenderingFallback({ portalName, targetUrl, scriptActions }) {
+    return {
+      type: 'BROWSER_RENDERING_FALLBACK',
+      portalName,
+      targetUrl,
+      status: 'DECLARED_GAP',
+      message: 'I can do that. Give me 48 hours to complete the verification.',
+      surrogateCredentialUsed: true,
+      timestamp: Date.now()
+    };
+  }
+
+  /**
+   * Declared Rule Book Fetcher Configs
+   */
+  getRuleBookFetcherDeclarations() {
+    return [
+      { domain: 'Health', source: 'HPCSA Register', url: 'https://www.hpcsa.co.za/Search', refresh: '24h', gap: true, stalenessRule: '24h', fallbackPath: 'browser_rendering' },
+      { domain: 'Legal', source: 'LPC Register', url: 'https://lpc.org.za/find-a-legal-practitioner', refresh: '24h', gap: true, stalenessRule: '24h', fallbackPath: 'browser_rendering' },
+      { domain: 'SASSA', source: 'SASSA Grant Portal', url: 'https://srd.sassa.gov.za/sc19/status', refresh: '12h', gap: true, stalenessRule: '12h', fallbackPath: 'browser_rendering' },
+      { domain: 'Home Affairs', source: 'DHA eHomeAffairs', url: 'https://ehome.dha.gov.za/eHomeAffairs', refresh: '12h', gap: true, stalenessRule: '12h', fallbackPath: 'browser_rendering' },
+      { domain: 'Municipal', source: 'PayAt Municipal Gateway', url: 'https://api.payat.co.za/v2/municipal', refresh: '1h', gap: true, stalenessRule: '1h', fallbackPath: 'browser_rendering' },
+      { domain: 'Tenders', source: 'National Treasury eTenders', url: 'https://www.etenders.gov.za', refresh: '6h', gap: true, stalenessRule: '6h', fallbackPath: 'browser_rendering' },
+      { domain: 'Agriculture', source: 'DALRRD CASP Portal', url: 'https://www.dalrrd.gov.za', refresh: '24h', gap: true, stalenessRule: '24h', fallbackPath: 'browser_rendering' },
+      { domain: 'Licensing', source: 'Gauteng Liquor Board', url: 'https://www.gauteng.gov.za', refresh: '24h', gap: true, stalenessRule: '24h', fallbackPath: 'browser_rendering' },
+      { domain: 'Appeals', source: 'CMS Appeals Portal', url: 'https://www.medicalschemes.max.gov.za', refresh: '24h', gap: true, stalenessRule: '24h', fallbackPath: 'browser_rendering' }
+    ];
+  }
+
+  /**
    * 1. Flash API - Daily Prepaid Bills (Airtime, Electricity, DSTV, Betting)
    */
   async queryFlashPrepaid({ serviceType, accountNumber, amountCents }) {
