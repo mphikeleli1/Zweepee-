@@ -58,10 +58,23 @@ export function calculatePricing({
   let jobMatchingFeeCents = 0;
   let referralCommissionCents = 0;
   let serviceConvenienceFeeCents = 0;
+  let flatFeeCents = 0;
 
   const mode = (intentMode || '').toUpperCase();
 
-  if (mode === 'BUY_PLUS_DELIVER') {
+  if (mode === 'FLAT_FEE') {
+    // Once-off flat fee services (e.g. filing, appeals, booking, quote preparation)
+    flatFeeCents = goodsSubtotalCents || 0;
+  } else if (mode === 'FREE' || mode === 'SUBSCRIPTION') {
+    // Free tier or recurring services covered under active subscription
+    goodsSubtotalCents = 0;
+    flatFeeCents = 0;
+    goodsMarkupCents = 0;
+    transportMarginCents = 0;
+  } else if (mode === 'FIVE_PERCENT_ON_TOP') {
+    // 5% fee on top of third-party statutory cost
+    serviceConvenienceFeeCents = calculatePercentageCents(goodsSubtotalCents, 5);
+  } else if (mode === 'BUY_PLUS_DELIVER') {
     // Physical store goods strictly 0% markup
     goodsMarkupCents = calculatePercentageCents(goodsSubtotalCents, cfg.STORE_GOODS_MARKUP_PERCENT);
 
