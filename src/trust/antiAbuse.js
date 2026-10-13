@@ -73,9 +73,6 @@ export class AntiAbuseGuardEngine {
   }
 
   /**
-   * Anti-Gaming Check for Listing Spam
-   */
-  /**
    * RSA ID Age Gate Verification (Extracts DOB from 13-digit RSA ID Number)
    */
   getPopiaInformationOfficerStatus() {
