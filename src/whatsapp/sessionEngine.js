@@ -605,19 +605,21 @@ export class WhatsAppSessionEngine {
         ruleBooksLoaded: ['TRAVEL'],
         compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['passport_number', 'frequent_flyer'], TOOLS: ['aeronology_sa_iata', 'amadeus_hotel_api', 'onecheckin_adapter'], UNTIL: 'revoked' },
         fourVerbs: { understand: 'Turnkey travel bundle: flight search, hotel booking, car rental, and T-24h automated check-in', locate: 'Aeronology SA Host IATA, Amadeus, 1Checkin', prepare: 'Travel Bundle Reservation & Paystack Single Total Checkout Link', track: 'PNR ticket issuance & 1Checkin boarding pass monitoring' },
-        sentinelPause: 'N',
-        sentinelPauseLocation: 'None (Direct 1-Tap Travel Purchase)',
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before issuing travel tickets and charging travel bundle payment',
         fetcherOutputOrGap: 'Aeronology SA Host IATA live. Amadeus live. 1Checkin adapter active.',
+        feeModeDeclared: 'REFERRAL_AFFILIATE (5% Commission R577.50 on R11,150 Component Total = R11,727.50 Total)',
         finalRenderText: `🌴 *Complete Travel & Flight Concierge Package*\n` +
           `───────────────\n\n` +
-          `✈️ *Flight:* FlySafair JNB ➔ CPT (07:00)\n` +
-          `🏨 *Hotel:* Sea Point Beachfront Hotel (4 Nights)\n` +
-          `🚗 *Car Hire:* VW Polo Hatchback (Cape Town Airport)\n` +
-          `🎟️ *Auto Check-In:* 1Checkin active — boarding pass will arrive on WhatsApp at T-24h.\n\n` +
-          `💳 *ONE TOTAL YOU PAY:* *R11,500.00* (0% Goods Markup)\n` +
-          `Tap below to complete booking instantly!`,
+          `✈️ *Flight:* FlySafair JNB ➔ CPT (R3,500.00)\n` +
+          `🏨 *Hotel:* Sea Point Beachfront Hotel 4 Nights (R6,500.00)\n` +
+          `🚗 *Car Hire:* VW Polo Hatchback 5 Days (R1,150.00)\n` +
+          `🎟️ *Auto Check-In:* 1Checkin active — boarding pass on WhatsApp at T-24h.\n` +
+          `🛡️ *Booking Fee (5% Referral Commission):* R577.50\n\n` +
+          `💳 *ONE TOTAL YOU PAY:* *R11,727.50*\n` +
+          `⏸️ *Sentinel Pause:* Awaiting your confirmation to execute travel bundle booking.`,
         matchesDeclaredShape: true,
-        defaultCartFallback: 'N' // Render is TRAVEL BUNDLE OPTIONS / CART
+        defaultCartFallback: 'N'
       };
     }
 
@@ -647,16 +649,19 @@ export class WhatsAppSessionEngine {
         ruleBooksLoaded: ['P2P_COMMERCE'],
         compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['p2p_listing_id'], TOOLS: ['paystack_escrow_hold', 'courier_middleman', 'pin_verifier'], UNTIL: 'revoked' },
         fourVerbs: { understand: 'P2P purchase of pre-owned iPhone with Paystack escrow hold, door inspection, and 6-digit release PIN', locate: 'myAI P2P Verified Network, Courier Guy / PicUp', prepare: 'Escrow Hold Creation & 6-Digit Verification PIN Generation', track: 'Courier door delivery & buyer 24-hour inspection window' },
-        sentinelPause: 'N',
-        sentinelPauseLocation: 'None (Requires 1-tap buyer/seller double approval)',
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before locking buyer funds in Paystack P2P escrow hold',
         fetcherOutputOrGap: 'P2P Escrow hold engine active. Courier API active.',
+        feeModeDeclared: 'RECOVERY_PERCENT (5% Goods R550 + 20% Transport R100 = Total R11,650.00)',
         finalRenderText: `📱 *Verified P2P Escrow & Delivery*\n` +
           `───────────────\n\n` +
           `🛍️ *Item:* Pre-owned iPhone 15 Pro (128GB)\n` +
-          `💵 *Escrow Price:* R11,500.00\n` +
-          `🛡️ *Protection:* 24-Hour Door Inspection Window\n` +
+          `💵 *Seller Price:* R11,000.00\n` +
+          `🚚 *Courier Delivery:* R500.00\n` +
+          `🛡️ *Platform Fee (5% Goods + 20% Transport):* R650.00\n` +
+          `💳 *TOTAL YOU PAY:* *R11,650.00*\n` +
           `🔑 *Release PIN:* 6-digit secret PIN generated. Share PIN with seller only after inspecting phone!\n\n` +
-          `Tap Approve below to lock funds safely in Paystack escrow.`,
+          `⏸️ *Sentinel Pause:* Awaiting your confirmation to lock R11,650.00 in Paystack Escrow.`,
         matchesDeclaredShape: true,
         defaultCartFallback: 'N'
       };
@@ -927,16 +932,17 @@ export class WhatsAppSessionEngine {
         ruleBooksLoaded: ['TOWNSHIP_ECONOMY', 'MULTISTORE'],
         compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['spaza_permit'], TOOLS: ['bulk_wholesaler_api', 'bakkie_courier_fleet'], UNTIL: 'revoked' },
         fourVerbs: { understand: 'Spaza shop bulk FMCG stock order (Maize meal, Oil, Sugar) & 1-Ton Bakkie delivery', locate: 'Trade Depot Wholesale, Makro Wholesale, Township Bakkie Fleet', prepare: 'Consortium Wholesale Invoice & 1-Ton Bakkie Courier Schedule', track: 'Bulk delivery tracking to spaza shop' },
-        sentinelPause: 'N',
-        sentinelPauseLocation: 'None (Direct 1-Tap FMCG Wholesale Purchase)',
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before placing bulk FMCG stock order with wholesaler',
         fetcherOutputOrGap: 'Trade Depot & Makro Wholesale APIs (DECLARED_GAP pending live account credentials). Bakkie fleet active.',
+        feeModeDeclared: 'TWENTY_PERCENT_TRANSPORT (R5,186.00 Total: R4,850 Goods + R280 Transport + R56 Transport Margin)',
         finalRenderText: `🛒 *Spaza Bulk FMCG Wholesale Order*\n` +
           `───────────────\n\n` +
           `📦 *Stock Order:* 10x 12.5kg Iwisa Maize, 5x 5L Sunfoil Oil, 10x 10kg Selati Sugar.\n` +
           `🏭 *Wholesaler:* Trade Depot Bulk Wholesale (In-Store Pricing: R4,850.00)\n` +
-          `🚚 *Transport:* 1-Ton Bakkie Courier (R280.00)\n\n` +
-          `💳 *ONE TOTAL YOU PAY:* *R5,130.00* (0% Goods Markup)\n` +
-          `Tap below to complete bulk order delivery!`,
+          `🚚 *Transport:* 1-Ton Bakkie Courier (R280.00 + R56.00 Transport Margin)\n\n` +
+          `💳 *ONE TOTAL YOU PAY:* *R5,186.00* (0% Goods Markup)\n` +
+          `⏸️ *Sentinel Pause:* Awaiting your confirmation to place R5,186.00 wholesale order.`,
         matchesDeclaredShape: true,
         defaultCartFallback: 'N'
       };
@@ -1007,16 +1013,17 @@ export class WhatsAppSessionEngine {
         ruleBooksLoaded: ['REMITTANCE_RULE_BOOK', 'IMPORT_EXPORT'],
         compilerCard: { COMPLAINT: rawText, TRIGGER: 'signal', MEMORY: ['passport_id', 'recipient_phone'], TOOLS: ['mukuru_api', 'mama_money_gateway'], UNTIL: 'revoked' },
         fourVerbs: { understand: 'Cross-border SADC cash remittance transfer (South Africa ➔ Zimbabwe / Mozambique)', locate: 'Mukuru API / Mama Money Gateway, SARB Cross-Border Reporting', prepare: 'Mukuru Cash Voucher Quote & FinSurv SADC Reporting Payload', track: 'Recipient cash pickup notification' },
-        sentinelPause: 'N',
-        sentinelPauseLocation: 'None (Direct 1-Tap Remittance Transfer)',
+        sentinelPause: 'Y',
+        sentinelPauseLocation: 'Before authorizing cross-border cash transfer and FinSurv reporting',
         fetcherOutputOrGap: 'Mukuru & Mama Money APIs (DECLARED_GAP pending live partner credentials). SADC reporting pre-filled.',
+        feeModeDeclared: 'FLAT_FEE (R35.00 Mukuru Fee + R15.00 mrAI Fee = R50.00 Fee, Total R2,050.00)',
         finalRenderText: `💸 *SADC Cross-Border Cash Remittance*\n` +
           `───────────────\n\n` +
           `🇿🇼 *Recipient:* Tendai Mokoena (+263 77 123 4567, Harare)\n` +
           `💵 *Send Amount:* R2,000.00 ($110 USD Equivalent)\n` +
-          `🛡️ *Remittance Fee:* R35.00 (Mukuru Cash Voucher)\n\n` +
-          `💳 *ONE TOTAL YOU PAY:* *R2,035.00*\n` +
-          `Tap below to authorize instant cash transfer!`,
+          `🛡️ *Remittance Fees:* R35.00 (Mukuru Fee) + R15.00 (mrAI Service Fee)\n\n` +
+          `💳 *ONE TOTAL YOU PAY:* *R2,050.00*\n` +
+          `⏸️ *Sentinel Pause:* Awaiting your approval to dispatch R2,050.00 cash remittance.`,
         matchesDeclaredShape: true,
         defaultCartFallback: 'N'
       };
