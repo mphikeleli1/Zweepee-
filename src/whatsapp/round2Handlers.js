@@ -34,7 +34,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before executing subscription cancellation & refund requests with providers',
-      fetcherOutputOrGap: 'MultiChoice Self-Service API active. Netflix & Showmax Web Desks ready.',
+      fetcherOutputOrGap: 'MultiChoice Self-Service (DECLARED_GAP). Netflix & Showmax Web Desks (DECLARED_GAP).',
       feeModeDeclared: 'FLAT_FEE (R25.00 Subscription Concierge Fee)',
       finalRenderText: `📺 *Multi-Subscription Cancellation & Refund Pack*\n` +
         `───────────────\n\n` +
@@ -154,7 +154,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (R0.00 municipal registration assistance)',
-      fetcherOutputOrGap: 'City of Cape Town e-Services Portal active.',
+      fetcherOutputOrGap: 'City of Cape Town e-Services (DECLARED_GAP).',
       feeModeDeclared: 'FLAT_FEE (R50.00 Municipal Dog Registration Fee)',
       finalRenderText: `🐕 *City of Cape Town Municipal Dog Registration Pack*\n` +
         `───────────────\n\n` +
@@ -183,7 +183,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before executing SABC TV licence payment',
-      fetcherOutputOrGap: 'SABC TV Licences Gateway active.',
+      fetcherOutputOrGap: 'SABC TV Licences Gateway (DECLARED_GAP).',
       feeModeDeclared: 'FLAT_FEE (R265.00 Annual Statutory Fee + R10.00 Platform Service Fee = R275.00)',
       finalRenderText: `📺 *SABC TV Licence Renewal Pack*\n` +
         `───────────────\n\n` +
@@ -213,7 +213,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before lodging formal credit dispute with TransUnion bureau',
-      fetcherOutputOrGap: 'TransUnion Bureau API active. Section 72 dispute pack pre-filled.',
+      fetcherOutputOrGap: 'TransUnion Bureau Portal (DECLARED_GAP). Section 72 dispute pack pre-filled.',
       feeModeDeclared: 'FLAT_FEE (R150.00 Credit Bureau Dispute Filing Fee)',
       finalRenderText: `📊 *TransUnion Credit Report & Bureau Dispute Pack*\n` +
         `───────────────\n\n` +
@@ -242,7 +242,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (R0.00 free municipal pensioner service)',
-      fetcherOutputOrGap: 'Municipal Revenue Desk API (DECLARED_GAP). Rebate application ready.',
+      fetcherOutputOrGap: 'Municipal Revenue Desk (DECLARED_GAP). Rebate application ready.',
       feeModeDeclared: 'FREE (R0.00 Free Municipal Pensioner Rebate Service)',
       finalRenderText: `👵 *Municipal Pensioner Rates Rebate Pack (FREE)*\n` +
         `───────────────\n\n` +
@@ -271,7 +271,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before dispatching flatbed tow truck and lodging claim',
-      fetcherOutputOrGap: 'AA Approved Tow Fleet API active. Insurer Claims Desk ready.',
+      fetcherOutputOrGap: 'AA Approved Tow Fleet (DECLARED_GAP). Insurer Claims Desk (DECLARED_GAP).',
       feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R850.00 Towing + R42.50 Platform Fee = R892.50 Total)',
       finalRenderText: `🚨 *Emergency Accident Towing & Insurance Claim Pack*\n` +
         `───────────────\n\n` +
@@ -331,7 +331,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (R0.00 free educational placement assistance)',
-      fetcherOutputOrGap: 'GDE Admissions Portal active. Benoni schools verified.',
+      fetcherOutputOrGap: 'GDE Admissions Portal (DECLARED_GAP). Benoni schools verified.',
       feeModeDeclared: 'FREE (R0.00 Free GDE Placement Assistance)',
       finalRenderText: `🏫 *GDE School Admissions & Grade 1 Placement Pack (FREE)*\n` +
         `───────────────\n\n` +
@@ -360,7 +360,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (R0.00 free statutory exemption service)',
-      fetcherOutputOrGap: 'SASA Exemption Calculator active. Forms pre-filled.',
+      fetcherOutputOrGap: 'SASA Exemption Portal (DECLARED_GAP). Forms pre-filled.',
       feeModeDeclared: 'FREE (R0.00 Free Statutory Exemption Service)',
       finalRenderText: `🎓 *SASA School Fee Exemption Pack (FREE)*\n` +
         `───────────────\n\n` +
@@ -419,7 +419,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (R0.00 free candidate service by law)',
-      fetcherOutputOrGap: 'Transnet Portal API active. Technical CV pre-filled.',
+      fetcherOutputOrGap: 'Transnet e-Recruitment (DECLARED_GAP). Technical CV pre-filled.',
       feeModeDeclared: 'FREE (R0.00 Candidate Fee Free By Law)',
       finalRenderText: `🔧 *Transnet Boilermaking Learnership Pack (FREE)*\n` +
         `───────────────\n\n` +
@@ -506,7 +506,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (R0.00 free urgent safety legal assistance)',
-      fetcherOutputOrGap: 'Court Clerk Portal active. Form 2 protection order pre-filled.',
+      fetcherOutputOrGap: 'Court Clerk Portal (DECLARED_GAP). Form 2 protection order pre-filled.',
       feeModeDeclared: 'FREE (R0.00 Urgent Legal Protection Free By Law)',
       finalRenderText: `🛡️ *Domestic Violence Protection Order Application Pack (FREE)*\n` +
         `───────────────\n\n` +
@@ -536,7 +536,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (R0.00 free maintenance application guidance)',
-      fetcherOutputOrGap: 'Department of Justice Maintenance Portal active.',
+      fetcherOutputOrGap: 'Department of Justice Maintenance Portal (DECLARED_GAP).',
       feeModeDeclared: 'FREE (R0.00 Child Maintenance Application Guidance)',
       finalRenderText: `⚖️ *Child Maintenance Application Pack (FREE)*\n` +
         `───────────────\n\n` +
@@ -565,7 +565,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before finalizing formal Last Will and Testament for execution',
-      fetcherOutputOrGap: 'Fiduciary Panel active. Draft Will pre-filled.',
+      fetcherOutputOrGap: 'Fiduciary Panel (DECLARED_GAP). Draft Will pre-filled.',
       feeModeDeclared: 'FLAT_FEE (R250.00 Will Drafting & Fiduciary Registration Fee)',
       finalRenderText: `📜 *Last Will and Testament Drafting Pack*\n` +
         `───────────────\n\n` +
@@ -624,7 +624,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Mandatory Sentinel Pause: Private Tax Records + External Egress',
-      fetcherOutputOrGap: 'SARS eFiling Browser Fallback active. VAT101 pre-filled.',
+      fetcherOutputOrGap: 'SARS eFiling Browser Fallback (DECLARED_GAP). VAT101 pre-filled.',
       feeModeDeclared: 'FLAT_FEE (R250.00 SARS VAT101 Registration Fee)',
       finalRenderText: `🏛️ *SARS Mandatory VAT Registration Pack (VAT101)*\n` +
         `───────────────\n\n` +
@@ -653,7 +653,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Mandatory Sentinel Pause: Private Tax Data + External Egress',
-      fetcherOutputOrGap: 'SARS eFiling Browser Fallback active.',
+      fetcherOutputOrGap: 'SARS eFiling Browser Fallback (DECLARED_GAP).',
       feeModeDeclared: 'FLAT_FEE (R150.00 Tax Clearance PIN Generation Fee)',
       finalRenderText: `📊 *SARS Tax Compliance Status (TCS) PIN Pack*\n` +
         `───────────────\n\n` +
@@ -682,7 +682,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Mandatory Sentinel Pause: Confidential Payroll Tax + External Egress',
-      fetcherOutputOrGap: 'SARS easyFile Browser Fallback active.',
+      fetcherOutputOrGap: 'SARS easyFile Browser Fallback (DECLARED_GAP).',
       feeModeDeclared: 'FLAT_FEE (R250.00 EMP501 Employer Recon Filing Fee)',
       finalRenderText: `📊 *SARS EMP501 Employer Annual Reconciliation Pack*\n` +
         `───────────────\n\n` +
@@ -711,7 +711,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before submitting CIPC Annual Return & paying statutory fee',
-      fetcherOutputOrGap: 'CIPC BizPortal Browser Fallback active.',
+      fetcherOutputOrGap: 'CIPC BizPortal Browser Fallback (DECLARED_GAP).',
       feeModeDeclared: 'FLAT_FEE (R150.00 Annual Return & BO Filing Fee)',
       finalRenderText: `🏢 *CIPC Annual Return & Beneficial Ownership (BO) Pack*\n` +
         `───────────────\n\n` +
@@ -739,7 +739,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before executing sworn affidavit before Commissioner of Oaths',
-      fetcherOutputOrGap: 'DTIC B-BBEE Portal active. Affidavit pre-filled.',
+      fetcherOutputOrGap: 'DTIC B-BBEE Portal (DECLARED_GAP). Affidavit pre-filled.',
       feeModeDeclared: 'FLAT_FEE (R150.00 B-BBEE Affidavit Preparation Fee)',
       finalRenderText: `🎖️ *DTIC B-BBEE EME Sworn Affidavit Pack*\n` +
         `───────────────\n\n` +
@@ -913,7 +913,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (Direct 1-Tap Multi-Store Checkout)',
-      fetcherOutputOrGap: 'Checkers API live. Dis-Chem Pharmacy API live. Courier API ready.',
+      fetcherOutputOrGap: 'Checkers API (DECLARED_GAP). Dis-Chem Pharmacy API (DECLARED_GAP). Courier API (DECLARED_GAP).',
       feeModeDeclared: 'TWENTY_PERCENT_TRANSPORT (R359.00 Total: R305 Goods + R45 Courier + R9 Margin)',
       finalRenderText: `🛒 *Multi-Store Unified Order (Checkers + Dis-Chem)*\n` +
         `───────────────\n\n` +
@@ -945,15 +945,16 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before locking geyser replacement fee in Paystack escrow',
-      fetcherOutputOrGap: 'PIRB Registry active. Paystack Escrow Engine active.',
-      feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R8,500.00 Geyser Installation & Escrow Lock)',
+      fetcherOutputOrGap: 'PIRB Registry (DECLARED_GAP). Paystack Escrow Engine (DECLARED_GAP).',
+      feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R8,500.00 Geyser + R425.00 mrAI Fee = R8,925.00 Total)',
       finalRenderText: `🔧 *PIRB Master Plumber & Geyser Replacement Pack*\n` +
         `───────────────\n\n` +
         `👤 *Plumber:* Johan Pretorius (PIRB Master Plumber # 88120)\n` +
         `📦 *Scope:* Supply & Fit 150L Kwikot Geyser + Pressure Control Valve + PIRB CoC\n` +
-        `💵 *Total All-In Quote:* R8,500.00 (Held safely in Paystack Escrow)\n` +
-        `📜 *Compliance:* Official PIRB Certificate of Compliance issued on site.\n\n` +
-        `⏸️ *Sentinel Pause:* Awaiting client approval to lock R8,500.00 in escrow.`,
+        `💵 *Geyser Quote:* R8,500.00 (Held safely in Paystack Escrow)\n` +
+        `🛡️ *mrAI Fee (5%):* R425.00\n` +
+        `💳 *TOTAL YOU PAY:* *R8,925.00*\n\n` +
+        `⏸️ *Sentinel Pause:* Awaiting client approval to lock R8,925.00 in escrow.`,
       matchesDeclaredShape: true,
       defaultCartFallback: 'N'
     };
@@ -975,15 +976,15 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before locking dual-artisan booking deposit in Paystack escrow',
-      fetcherOutputOrGap: 'ECA Registry active. Artisan Network active.',
-      feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R2,050.00 Dual Artisan Booking & Escrow Lock)',
+      fetcherOutputOrGap: 'ECA Registry (DECLARED_GAP). Artisan Network (DECLARED_GAP).',
+      feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R2,050.00 Dual Artisan + R102.50 mrAI Fee = R2,152.50 Total)',
       finalRenderText: `⚡🎨 *Coordinated Electrician & Painter Saturday Pack*\n` +
         `───────────────\n\n` +
-        `⚡ *Electrician:* Sipho (ECA Certified - Light Fitting & Plug Repair - R850.00)\n` +
-        `🎨 *Painter:* David (Dulux Accredited - Room Painting - R1,200.00)\n` +
-        `📅 *Date:* This Saturday (08:00 AM Combined Arrival)\n` +
-        `💳 *Total Escrow Lock:* R2,050.00\n\n` +
-        `⏸️ *Sentinel Pause:* Awaiting approval to lock R2,050.00 in Paystack Escrow.`,
+        `⚡ *Electrician:* Sipho (ECA Certified - R850.00)\n` +
+        `🎨 *Painter:* David (Dulux Accredited - R1,200.00)\n` +
+        `🛡️ *mrAI Fee (5%):* R102.50\n` +
+        `💳 *TOTAL ESCROW LOCK:* *R2,152.50*\n\n` +
+        `⏸️ *Sentinel Pause:* Awaiting approval to lock R2,152.50 in Paystack Escrow.`,
       matchesDeclaredShape: true,
       defaultCartFallback: 'N'
     };
@@ -1005,7 +1006,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (Direct 1-Tap Checkout)',
-      fetcherOutputOrGap: 'Takealot Marketplace API active. Haulage fleet ready.',
+      fetcherOutputOrGap: 'Takealot Marketplace API (DECLARED_GAP). Haulage fleet (DECLARED_GAP).',
       feeModeDeclared: 'TWENTY_PERCENT_TRANSPORT (R8,999.00 Fridge + R350 Removal Haulage + R70 Margin)',
       finalRenderText: `❄️ *Takealot Fridge Order & Old Unit Removal*\n` +
         `───────────────\n\n` +
@@ -1035,14 +1036,16 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before dispatching courier pickup for cross-border parcel',
-      fetcherOutputOrGap: 'The Courier Guy API active. SADC waybill pre-filled.',
-      feeModeDeclared: 'TWENTY_PERCENT_TRANSPORT (R650.00 Express Door Courier Fee)',
+      fetcherOutputOrGap: 'The Courier Guy API (DECLARED_GAP). SADC waybill pre-filled.',
+      feeModeDeclared: 'TWENTY_PERCENT_TRANSPORT (R650.00 Express Courier + R130.00 Margin = R780.00 Total)',
       finalRenderText: `📦 *Cross-Border Courier Pack (Cape Town ➔ Harare)*\n` +
         `───────────────\n\n` +
         `📍 *Route:* Cape Town ➔ Harare, Zimbabwe (3-5 Day Express Door Delivery)\n` +
         `📋 *1. SADC Waybill:* International Courier Manifest pre-filled.\n` +
         `🛃 *2. Customs CN22:* Zimra duty clearance declaration attached.\n` +
-        `💵 *Express Rate:* R650.00 (All-Inclusive Door-to-Door)\n\n` +
+        `🚚 *Courier Fee:* R650.00\n` +
+        `🛡️ *Transport Margin (20%):* R130.00\n` +
+        `💳 *TOTAL YOU PAY:* *R780.00*\n\n` +
         `⏸️ *Sentinel Pause:* Awaiting sender approval to confirm parcel pickup.`,
       matchesDeclaredShape: true,
       defaultCartFallback: 'N'
@@ -1065,7 +1068,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before issuing international flight tickets and hotel vouchers',
-      fetcherOutputOrGap: 'Aeronology SA Host IATA live. Amadeus live. Bryte Insurance active.',
+      fetcherOutputOrGap: 'Aeronology SA Host IATA (DECLARED_GAP). Amadeus (DECLARED_GAP). Bryte Insurance (DECLARED_GAP).',
       feeModeDeclared: 'REFERRAL_AFFILIATE (5% Commission R925.00 on R18,500 Package = R19,425.00 Total)',
       finalRenderText: `✈️🏨 *Dubai Travel Bundle (Flight + Marina Hotel + Insurance)*\n` +
         `───────────────\n\n` +
@@ -1127,7 +1130,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (Direct 1-Tap Checkout)',
-      fetcherOutputOrGap: 'Avis & Hertz APIs live.',
+      fetcherOutputOrGap: 'Avis & Hertz APIs (DECLARED_GAP).',
       feeModeDeclared: 'REFERRAL_AFFILIATE (5% Commission R125.00 on R2,500 = R2,625.00 Total)',
       finalRenderText: `🚗 *OR Tambo 7-Day Car Rental Reservation*\n` +
         `───────────────\n\n` +
@@ -1157,6 +1160,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (R0.00 free referral booking)',
+      fetcherOutputOrGap: 'Dis-Chem Travel Clinic (DECLARED_GAP).',
       feeModeDeclared: 'FREE (R0.00 Free Travel Clinic Referral Booking)',
       finalRenderText: `💉 *Kenya Travel Vaccination Clinic Booking Pack (FREE)*\n` +
         `───────────────\n\n` +
@@ -1215,13 +1219,13 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before charging bank account for dual electricity tokens',
-      fetcherOutputOrGap: 'Flash SwitchPay Vending API live.',
-      feeModeDeclared: 'FLAT_FEE (R200.00 Home + R200.00 Mother + R0.00 Zero Platform Fee = R400.00)',
+      fetcherOutputOrGap: 'Flash SwitchPay Vending API (DECLARED_GAP).',
+      feeModeDeclared: 'FLAT_FEE (R200.00 Home + R200.00 Mother = R400.00 Total)',
       finalRenderText: `⚡ *Dual Prepaid Electricity Token Purchase*\n` +
         `───────────────\n\n` +
         `🏠 *Meter 1 (Home):* Acc # 07192837192 (R200.00 Electricity)\n` +
         `👵 *Meter 2 (Mother):* Acc # 04182739102 (R200.00 Electricity)\n` +
-        `🛡️ *Platform Fee:* R0.00 (Free Utility Purchase)\n` +
+        `🛡️ *Platform Fee:* R0.00 (Zero Goods / Utility Markup)\n` +
         `💳 *TOTAL YOU PAY:* *R400.00*\n\n` +
         `⏸️ *Sentinel Pause:* Awaiting approval to dispatch R400.00 electricity tokens.`,
       matchesDeclaredShape: true,
@@ -1245,8 +1249,8 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (Direct 1-Tap Checkout)',
-      fetcherOutputOrGap: 'Flash Airtime API live.',
-      feeModeDeclared: 'FLAT_FEE (R200 Telkom + R200 MTN + R200 Vodacom = R600.00 Total)',
+      fetcherOutputOrGap: 'Flash Airtime API (DECLARED_GAP).',
+      feeModeDeclared: 'FLAT_FEE (R200 Telkom + R200 MTN + R200 Vodacom = R600.00 Total, 0% Fee)',
       finalRenderText: `📱 *Multi-Network Airtime Top-Up (1-Tap)*\n` +
         `───────────────\n\n` +
         `📶 *Telkom Mobile:* R200.00 Direct Recharge\n` +
@@ -1276,8 +1280,8 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before executing monthly multi-bill payment transaction',
-      fetcherOutputOrGap: 'PayAt Gateway active. Medical Aid API active.',
-      feeModeDeclared: 'FLAT_FEE (R929 DSTV + R199 Netflix + R3,200 Discovery = R4,328.00 Total)',
+      fetcherOutputOrGap: 'PayAt Gateway (DECLARED_GAP). Discovery Health API (DECLARED_GAP).',
+      feeModeDeclared: 'FLAT_FEE (R929 DSTV + R199 Netflix + R3,200 Discovery = R4,328.00 Total, 0% Fee)',
       finalRenderText: `💳 *Monthly Consolidated Bill Payment (1-Tap)*\n` +
         `───────────────\n\n` +
         `📺 *DSTV Premium:* R929.00\n` +
@@ -1307,7 +1311,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before executing municipal rates & water statement payment',
-      fetcherOutputOrGap: 'PayAt Municipal Gateway active.',
+      fetcherOutputOrGap: 'PayAt Municipal Gateway (DECLARED_GAP).',
       feeModeDeclared: 'FLAT_FEE (R1,850.00 Municipal Statement + R10.00 Service Fee = R1,860.00)',
       finalRenderText: `🏛️ *Single Municipal Account Settlement*\n` +
         `───────────────\n\n` +
@@ -1340,8 +1344,8 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before executing PayShap instant EFT payment to school',
-      fetcherOutputOrGap: 'Stitch PayShap API active. PayFast Zero-Fee active.',
-      feeModeDeclared: 'ZERO_FEE_WAIVER (R2,800.00 School Fees <= R3,000 Zero Fee Threshold)',
+      fetcherOutputOrGap: 'Stitch PayShap API (DECLARED_GAP). PayFast (DECLARED_GAP).',
+      feeModeDeclared: 'ZERO_FEE_WAIVER (R2,800.00 School Fees <= R3,000 PayFast Zero-Fee Threshold)',
       finalRenderText: `🏫 *School Fees Instant EFT Payment (2 Children)*\n` +
         `───────────────\n\n` +
         `👧 *Child 1 (Grade 4):* Ref # SCH-8812 (R1,400.00)\n` +
@@ -1371,16 +1375,17 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before locking triple-artisan renovation funds in Paystack escrow',
-      fetcherOutputOrGap: 'PIRB & ECA Registries active. Paystack Escrow Engine active.',
-      feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R12,700.00 Renovation Escrow Lock)',
+      fetcherOutputOrGap: 'PIRB & ECA Registries (DECLARED_GAP). Paystack Escrow Engine (DECLARED_GAP).',
+      feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R12,700.00 Renovation + R635.00 mrAI Fee = R13,335.00 Total)',
       finalRenderText: `🛠️ *Triple Certified Renovation Team & Escrow Pack*\n` +
         `───────────────\n\n` +
         `🔧 *PIRB Plumber:* Geyser & Piping Alteration (R3,500.00 + PIRB CoC)\n` +
         `⚡ *ECA Electrician:* Board Rewiring & Fittings (R4,200.00 + Electrical CoC)\n` +
         `🎨 *SANS Painter:* Interior & Exterior Coating (R5,000.00)\n` +
+        `🛡️ *mrAI Fee (5%):* R635.00\n` +
         `───────────────\n` +
-        `💳 *TOTAL ESCROW LOCK:* *R12,700.00*\n\n` +
-        `⏸️ *Sentinel Pause:* Awaiting approval to lock R12,700.00 in Paystack Escrow.`,
+        `💳 *TOTAL ESCROW LOCK:* *R13,335.00*\n\n` +
+        `⏸️ *Sentinel Pause:* Awaiting approval to lock R13,335.00 in Paystack Escrow.`,
       matchesDeclaredShape: true,
       defaultCartFallback: 'N'
     };
@@ -1402,7 +1407,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before signing formal vehicle finance credit agreement',
-      fetcherOutputOrGap: 'WesBank Dealer API active. TransUnion active.',
+      fetcherOutputOrGap: 'WesBank Dealer API (DECLARED_GAP). TransUnion (DECLARED_GAP).',
       feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R250.00 Vehicle Finance Verification Fee)',
       finalRenderText: `🚘 *Verified Dealer Used Car & Finance Pack*\n` +
         `───────────────\n\n` +
@@ -1432,7 +1437,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'N',
       sentinelPauseLocation: 'None (Free listing creation)',
-      fetcherOutputOrGap: 'P2P Marketplace Engine active.',
+      fetcherOutputOrGap: 'P2P Marketplace Engine (DECLARED_GAP).',
       feeModeDeclared: 'RECOVERY_PERCENT (5% Seller Commission on Sale Release)',
       finalRenderText: `🏷️ *Multi-Item P2P Marketplace Listings Created*\n` +
         `───────────────\n\n` +
@@ -1462,16 +1467,17 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before locking matric dance package deposit in Paystack escrow',
-      fetcherOutputOrGap: 'Photographer & Boutique Networks active.',
-      feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R4,250.00 Matric Dance Package Escrow Lock)',
+      fetcherOutputOrGap: 'Photographer & Boutique Networks (DECLARED_GAP).',
+      feeModeDeclared: 'FIVE_PERCENT_ON_TOP (R4,250.00 Event Package + R212.50 mrAI Fee = R4,462.50 Total)',
       finalRenderText: `💃 *Matric Dance Complete Package Pack*\n` +
         `───────────────\n\n` +
         `📸 *Photographer:* Studio 92 (2-Hour Outdoor Shoot + Edited Album - R1,800.00)\n` +
         `👗 *Dress Rental:* Couture Boutique Designer Evening Gown (R1,500.00 + Deposit)\n` +
         `💇 *Hair & Makeup:* Mobile Stylist Home Visit (R950.00)\n` +
+        `🛡️ *mrAI Fee (5%):* R212.50\n` +
         `───────────────\n` +
-        `💳 *TOTAL ESCROW LOCK:* *R4,250.00*\n\n` +
-        `⏸️ *Sentinel Pause:* Awaiting approval to lock R4,250.00 in Paystack Escrow.`,
+        `💳 *TOTAL ESCROW LOCK:* *R4,462.50*\n\n` +
+        `⏸️ *Sentinel Pause:* Awaiting approval to lock R4,462.50 in Paystack Escrow.`,
       matchesDeclaredShape: true,
       defaultCartFallback: 'N'
     };
@@ -1493,7 +1499,7 @@ export function processRound2RuleBookRequest(waId, rawText, session, userProfile
       loopOutput: loop,
       sentinelPause: 'Y',
       sentinelPauseLocation: 'Before authorizing funeral service dispatch and burial society claim payout',
-      fetcherOutputOrGap: 'DHA Death Registry active. Funeral Parlour Network ready.',
+      fetcherOutputOrGap: 'DHA Death Registry (DECLARED_GAP). Funeral Parlour Network (DECLARED_GAP).',
       feeModeDeclared: 'FLAT_FEE (R250.00 Funeral Assistance & Burial Claim Coordination Fee)',
       finalRenderText: `🕊️ *Comprehensive Funeral Coordination & Claim Pack*\n` +
         `───────────────\n\n` +

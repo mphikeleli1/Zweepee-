@@ -31,6 +31,7 @@ import { PayFastPaymentGateway } from '../payments/payfast.js';
 import { PayShapPaymentGateway } from '../payments/payshap.js';
 import { TripManagementEngine } from '../commerce/tripManagement.js';
 import { processRound2RuleBookRequest } from './round2Handlers.js';
+import { processRegressionRuleBookRequest } from './regressionHandlers.js';
 
 export class WhatsAppSessionEngine {
   constructor(kvSessions, kvUsers, kvCatalog, db) {
@@ -101,6 +102,11 @@ export class WhatsAppSessionEngine {
     const r2Result = processRound2RuleBookRequest(waId, rawText, session, userProfile, this.agentFactory);
     if (r2Result) {
       return r2Result;
+    }
+
+    const regResult = processRegressionRuleBookRequest(waId, rawText, session, userProfile, this.agentFactory);
+    if (regResult) {
+      return regResult;
     }
 
     const lower = (rawText || '').toLowerCase();
